@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { MLB_TEAMS } from '@/types/league';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -27,11 +28,12 @@ import {
   Copy,
   Send,
   MessageSquare,
-  Facebook,
   Share2,
   Timer,
   Megaphone,
   ExternalLink,
+  Shield,
+  Eye,
 } from 'lucide-react';
 
 // =============================================================================
@@ -80,41 +82,10 @@ interface WebhookSettings {
 }
 
 // =============================================================================
-// MOCK DATA
+// CONSTANTS
 // =============================================================================
 
-const allTeams: { id: string; name: string; abbreviation: string }[] = [
-  { id: 'ari', name: 'Arizona Diamondbacks', abbreviation: 'ARI' },
-  { id: 'atl', name: 'Atlanta Braves', abbreviation: 'ATL' },
-  { id: 'bal', name: 'Baltimore Orioles', abbreviation: 'BAL' },
-  { id: 'bos', name: 'Boston Red Sox', abbreviation: 'BOS' },
-  { id: 'chc', name: 'Chicago Cubs', abbreviation: 'CHC' },
-  { id: 'cws', name: 'Chicago White Sox', abbreviation: 'CWS' },
-  { id: 'cin', name: 'Cincinnati Reds', abbreviation: 'CIN' },
-  { id: 'cle', name: 'Cleveland Guardians', abbreviation: 'CLE' },
-  { id: 'col', name: 'Colorado Rockies', abbreviation: 'COL' },
-  { id: 'det', name: 'Detroit Tigers', abbreviation: 'DET' },
-  { id: 'hou', name: 'Houston Astros', abbreviation: 'HOU' },
-  { id: 'kc', name: 'Kansas City Royals', abbreviation: 'KC' },
-  { id: 'laa', name: 'Los Angeles Angels', abbreviation: 'LAA' },
-  { id: 'lad', name: 'Los Angeles Dodgers', abbreviation: 'LAD' },
-  { id: 'mia', name: 'Miami Marlins', abbreviation: 'MIA' },
-  { id: 'mil', name: 'Milwaukee Brewers', abbreviation: 'MIL' },
-  { id: 'min', name: 'Minnesota Twins', abbreviation: 'MIN' },
-  { id: 'nym', name: 'New York Mets', abbreviation: 'NYM' },
-  { id: 'nyy', name: 'New York Yankees', abbreviation: 'NYY' },
-  { id: 'oak', name: 'Oakland Athletics', abbreviation: 'OAK' },
-  { id: 'phi', name: 'Philadelphia Phillies', abbreviation: 'PHI' },
-  { id: 'pit', name: 'Pittsburgh Pirates', abbreviation: 'PIT' },
-  { id: 'sd', name: 'San Diego Padres', abbreviation: 'SD' },
-  { id: 'sf', name: 'San Francisco Giants', abbreviation: 'SF' },
-  { id: 'sea', name: 'Seattle Mariners', abbreviation: 'SEA' },
-  { id: 'stl', name: 'St. Louis Cardinals', abbreviation: 'STL' },
-  { id: 'tb', name: 'Tampa Bay Rays', abbreviation: 'TB' },
-  { id: 'tex', name: 'Texas Rangers', abbreviation: 'TEX' },
-  { id: 'tor', name: 'Toronto Blue Jays', abbreviation: 'TOR' },
-  { id: 'wsh', name: 'Washington Nationals', abbreviation: 'WSH' },
-];
+const allTeams = MLB_TEAMS.map(t => ({ id: t.id, name: t.name, abbreviation: t.abbreviation }));
 
 // Sample IL placements for demo
 const samplePlacements: ILPlacement[] = [
@@ -188,10 +159,7 @@ const samplePlacements: ILPlacement[] = [
   },
 ];
 
-// =============================================================================
-// CONSTANTS - IL RULES
-// =============================================================================
-
+// IL Rules
 const IL_RULES = {
   MIN_PLACEMENTS_PER_SEASON: 3,
   MIN_GAMES_PER_PLACEMENT: 5,
@@ -270,13 +238,6 @@ function calculateTeamCompliance(
     complianceIssues,
     penaltyLosses,
   };
-}
-
-function getGamesRemaining(placement: ILPlacement): number {
-  if (placement.status === 'completed') return 0;
-  const gamesNeeded = IL_RULES.MIN_GAMES_PER_PLACEMENT;
-  const remaining = gamesNeeded - placement.gamesOnIL;
-  return Math.max(0, remaining);
 }
 
 function generateESPNAnnouncement(
@@ -479,6 +440,17 @@ function SettingsModal({ isOpen, onClose, settings, onSave }: SettingsModalProps
         </div>
 
         <div className="p-6 space-y-6">
+          {/* Admin Only Notice */}
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-amber-400" />
+              <span className="text-amber-400 font-semibold text-sm">Commissioner Only</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              These settings affect all league announcements
+            </p>
+          </div>
+
           {/* Discord Webhook */}
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
@@ -503,15 +475,14 @@ function SettingsModal({ isOpen, onClose, settings, onSave }: SettingsModalProps
                 disabled={!localSettings.discordWebhookUrl || testStatus === 'testing'}
               >
                 {testStatus === 'testing' ? (
-                  <Clock className="w-4 h-4 animate-spin" />
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                 ) : testStatus === 'success' ? (
                   <Check className="w-4 h-4 text-emerald-400" />
                 ) : testStatus === 'error' ? (
-                  <X className="w-4 h-4 text-red-400" />
+                  <XCircle className="w-4 h-4 text-red-400" />
                 ) : (
-                  <Send className="w-4 h-4" />
+                  'Test'
                 )}
-                Test
               </Button>
             </div>
           </div>
@@ -519,9 +490,9 @@ function SettingsModal({ isOpen, onClose, settings, onSave }: SettingsModalProps
           {/* Auto-post toggle */}
           <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
             <div>
-              <p className="font-medium text-foreground">Auto-post to Discord</p>
+              <p className="font-medium text-foreground text-sm">Auto-post to Discord</p>
               <p className="text-xs text-muted-foreground">
-                Automatically announce IL moves when added/activated
+                Automatically post announcements when placements are added
               </p>
             </div>
             <button
@@ -532,7 +503,7 @@ function SettingsModal({ isOpen, onClose, settings, onSave }: SettingsModalProps
                 })
               }
               className={`relative w-12 h-6 rounded-full transition-colors ${
-                localSettings.autoPostToDiscord ? 'bg-emerald-500' : 'bg-muted'
+                localSettings.autoPostToDiscord ? 'bg-jkap-red-500' : 'bg-muted'
               }`}
             >
               <span
@@ -548,56 +519,41 @@ function SettingsModal({ isOpen, onClose, settings, onSave }: SettingsModalProps
             <label className="block text-sm font-medium text-foreground mb-2">
               Announcement Style
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => setLocalSettings({ ...localSettings, announcementStyle: 'espn' })}
-                className={`p-4 rounded-lg border-2 text-left transition-all ${
+                onClick={() =>
+                  setLocalSettings({ ...localSettings, announcementStyle: 'espn' })
+                }
+                className={`p-3 rounded-lg border text-left transition-all ${
                   localSettings.announcementStyle === 'espn'
                     ? 'border-jkap-red-500 bg-jkap-red-500/10'
-                    : 'border-border hover:border-border-light'
+                    : 'border-border bg-muted/50 hover:border-border/80'
                 }`}
               >
-                <p className="font-semibold text-foreground">ESPN Style</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Full announcement with emojis, hashtags, and details
-                </p>
+                <p className="font-medium text-foreground text-sm">ESPN Style</p>
+                <p className="text-xs text-muted-foreground">Full format with emojis & hashtags</p>
               </button>
               <button
-                onClick={() => setLocalSettings({ ...localSettings, announcementStyle: 'simple' })}
-                className={`p-4 rounded-lg border-2 text-left transition-all ${
+                onClick={() =>
+                  setLocalSettings({ ...localSettings, announcementStyle: 'simple' })
+                }
+                className={`p-3 rounded-lg border text-left transition-all ${
                   localSettings.announcementStyle === 'simple'
                     ? 'border-jkap-red-500 bg-jkap-red-500/10'
-                    : 'border-border hover:border-border-light'
+                    : 'border-border bg-muted/50 hover:border-border/80'
                 }`}
               >
-                <p className="font-semibold text-foreground">Simple</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Clean one-line transaction notice
-                </p>
+                <p className="font-medium text-foreground text-sm">Simple</p>
+                <p className="text-xs text-muted-foreground">Clean one-liner format</p>
               </button>
             </div>
           </div>
 
-          {/* Facebook Note */}
-          <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <Facebook className="w-4 h-4 text-blue-400" />
-              <span className="text-sm font-semibold text-blue-400">Facebook Posting</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              For Facebook, use the "Copy Announcement" button when making IL moves. 
-              You can then paste directly into your Facebook group. 
-              Full Facebook API integration coming soon!
-            </p>
-          </div>
-
-          {/* Actions */}
           <div className="flex gap-3 pt-4">
             <Button type="button" variant="secondary" onClick={onClose} fullWidth>
               Cancel
             </Button>
-            <Button variant="primary" onClick={handleSave} fullWidth>
-              <Check className="w-4 h-4" />
+            <Button type="button" variant="primary" onClick={handleSave} fullWidth>
               Save Settings
             </Button>
           </div>
@@ -611,7 +567,7 @@ interface AnnouncementPreviewProps {
   isOpen: boolean;
   onClose: () => void;
   announcement: string;
-  onPost: () => Promise<void>;
+  onPost: () => void;
   onCopy: () => void;
   isPosting: boolean;
   hasWebhook: boolean;
@@ -626,14 +582,6 @@ function AnnouncementPreview({
   isPosting,
   hasWebhook,
 }: AnnouncementPreviewProps) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    onCopy();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -654,46 +602,25 @@ function AnnouncementPreview({
         </div>
 
         <div className="p-6">
-          {/* Preview */}
-          <div className="bg-muted/50 border border-border rounded-lg p-4 mb-6">
-            <pre className="text-sm text-foreground whitespace-pre-wrap font-sans">
-              {announcement}
-            </pre>
+          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap text-foreground mb-6 max-h-[300px] overflow-y-auto">
+            {announcement}
           </div>
 
-          {/* Actions */}
-          <div className="grid grid-cols-2 gap-3">
-            <Button variant="secondary" onClick={handleCopy} fullWidth>
-              {copied ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4" />
-                  Copy for Facebook
-                </>
-              )}
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={onCopy} fullWidth>
+              <Copy className="w-4 h-4" />
+              Copy to Clipboard
             </Button>
-            <Button
-              variant="primary"
-              onClick={onPost}
-              disabled={!hasWebhook || isPosting}
-              fullWidth
-            >
-              {isPosting ? (
-                <>
-                  <Clock className="w-4 h-4 animate-spin" />
-                  Posting...
-                </>
-              ) : (
-                <>
-                  <MessageSquare className="w-4 h-4" />
-                  Post to Discord
-                </>
-              )}
-            </Button>
+            {hasWebhook && (
+              <Button variant="primary" onClick={onPost} disabled={isPosting} fullWidth>
+                {isPosting ? (
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                Post to Discord
+              </Button>
+            )}
           </div>
 
           {!hasWebhook && (
@@ -711,11 +638,12 @@ interface AddPlacementModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (placement: Omit<ILPlacement, 'id' | 'gamesOnIL' | 'status'>, showAnnouncement: boolean) => void;
-  teams: typeof allTeams;
+  userTeamId?: string;
+  isAdmin: boolean;
 }
 
-function AddPlacementModal({ isOpen, onClose, onAdd, teams }: AddPlacementModalProps) {
-  const [selectedTeam, setSelectedTeam] = useState('');
+function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddPlacementModalProps) {
+  const [selectedTeam, setSelectedTeam] = useState(userTeamId || '');
   const [playerName, setPlayerName] = useState('');
   const [position, setPosition] = useState('');
   const [playerType, setPlayerType] = useState<'pitcher' | 'position'>('position');
@@ -723,6 +651,13 @@ function AddPlacementModal({ isOpen, onClose, onAdd, teams }: AddPlacementModalP
   const [startGame, setStartGame] = useState(1);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [announceOnAdd, setAnnounceOnAdd] = useState(true);
+
+  // Reset to user's team when modal opens
+  useEffect(() => {
+    if (isOpen && userTeamId && !isAdmin) {
+      setSelectedTeam(userTeamId);
+    }
+  }, [isOpen, userTeamId, isAdmin]);
 
   const positions = ['SP', 'RP', 'CP', 'C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH'];
 
@@ -746,7 +681,6 @@ function AddPlacementModal({ isOpen, onClose, onAdd, teams }: AddPlacementModalP
       announceOnAdd
     );
 
-    setSelectedTeam('');
     setPlayerName('');
     setPosition('');
     setPlayerType('position');
@@ -756,6 +690,8 @@ function AddPlacementModal({ isOpen, onClose, onAdd, teams }: AddPlacementModalP
   };
 
   if (!isOpen) return null;
+
+  const userTeam = allTeams.find(t => t.id === userTeamId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -772,22 +708,37 @@ function AddPlacementModal({ isOpen, onClose, onAdd, teams }: AddPlacementModalP
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Team</label>
-            <select
-              value={selectedTeam}
-              onChange={(e) => setSelectedTeam(e.target.value)}
-              className="w-full px-4 py-3 bg-muted border border-border rounded-lg text-foreground focus:border-jkap-red-500 focus:outline-none"
-              required
-            >
-              <option value="">Select a team...</option>
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Team Display/Select */}
+          {isAdmin ? (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Team</label>
+              <select
+                value={selectedTeam}
+                onChange={(e) => setSelectedTeam(e.target.value)}
+                className="w-full px-4 py-3 bg-muted border border-border rounded-lg text-foreground focus:border-jkap-red-500 focus:outline-none"
+                required
+              >
+                <option value="">Select a team...</option>
+                {allTeams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="p-4 rounded-lg bg-jkap-red-500/10 border border-jkap-red-500/30">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-jkap-navy-600 flex items-center justify-center font-display text-white">
+                  {userTeam?.abbreviation || '???'}
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">{userTeam?.name || 'Your Team'}</p>
+                  <p className="text-xs text-muted-foreground">Adding placement for your team</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">Player Name</label>
@@ -939,27 +890,36 @@ interface TeamCardProps {
   isExpanded: boolean;
   onToggle: () => void;
   currentGame: number;
+  canEdit: boolean;
+  isUserTeam: boolean;
 }
 
-function TeamCard({ teamData, onActivate, isExpanded, onToggle, currentGame }: TeamCardProps) {
+function TeamCard({ teamData, onActivate, isExpanded, onToggle, currentGame, canEdit, isUserTeam }: TeamCardProps) {
   const [activateGameInput, setActivateGameInput] = useState<{ [key: string]: number }>({});
 
   return (
     <Card
       className={`overflow-hidden transition-all ${
-        !teamData.isCompliant ? 'border-amber-500/50' : ''
-      }`}
+        isUserTeam ? 'ring-2 ring-jkap-red-500 ring-offset-2 ring-offset-background' : ''
+      } ${!teamData.isCompliant ? 'border-amber-500/50' : ''}`}
     >
       <button
         onClick={onToggle}
         className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors"
       >
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-jkap-navy-600 flex items-center justify-center font-display text-white">
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-display text-white ${
+            isUserTeam ? 'bg-gradient-to-br from-jkap-red-500 to-jkap-red-600' : 'bg-jkap-navy-600'
+          }`}>
             {teamData.abbreviation}
           </div>
           <div className="text-left">
-            <h3 className="font-semibold text-foreground">{teamData.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-foreground">{teamData.name}</h3>
+              {isUserTeam && (
+                <Badge variant="active" className="text-xs">Your Team</Badge>
+              )}
+            </div>
             <div className="flex items-center gap-2 text-sm">
               <span className="text-muted-foreground">
                 {teamData.totalPlacements} placement{teamData.totalPlacements !== 1 ? 's' : ''}
@@ -974,6 +934,9 @@ function TeamCard({ teamData, onActivate, isExpanded, onToggle, currentGame }: T
         </div>
 
         <div className="flex items-center gap-3">
+          {!canEdit && !isUserTeam && (
+            <Eye className="w-4 h-4 text-muted-foreground" />
+          )}
           {teamData.isCompliant ? (
             <div className="flex items-center gap-1 text-emerald-400">
               <CheckCircle2 className="w-5 h-5" />
@@ -999,25 +962,30 @@ function TeamCard({ teamData, onActivate, isExpanded, onToggle, currentGame }: T
 
       {isExpanded && (
         <div className="border-t border-border">
-          <div className="grid grid-cols-4 gap-4 p-4 bg-muted/30">
+          {/* Stats Bar */}
+          <div className="grid grid-cols-5 gap-4 p-4 bg-muted/30">
             <div className="text-center">
-              <p className="text-2xl font-bold text-foreground">
+              <p className="text-lg font-bold text-foreground">
                 {teamData.completedPlacements.length}/{IL_RULES.MIN_PLACEMENTS_PER_SEASON}
               </p>
               <p className="text-xs text-muted-foreground">Required Stints</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-foreground">{teamData.pitcherPlacements}</p>
+              <p className="text-lg font-bold text-foreground">{teamData.pitcherPlacements}</p>
               <p className="text-xs text-muted-foreground">Pitcher Stints</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-foreground">{teamData.positionPlacements}</p>
+              <p className="text-lg font-bold text-foreground">{teamData.positionPlacements}</p>
               <p className="text-xs text-muted-foreground">Position Stints</p>
             </div>
             <div className="text-center">
+              <p className="text-lg font-bold text-foreground">{teamData.activePlacements.length}</p>
+              <p className="text-xs text-muted-foreground">Currently on IL</p>
+            </div>
+            <div className="text-center">
               <p
-                className={`text-2xl font-bold ${
-                  teamData.penaltyLosses > 0 ? 'text-jkap-red-500' : 'text-emerald-400'
+                className={`text-lg font-bold ${
+                  teamData.penaltyLosses > 0 ? 'text-amber-400' : 'text-emerald-400'
                 }`}
               >
                 {teamData.penaltyLosses > 0 ? `+${teamData.penaltyLosses}` : '0'}
@@ -1026,16 +994,17 @@ function TeamCard({ teamData, onActivate, isExpanded, onToggle, currentGame }: T
             </div>
           </div>
 
+          {/* Compliance Issues */}
           {teamData.complianceIssues.length > 0 && (
-            <div className="p-4 bg-amber-500/10 border-y border-amber-500/30">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-4 h-4 text-amber-400" />
-                <span className="text-sm font-semibold text-amber-400">Compliance Issues</span>
-              </div>
+            <div className="p-4 bg-amber-500/5 border-b border-amber-500/20">
+              <h4 className="text-sm font-semibold text-amber-400 mb-2 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                Compliance Issues
+              </h4>
               <ul className="space-y-1">
-                {teamData.complianceIssues.map((issue, i) => (
-                  <li key={i} className="text-sm text-muted-foreground flex items-center gap-2">
-                    <XCircle className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                {teamData.complianceIssues.map((issue, idx) => (
+                  <li key={idx} className="text-sm text-muted-foreground flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                     {issue}
                   </li>
                 ))}
@@ -1043,118 +1012,114 @@ function TeamCard({ teamData, onActivate, isExpanded, onToggle, currentGame }: T
             </div>
           )}
 
+          {/* Active IL Placements */}
           {teamData.activePlacements.length > 0 && (
             <div className="p-4 border-b border-border">
               <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-400" />
+                <Activity className="w-4 h-4 text-jkap-red-500" />
                 Active IL ({teamData.activePlacements.length})
               </h4>
               <div className="space-y-3">
                 {teamData.activePlacements.map((placement) => {
-                  const gamesRemaining = getGamesRemaining(placement);
+                  const gamesRemaining = Math.max(0, IL_RULES.MIN_GAMES_PER_PLACEMENT - placement.gamesOnIL);
                   const canActivate = gamesRemaining === 0;
+                  const progress = Math.min(100, (placement.gamesOnIL / IL_RULES.MIN_GAMES_PER_PLACEMENT) * 100);
 
                   return (
                     <div
                       key={placement.id}
-                      className="p-4 bg-muted/50 rounded-lg border border-border"
+                      className="p-4 rounded-lg bg-muted/50 border border-border"
                     >
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <div
                             className={`w-12 h-12 rounded-lg flex items-center justify-center text-sm font-bold ${
                               placement.player.type === 'pitcher'
-                                ? 'bg-blue-500/20 text-blue-400'
-                                : 'bg-emerald-500/20 text-emerald-400'
+                                ? 'bg-blue-500/10 text-blue-400'
+                                : 'bg-emerald-500/10 text-emerald-400'
                             }`}
                           >
                             {placement.player.position}
                           </div>
                           <div>
                             <p className="font-semibold text-foreground">{placement.player.name}</p>
-                            <p className="text-sm text-muted-foreground">{placement.injury}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {placement.injury} • Started Game {placement.startGame}
+                            </p>
                           </div>
                         </div>
-
-                        {/* Games Remaining Badge */}
-                        <div
-                          className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                            canActivate
-                              ? 'bg-emerald-500/20 border border-emerald-500/30'
-                              : 'bg-amber-500/20 border border-amber-500/30'
-                          }`}
-                        >
-                          <Timer className={`w-4 h-4 ${canActivate ? 'text-emerald-400' : 'text-amber-400'}`} />
-                          <div className="text-right">
-                            <p className={`text-lg font-bold ${canActivate ? 'text-emerald-400' : 'text-amber-400'}`}>
-                              {gamesRemaining > 0 ? gamesRemaining : '✓'}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                              {gamesRemaining > 0 ? 'Games Left' : 'Eligible'}
-                            </p>
-                          </div>
+                        <div className="text-right">
+                          {canActivate ? (
+                            <Badge variant="active" className="text-xs flex items-center gap-1">
+                              <Check className="w-3 h-3" />
+                              ELIGIBLE
+                            </Badge>
+                          ) : (
+                            <Badge variant="delinquent" className="text-xs flex items-center gap-1">
+                              <Timer className="w-3 h-3" />
+                              {gamesRemaining} Games Left
+                            </Badge>
+                          )}
                         </div>
                       </div>
 
                       {/* Progress Bar */}
-                      <div className="mt-4">
-                        <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                          <span>Game {placement.startGame}</span>
-                          <span>
+                      <div className="mb-3">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-muted-foreground">IL Progress</span>
+                          <span className="text-foreground font-medium">
                             {placement.gamesOnIL} / {IL_RULES.MIN_GAMES_PER_PLACEMENT} games
                           </span>
                         </div>
                         <div className="h-2 bg-muted rounded-full overflow-hidden">
                           <div
-                            className={`h-full transition-all ${
+                            className={`h-full rounded-full transition-all ${
                               canActivate ? 'bg-emerald-500' : 'bg-amber-500'
                             }`}
-                            style={{
-                              width: `${Math.min(
-                                100,
-                                (placement.gamesOnIL / IL_RULES.MIN_GAMES_PER_PLACEMENT) * 100
-                              )}%`,
-                            }}
+                            style={{ width: `${progress}%` }}
                           />
                         </div>
                       </div>
 
-                      {/* Activate Controls */}
-                      <div className="mt-4 flex items-center gap-3">
-                        <div className="flex-1">
-                          <label className="text-xs text-muted-foreground block mb-1">
-                            Activate at Game #
-                          </label>
-                          <input
-                            type="number"
-                            placeholder={`Min: ${placement.startGame + IL_RULES.MIN_GAMES_PER_PLACEMENT - 1}`}
-                            value={activateGameInput[placement.id] || ''}
-                            onChange={(e) =>
-                              setActivateGameInput({
-                                ...activateGameInput,
-                                [placement.id]: parseInt(e.target.value) || 0,
-                              })
+                      {/* Activate Controls - Only show if can edit */}
+                      {canEdit && (
+                        <div className="flex items-center gap-3 pt-2 border-t border-border/50">
+                          <div className="flex-1">
+                            <label className="text-xs text-muted-foreground block mb-1">
+                              Activate at Game #
+                            </label>
+                            <input
+                              type="number"
+                              min={placement.startGame + IL_RULES.MIN_GAMES_PER_PLACEMENT - 1}
+                              value={activateGameInput[placement.id] || currentGame}
+                              onChange={(e) =>
+                                setActivateGameInput({
+                                  ...activateGameInput,
+                                  [placement.id]: parseInt(e.target.value) || currentGame,
+                                })
+                              }
+                              className="w-full px-3 py-2 bg-muted border border-border rounded text-sm text-foreground focus:border-jkap-red-500 focus:outline-none"
+                            />
+                          </div>
+                          <Button
+                            variant={canActivate ? 'primary' : 'secondary'}
+                            size="sm"
+                            disabled={!canActivate}
+                            onClick={() =>
+                              onActivate(
+                                placement.id,
+                                activateGameInput[placement.id] || currentGame
+                              )
                             }
-                            className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm text-foreground focus:border-jkap-red-500 focus:outline-none"
-                            min={placement.startGame + IL_RULES.MIN_GAMES_PER_PLACEMENT - 1}
-                          />
+                            className="mt-5"
+                          >
+                            <Check className="w-4 h-4" />
+                            Activate
+                          </Button>
                         </div>
-                        <Button
-                          variant={canActivate ? 'primary' : 'secondary'}
-                          size="sm"
-                          onClick={() => {
-                            const endGame = activateGameInput[placement.id];
-                            if (endGame) onActivate(placement.id, endGame);
-                          }}
-                          disabled={!activateGameInput[placement.id]}
-                          className="mt-5"
-                        >
-                          <Check className="w-4 h-4" />
-                          Activate
-                        </Button>
-                      </div>
+                      )}
 
-                      {!canActivate && (
+                      {!canActivate && canEdit && (
                         <p className="text-xs text-amber-400 mt-2 flex items-center gap-1">
                           <AlertCircle className="w-3 h-3" />
                           Cannot activate until minimum {IL_RULES.MIN_GAMES_PER_PLACEMENT} games served
@@ -1246,7 +1211,10 @@ export default function InjuredListPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [currentGame, setCurrentGame] = useState(10); // Track current season game number
+  const [currentGame, setCurrentGame] = useState(10);
+
+  const isAdmin = user?.isAdmin ?? false;
+  const userTeamId = user?.teamId;
 
   // Webhook settings
   const [webhookSettings, setWebhookSettings] = useState<WebhookSettings>({
@@ -1259,6 +1227,13 @@ export default function InjuredListPage() {
   const [showAnnouncementPreview, setShowAnnouncementPreview] = useState(false);
   const [pendingAnnouncement, setPendingAnnouncement] = useState('');
   const [isPostingAnnouncement, setIsPostingAnnouncement] = useState(false);
+
+  // Auto-expand user's team on load
+  useEffect(() => {
+    if (userTeamId && !isAdmin) {
+      setExpandedTeams(new Set([userTeamId]));
+    }
+  }, [userTeamId, isAdmin]);
 
   // Load settings from localStorage
   useEffect(() => {
@@ -1293,8 +1268,17 @@ export default function InjuredListPage() {
     return allTeams.map((team) => calculateTeamCompliance(team.id, placements));
   }, [placements]);
 
+  // Sort teams: user's team first, then alphabetically
+  const sortedTeamData = useMemo(() => {
+    return [...teamData].sort((a, b) => {
+      if (a.id === userTeamId) return -1;
+      if (b.id === userTeamId) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [teamData, userTeamId]);
+
   const filteredTeams = useMemo(() => {
-    return teamData.filter((team) => {
+    return sortedTeamData.filter((team) => {
       const matchesSearch =
         team.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         team.abbreviation.toLowerCase().includes(searchTerm.toLowerCase());
@@ -1305,7 +1289,7 @@ export default function InjuredListPage() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [teamData, searchTerm, filterStatus]);
+  }, [sortedTeamData, searchTerm, filterStatus]);
 
   const stats = useMemo(() => {
     const compliant = teamData.filter((t) => t.isCompliant).length;
@@ -1314,6 +1298,10 @@ export default function InjuredListPage() {
     const activePlacements = placements.filter((p) => p.status === 'active').length;
     return { compliant, nonCompliant, totalPlacements, activePlacements };
   }, [teamData, placements]);
+
+  const userTeamData = useMemo(() => {
+    return teamData.find((t) => t.id === userTeamId);
+  }, [teamData, userTeamId]);
 
   const toggleTeam = (teamId: string) => {
     setExpandedTeams((prev) => {
@@ -1453,7 +1441,7 @@ export default function InjuredListPage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <Link
                 href="/tools"
@@ -1462,7 +1450,7 @@ export default function InjuredListPage() {
                 <ArrowLeft className="w-4 h-4" />
                 <span className="text-sm">Back to Tools</span>
               </Link>
-              <div className="h-6 w-px bg-border" />
+              <div className="h-6 w-px bg-border hidden sm:block" />
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center">
                   <AlertTriangle className="w-5 h-5 text-white" />
@@ -1470,7 +1458,7 @@ export default function InjuredListPage() {
                 <div>
                   <h1 className="font-display text-xl text-foreground">INJURED LIST MANAGER</h1>
                   <p className="text-xs text-muted-foreground">
-                    Track IL compliance across all teams
+                    {isAdmin ? 'Commissioner View - All Teams' : `Managing ${user?.teamName || 'Your Team'}`}
                   </p>
                 </div>
               </div>
@@ -1491,15 +1479,17 @@ export default function InjuredListPage() {
               </div>
 
               {/* Admin-only settings button */}
-              {user?.isAdmin && (
+              {isAdmin && (
                 <Button variant="ghost" size="sm" onClick={() => setShowSettingsModal(true)}>
                   <Settings className="w-4 h-4" />
                 </Button>
               )}
-              <Button variant="secondary" size="sm" onClick={exportData}>
-                <Download className="w-4 h-4" />
-                Export
-              </Button>
+              {isAdmin && (
+                <Button variant="secondary" size="sm" onClick={exportData}>
+                  <Download className="w-4 h-4" />
+                  <span className="hidden sm:inline">Export</span>
+                </Button>
+              )}
               <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
                 <Plus className="w-4 h-4" />
                 Add Placement
@@ -1510,28 +1500,75 @@ export default function InjuredListPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div
-          className={`grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 transition-all duration-700 ${
-            isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-          }`}
-        >
-          <Card className="p-4 text-center">
-            <p className="text-3xl font-bold text-foreground">{stats.totalPlacements}</p>
-            <p className="text-sm text-muted-foreground">Total Placements</p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-3xl font-bold text-emerald-400">{stats.activePlacements}</p>
-            <p className="text-sm text-muted-foreground">Currently on IL</p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-3xl font-bold text-emerald-400">{stats.compliant}</p>
-            <p className="text-sm text-muted-foreground">Teams Compliant</p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-3xl font-bold text-amber-400">{stats.nonCompliant}</p>
-            <p className="text-sm text-muted-foreground">Need Attention</p>
-          </Card>
-        </div>
+        {/* User's Team Summary Card (non-admin only) */}
+        {!isAdmin && userTeamData && (
+          <div
+            className={`mb-8 transition-all duration-700 ${
+              isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
+            <Card className="p-6 border-2 border-jkap-red-500/50 bg-gradient-to-br from-jkap-red-500/5 to-transparent">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-jkap-red-500 to-jkap-red-600 flex items-center justify-center font-display text-white text-xl">
+                    {userTeamData.abbreviation}
+                  </div>
+                  <div>
+                    <h2 className="font-display text-2xl text-foreground">{userTeamData.name}</h2>
+                    <p className="text-muted-foreground">Your Team IL Status</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  {userTeamData.isCompliant ? (
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                      <span className="font-medium text-emerald-400">Compliant</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                      <AlertCircle className="w-5 h-5 text-amber-400" />
+                      <span className="font-medium text-amber-400">
+                        {userTeamData.complianceIssues.length} Issue{userTeamData.complianceIssues.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )}
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-foreground">
+                      {userTeamData.completedPlacements.length}/{IL_RULES.MIN_PLACEMENTS_PER_SEASON}
+                    </p>
+                    <p className="text-xs text-muted-foreground">IL Stints Completed</p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Stats Grid (admin view) */}
+        {isAdmin && (
+          <div
+            className={`grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 transition-all duration-700 ${
+              isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
+            <Card className="p-4 text-center">
+              <p className="text-3xl font-bold text-foreground">{stats.totalPlacements}</p>
+              <p className="text-sm text-muted-foreground">Total Placements</p>
+            </Card>
+            <Card className="p-4 text-center">
+              <p className="text-3xl font-bold text-emerald-400">{stats.activePlacements}</p>
+              <p className="text-sm text-muted-foreground">Currently on IL</p>
+            </Card>
+            <Card className="p-4 text-center">
+              <p className="text-3xl font-bold text-emerald-400">{stats.compliant}</p>
+              <p className="text-sm text-muted-foreground">Teams Compliant</p>
+            </Card>
+            <Card className="p-4 text-center">
+              <p className="text-3xl font-bold text-amber-400">{stats.nonCompliant}</p>
+              <p className="text-sm text-muted-foreground">Need Attention</p>
+            </Card>
+          </div>
+        )}
 
         <div
           className={`mb-8 transition-all duration-700 delay-100 ${
@@ -1547,73 +1584,62 @@ export default function InjuredListPage() {
           }`}
         >
           <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
+              placeholder="Search teams..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search teams..."
-              className="w-full pl-11 pr-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder-muted-foreground focus:border-jkap-red-500 focus:outline-none"
+              className="w-full pl-10 pr-4 py-3 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:border-jkap-red-500 focus:outline-none"
             />
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => setFilterStatus('all')}
-              className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                filterStatus === 'all'
-                  ? 'bg-jkap-red-500 text-white'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
-            >
-              All Teams
-            </button>
-            <button
-              onClick={() => setFilterStatus('compliant')}
-              className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                filterStatus === 'compliant'
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
-            >
-              <CheckCircle2 className="w-4 h-4 inline mr-1" />
-              Compliant
-            </button>
-            <button
-              onClick={() => setFilterStatus('non-compliant')}
-              className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                filterStatus === 'non-compliant'
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
-            >
-              <AlertCircle className="w-4 h-4 inline mr-1" />
-              Issues
-            </button>
+            {['all', 'compliant', 'non-compliant'].map((status) => (
+              <button
+                key={status}
+                onClick={() => setFilterStatus(status as typeof filterStatus)}
+                className={`px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                  filterStatus === status
+                    ? 'bg-jkap-red-500 text-white'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                {status === 'all' ? 'All Teams' : status === 'compliant' ? 'Compliant' : 'Non-Compliant'}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div
-          className={`space-y-4 transition-all duration-700 delay-300 ${
-            isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-          }`}
-        >
-          {filteredTeams.map((team) => (
-            <TeamCard
-              key={team.id}
-              teamData={team}
-              onActivate={handleActivatePlayer}
-              isExpanded={expandedTeams.has(team.id)}
-              onToggle={() => toggleTeam(team.id)}
-              currentGame={currentGame}
-            />
-          ))}
+        {/* View-only notice for non-admins */}
+        {!isAdmin && (
+          <div className="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center gap-2">
+            <Eye className="w-4 h-4 text-blue-400" />
+            <p className="text-sm text-blue-400">
+              You can view all teams but can only manage your own team ({user?.teamAbbreviation})
+            </p>
+          </div>
+        )}
 
-          {filteredTeams.length === 0 && (
-            <div className="text-center py-12">
-              <Users className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
-              <p className="text-muted-foreground">No teams match your search</p>
+        <div className="space-y-4">
+          {filteredTeams.map((team, index) => (
+            <div
+              key={team.id}
+              className={`transition-all duration-500 ${
+                isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+              }`}
+              style={{ transitionDelay: `${index * 50}ms` }}
+            >
+              <TeamCard
+                teamData={team}
+                onActivate={handleActivatePlayer}
+                isExpanded={expandedTeams.has(team.id)}
+                onToggle={() => toggleTeam(team.id)}
+                currentGame={currentGame}
+                canEdit={isAdmin || team.id === userTeamId}
+                isUserTeam={team.id === userTeamId}
+              />
             </div>
-          )}
+          ))}
         </div>
       </main>
 
@@ -1622,15 +1648,18 @@ export default function InjuredListPage() {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAdd={handleAddPlacement}
-        teams={allTeams}
+        userTeamId={userTeamId}
+        isAdmin={isAdmin}
       />
 
-      <SettingsModal
-        isOpen={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
-        settings={webhookSettings}
-        onSave={handleSaveSettings}
-      />
+      {isAdmin && (
+        <SettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
+          settings={webhookSettings}
+          onSave={handleSaveSettings}
+        />
+      )}
 
       <AnnouncementPreview
         isOpen={showAnnouncementPreview}
@@ -1644,3 +1673,4 @@ export default function InjuredListPage() {
     </div>
   );
 }
+

@@ -1,50 +1,69 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AuthUser } from '@/types/league';
+import { AuthUser, MLB_TEAMS } from '@/types/league';
 
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
-  register: (email: string, password: string, name: string) => Promise<boolean>;
+  register: (username: string, password: string, displayName: string, teamId: string) => Promise<{ success: boolean; error?: string }>;
+  getAllUsers: () => AuthUser[];
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Demo users for development (replace with real auth later)
-const DEMO_USERS: Record<string, { password: string; user: AuthUser }> = {
-  'murphi@jkapmemorial.com': {
-    password: 'demo123',
-    user: {
-      id: 'owner-001',
-      email: 'murphi@jkapmemorial.com',
-      name: 'Murphi Kennedy',
-      teamId: 'team-ari',
-      isAdmin: false,
-    },
-  },
-  'admin@jkapmemorial.com': {
-    password: 'admin123',
-    user: {
-      id: 'admin-001',
-      email: 'admin@jkapmemorial.com',
-      name: 'League Admin',
-      isAdmin: true,
-    },
-  },
+const AUTH_STORAGE_KEY = 'jkap_auth_user';
+const USERS_STORAGE_KEY = 'jkap_users';
+
+// Default admin user (always available)
+const DEFAULT_ADMIN: AuthUser = {
+  id: 'admin-001',
+  username: 'commissioner',
+  displayName: 'League Commissioner',
+  teamId: 'admin',
+  teamName: 'League Office',
+  teamAbbreviation: 'LO',
+  isAdmin: true,
+  createdAt: '2024-01-01',
 };
 
-const AUTH_STORAGE_KEY = 'jkap_auth_user';
+// Initial demo users
+const INITIAL_USERS: { user: AuthUser; password: string }[] = [
+  {
+    user: DEFAULT_ADMIN,
+    password: 'jkap2024',
+  },
+];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [users, setUsers] = useState<{ user: AuthUser; password: string }[]>(INITIAL_USERS);
 
-  // Check for existing session on mount
+  // Load users and current session from localStorage
   useEffect(() => {
+    // Load stored users
+    const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+    if (storedUsers) {
+      try {
+        const parsedUsers = JSON.parse(storedUsers);
+        // Ensure admin is always present
+        const hasAdmin = parsedUsers.some((u: { user: AuthUser }) => u.user.id === 'admin-001');
+        if (!hasAdmin) {
+          parsedUsers.push(INITIAL_USERS[0]);
+        }
+        setUsers(parsedUsers);
+      } catch {
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(INITIAL_USERS));
+      }
+    } else {
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(INITIAL_USERS));
+    }
+
+    // Load current session
     const stored = localStorage.getItem(AUTH_STORAGE_KEY);
     if (stored) {
       try {
@@ -57,16 +76,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     
     // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     
-    const demoUser = DEMO_USERS[email.toLowerCase()];
-    if (demoUser && demoUser.password === password) {
-      setUser(demoUser.user);
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demoUser.user));
+    // Get latest users from localStorage
+    const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+    const currentUsers = storedUsers ? JSON.parse(storedUsers) : INITIAL_USERS;
+    
+    const foundUser = currentUsers.find(
+      (u: { user: AuthUser; password: string }) => 
+        u.user.username.toLowerCase() === username.toLowerCase() && 
+        u.password === password
+    );
+    
+    if (foundUser) {
+      setUser(foundUser.user);
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(foundUser.user));
       setIsLoading(false);
       return true;
     }
@@ -80,24 +108,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
-  const register = async (email: string, password: string, name: string): Promise<boolean> => {
+  const register = async (
+    username: string, 
+    password: string, 
+    displayName: string, 
+    teamId: string
+  ): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
     
     // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     
-    // For demo, just create a new user
+    // Get latest users
+    const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+    const currentUsers: { user: AuthUser; password: string }[] = storedUsers 
+      ? JSON.parse(storedUsers) 
+      : INITIAL_USERS;
+    
+    // Check if username already exists
+    const usernameExists = currentUsers.some(
+      (u) => u.user.username.toLowerCase() === username.toLowerCase()
+    );
+    if (usernameExists) {
+      setIsLoading(false);
+      return { success: false, error: 'Username already taken. Please choose another.' };
+    }
+    
+    // Check if team is already claimed
+    const teamClaimed = currentUsers.some(
+      (u) => u.user.teamId === teamId && !u.user.isAdmin
+    );
+    if (teamClaimed) {
+      setIsLoading(false);
+      return { success: false, error: 'This team has already been claimed by another owner.' };
+    }
+    
+    // Find team info
+    const team = MLB_TEAMS.find((t) => t.id === teamId);
+    if (!team) {
+      setIsLoading(false);
+      return { success: false, error: 'Invalid team selection.' };
+    }
+    
+    // Create new user
     const newUser: AuthUser = {
       id: `user-${Date.now()}`,
-      email: email.toLowerCase(),
-      name,
+      username: username.toLowerCase(),
+      displayName,
+      teamId: team.id,
+      teamName: team.name,
+      teamAbbreviation: team.abbreviation,
       isAdmin: false,
+      createdAt: new Date().toISOString().split('T')[0],
     };
     
+    const newUserEntry = { user: newUser, password };
+    const updatedUsers = [...currentUsers, newUserEntry];
+    
+    // Save to localStorage
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(updatedUsers));
+    setUsers(updatedUsers);
+    
+    // Log in the new user
     setUser(newUser);
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
+    
     setIsLoading(false);
-    return true;
+    return { success: true };
+  };
+
+  const getAllUsers = (): AuthUser[] => {
+    const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+    if (storedUsers) {
+      try {
+        const parsed = JSON.parse(storedUsers);
+        return parsed.map((u: { user: AuthUser }) => u.user);
+      } catch {
+        return [];
+      }
+    }
+    return [];
   };
 
   return (
@@ -109,6 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         register,
+        getAllUsers,
       }}
     >
       {children}
@@ -125,4 +216,3 @@ export function useAuth() {
 }
 
 export default AuthContext;
-

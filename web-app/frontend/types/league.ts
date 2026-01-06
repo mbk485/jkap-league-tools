@@ -124,11 +124,48 @@ export interface TeamStream {
 // Auth User
 export interface AuthUser {
   id: string;
-  email: string;
-  name: string;
-  teamId?: string;
+  username: string;
+  displayName: string;
+  teamId: string;
+  teamName: string;
+  teamAbbreviation: string;
   isAdmin: boolean;
+  createdAt: string;
 }
+
+// All 30 MLB Teams for selection
+export const MLB_TEAMS = [
+  { id: 'ari', name: 'Arizona Diamondbacks', abbreviation: 'ARI' },
+  { id: 'atl', name: 'Atlanta Braves', abbreviation: 'ATL' },
+  { id: 'bal', name: 'Baltimore Orioles', abbreviation: 'BAL' },
+  { id: 'bos', name: 'Boston Red Sox', abbreviation: 'BOS' },
+  { id: 'chc', name: 'Chicago Cubs', abbreviation: 'CHC' },
+  { id: 'cws', name: 'Chicago White Sox', abbreviation: 'CWS' },
+  { id: 'cin', name: 'Cincinnati Reds', abbreviation: 'CIN' },
+  { id: 'cle', name: 'Cleveland Guardians', abbreviation: 'CLE' },
+  { id: 'col', name: 'Colorado Rockies', abbreviation: 'COL' },
+  { id: 'det', name: 'Detroit Tigers', abbreviation: 'DET' },
+  { id: 'hou', name: 'Houston Astros', abbreviation: 'HOU' },
+  { id: 'kc', name: 'Kansas City Royals', abbreviation: 'KC' },
+  { id: 'laa', name: 'Los Angeles Angels', abbreviation: 'LAA' },
+  { id: 'lad', name: 'Los Angeles Dodgers', abbreviation: 'LAD' },
+  { id: 'mia', name: 'Miami Marlins', abbreviation: 'MIA' },
+  { id: 'mil', name: 'Milwaukee Brewers', abbreviation: 'MIL' },
+  { id: 'min', name: 'Minnesota Twins', abbreviation: 'MIN' },
+  { id: 'nym', name: 'New York Mets', abbreviation: 'NYM' },
+  { id: 'nyy', name: 'New York Yankees', abbreviation: 'NYY' },
+  { id: 'oak', name: 'Oakland Athletics', abbreviation: 'OAK' },
+  { id: 'phi', name: 'Philadelphia Phillies', abbreviation: 'PHI' },
+  { id: 'pit', name: 'Pittsburgh Pirates', abbreviation: 'PIT' },
+  { id: 'sd', name: 'San Diego Padres', abbreviation: 'SD' },
+  { id: 'sf', name: 'San Francisco Giants', abbreviation: 'SF' },
+  { id: 'sea', name: 'Seattle Mariners', abbreviation: 'SEA' },
+  { id: 'stl', name: 'St. Louis Cardinals', abbreviation: 'STL' },
+  { id: 'tb', name: 'Tampa Bay Rays', abbreviation: 'TB' },
+  { id: 'tex', name: 'Texas Rangers', abbreviation: 'TEX' },
+  { id: 'tor', name: 'Toronto Blue Jays', abbreviation: 'TOR' },
+  { id: 'wsh', name: 'Washington Nationals', abbreviation: 'WSH' },
+] as const;
 
 // =============================================================================
 // RE-EXPORT FROM CONFIG (Single source of truth for URLs)
