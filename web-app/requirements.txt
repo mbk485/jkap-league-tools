@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+piexif
+stripe
+PyJWT
+Pillow
+pillow-heif
+sqlalchemy
+psycopg2-binary
