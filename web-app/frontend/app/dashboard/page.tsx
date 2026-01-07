@@ -68,7 +68,7 @@ function getGreeting(): string {
 
 function DashboardContent() {
   const { user } = useAuth();
-  const [owner] = useState<TeamOwner>({ ...mockOwner, name: user?.name || mockOwner.name });
+  const [owner] = useState<TeamOwner>({ ...mockOwner, name: user?.displayName || mockOwner.name });
   const [team] = useState<Team>(mockTeam);
   const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
   const [isLoaded, setIsLoaded] = useState(false);
