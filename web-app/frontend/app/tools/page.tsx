@@ -20,6 +20,7 @@ import {
   Shield,
   AlertTriangle,
   FileSpreadsheet,
+  Newspaper,
 } from 'lucide-react';
 
 interface LeagueTool {
@@ -52,6 +53,15 @@ const leagueTools: LeagueTool[] = [
     href: '/tools/injured-list',
     status: 'available',
     category: 'management',
+  },
+  {
+    id: 'game-recap',
+    name: 'Game Recap Creator',
+    description: 'Generate ESPN-style game recaps and social media images. AI-powered writing with shareable graphics.',
+    icon: <Newspaper className="w-7 h-7" />,
+    href: '/tools/game-recap',
+    status: 'available',
+    category: 'analytics',
     isNew: true,
   },
   {
