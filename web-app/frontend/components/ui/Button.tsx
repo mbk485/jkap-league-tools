@@ -28,6 +28,7 @@ interface ButtonAsButton extends ButtonBaseProps {
 interface ButtonAsLink extends ButtonBaseProps {
   as: 'link';
   href: string;
+  target?: string;
   onClick?: never;
   type?: never;
 }
@@ -140,6 +141,7 @@ export function Button({
     return (
       <Link
         href={props.href}
+        target={props.target}
         className={combinedClassName}
         aria-disabled={disabled}
       >
