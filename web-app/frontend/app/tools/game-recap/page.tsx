@@ -367,7 +367,7 @@ function ImagePreview({ style, gameData }: { style: ImageStyle; gameData: GameDa
         
         {/* Style Indicator */}
         <div className="absolute top-4 right-4">
-          <Badge variant="success" className="text-xs">
+          <Badge variant="active" className="text-xs">
             {style === 'instagram' && <Instagram className="w-3 h-3 mr-1" />}
             {style === 'realistic' && <Camera className="w-3 h-3 mr-1" />}
             {style === 'graphic' && <Zap className="w-3 h-3 mr-1" />}
@@ -529,7 +529,7 @@ export default function GameRecapPage() {
                 </div>
               </div>
             </div>
-            <Badge variant="info" className="hidden sm:flex">
+            <Badge variant="system" className="hidden sm:flex">
               <Sparkles className="w-3 h-3 mr-1" />
               AI Powered
             </Badge>
