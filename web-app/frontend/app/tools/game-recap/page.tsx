@@ -7,6 +7,12 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { MLB_TEAMS } from '@/types/league';
+import { 
+  generateRecap as generateAIRecap, 
+  isOpenAIConfigured, 
+  saveApiKey, 
+  removeApiKey 
+} from '@/lib/openai';
 import {
   ArrowLeft,
   Newspaper,
@@ -28,6 +34,9 @@ import {
   Camera,
   FileText,
   Loader2,
+  Settings,
+  Key,
+  X,
 } from 'lucide-react';
 
 // =============================================================================
@@ -418,9 +427,19 @@ export default function GameRecapPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [activeTab, setActiveTab] = useState<'recap' | 'image'>('recap');
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  
+  // API Settings State (admin only)
+  const [showApiSettings, setShowApiSettings] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [hasApiKey, setHasApiKey] = useState(false);
+  
+  const isAdmin = user?.isAdmin ?? false;
   
   useEffect(() => {
     setIsLoaded(true);
+    // Check if API key is configured
+    setHasApiKey(isOpenAIConfigured());
   }, []);
   
   const handleAddPlayer = () => {
@@ -465,12 +484,50 @@ export default function GameRecapPage() {
     }));
   };
   
+  const handleSaveApiKey = () => {
+    if (apiKeyInput.trim()) {
+      saveApiKey(apiKeyInput.trim());
+      setHasApiKey(true);
+      setApiKeyInput('');
+      setShowApiSettings(false);
+    }
+  };
+  
+  const handleRemoveApiKey = () => {
+    removeApiKey();
+    setHasApiKey(false);
+    setApiKeyInput('');
+  };
+  
   const handleGenerate = async () => {
     setIsGenerating(true);
+    setGenerationError(null);
     
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Get team names
+    const homeTeamData = allTeams.find(t => t.id === gameData.homeTeam);
+    const awayTeamData = allTeams.find(t => t.id === gameData.awayTeam);
     
+    // Try OpenAI first if configured
+    if (hasApiKey) {
+      try {
+        const recap = await generateAIRecap({
+          ...gameData,
+          homeTeamName: homeTeamData?.name || gameData.homeTeam,
+          awayTeamName: awayTeamData?.name || gameData.awayTeam,
+        }, recapStyle);
+        
+        setGeneratedRecap(recap);
+        setShowImagePreview(true);
+        setIsGenerating(false);
+        return;
+      } catch (error) {
+        console.error('OpenAI generation failed:', error);
+        setGenerationError(error instanceof Error ? error.message : 'AI generation failed');
+        // Fall back to mock generation
+      }
+    }
+    
+    // Fallback to mock generation
     const recap = generateMockRecap(gameData, recapStyle);
     setGeneratedRecap(recap);
     setShowImagePreview(true);
@@ -529,13 +586,98 @@ export default function GameRecapPage() {
                 </div>
               </div>
             </div>
-            <Badge variant="system" className="hidden sm:flex">
-              <Sparkles className="w-3 h-3 mr-1" />
-              AI Powered
-            </Badge>
+            <div className="flex items-center gap-2">
+              {hasApiKey ? (
+                <Badge variant="active" className="hidden sm:flex">
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  AI Enabled
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="hidden sm:flex">
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  Demo Mode
+                </Badge>
+              )}
+              {isAdmin && (
+                <button
+                  onClick={() => setShowApiSettings(true)}
+                  className="p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                  title="API Settings"
+                >
+                  <Settings className="w-5 h-5 text-muted-foreground" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* API Settings Modal (Admin Only) */}
+      {showApiSettings && isAdmin && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Key className="w-5 h-5 text-jkap-red-500" />
+                  OpenAI API Settings
+                </CardTitle>
+                <button
+                  onClick={() => setShowApiSettings(false)}
+                  className="p-1 rounded hover:bg-muted/50"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Add your OpenAI API key to enable AI-powered game recap generation. 
+                Get your key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-jkap-red-500 hover:underline">platform.openai.com</a>
+              </p>
+              
+              {hasApiKey ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-xl">
+                    <Check className="w-5 h-5 text-green-500" />
+                    <span className="text-green-400 text-sm">API Key Configured</span>
+                  </div>
+                  <Button
+                    onClick={handleRemoveApiKey}
+                    variant="danger"
+                    fullWidth
+                  >
+                    Remove API Key
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <input
+                    type="password"
+                    placeholder="sk-..."
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    className="w-full bg-background/50 border border-border rounded-xl px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-jkap-red-500/50"
+                  />
+                  <Button
+                    onClick={handleSaveApiKey}
+                    disabled={!apiKeyInput.trim()}
+                    fullWidth
+                    icon={<Key className="w-4 h-4" />}
+                  >
+                    Save API Key
+                  </Button>
+                </div>
+              )}
+              
+              <p className="text-xs text-muted-foreground">
+                Your API key is stored locally in your browser and never sent to our servers.
+                Uses GPT-4o-mini model (~$0.001 per recap).
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className={`max-w-7xl mx-auto px-4 py-8 transition-all duration-500 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
@@ -805,6 +947,21 @@ export default function GameRecapPage() {
                   <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
                     <AlertCircle className="w-3 h-3" />
                     Select both teams and enter a score to generate
+                  </p>
+                )}
+                
+                {generationError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                    <p className="text-xs text-red-400 text-center flex items-center justify-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {generationError}
+                    </p>
+                  </div>
+                )}
+                
+                {!hasApiKey && canGenerate && (
+                  <p className="text-xs text-amber-400/70 text-center">
+                    Demo mode: Using template generation. {isAdmin && 'Add OpenAI API key in settings for AI-powered recaps.'}
                   </p>
                 )}
               </CardContent>
