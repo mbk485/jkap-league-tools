@@ -193,7 +193,7 @@ export default function LeagueToolsPage() {
 
               {user && (
                 <p className="text-sm text-muted-foreground/70 mt-4">
-                  Signed in as <span className="text-foreground font-medium">{user.name}</span>
+                  Signed in as <span className="text-foreground font-medium">{user.displayName}</span>
                   {user.isAdmin && (
                     <Badge variant="delinquent" className="ml-2 text-xs">Admin</Badge>
                   )}
