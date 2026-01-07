@@ -87,77 +87,28 @@ interface WebhookSettings {
 
 const allTeams = MLB_TEAMS.map(t => ({ id: t.id, name: t.name, abbreviation: t.abbreviation }));
 
-// Sample IL placements for demo
-const samplePlacements: ILPlacement[] = [
-  {
-    id: 'il-001',
-    player: { id: 'p1', name: 'Zack Wheeler', position: 'SP', type: 'pitcher' },
-    teamId: 'phi',
-    startDate: '2026-01-01',
-    startGame: 1,
-    gamesOnIL: 8,
-    endDate: '2026-01-10',
-    endGame: 8,
-    injury: 'Shoulder Strain',
-    status: 'completed',
-  },
-  {
-    id: 'il-002',
-    player: { id: 'p2', name: 'Bryce Harper', position: 'RF', type: 'position' },
-    teamId: 'phi',
-    startDate: '2026-01-05',
-    startGame: 5,
-    gamesOnIL: 6,
-    endDate: '2026-01-12',
-    endGame: 10,
-    injury: 'Hamstring Tightness',
-    status: 'completed',
-  },
-  {
-    id: 'il-003',
-    player: { id: 'p3', name: 'Kyle Schwarber', position: 'LF', type: 'position' },
-    teamId: 'phi',
-    startDate: '2026-01-03',
-    startGame: 3,
-    gamesOnIL: 4,
-    injury: 'Back Spasms',
-    status: 'active',
-  },
-  {
-    id: 'il-004',
-    player: { id: 'p4', name: 'Aaron Judge', position: 'RF', type: 'position' },
-    teamId: 'nyy',
-    startDate: '2026-01-02',
-    startGame: 2,
-    gamesOnIL: 7,
-    endDate: '2026-01-09',
-    endGame: 8,
-    injury: 'Oblique Strain',
-    status: 'completed',
-  },
-  {
-    id: 'il-005',
-    player: { id: 'p5', name: 'Gerrit Cole', position: 'SP', type: 'pitcher' },
-    teamId: 'nyy',
-    startDate: '2026-01-04',
-    startGame: 4,
-    gamesOnIL: 5,
-    injury: 'Elbow Inflammation',
-    status: 'active',
-  },
-  {
-    id: 'il-006',
-    player: { id: 'p6', name: 'Ronald Acuna Jr', position: 'RF', type: 'position' },
-    teamId: 'atl',
-    startDate: '2026-01-01',
-    startGame: 1,
-    gamesOnIL: 10,
-    endDate: '2026-01-12',
-    endGame: 10,
-    injury: 'Knee Soreness',
-    status: 'completed',
-  },
-];
+// IL Placements - starts empty for clean rollout
+const IL_STORAGE_KEY = 'jkap_il_placements';
+
+// Load placements from localStorage or start with empty array
+const loadPlacements = (): ILPlacement[] => {
+  if (typeof window === 'undefined') return [];
+  const stored = localStorage.getItem(IL_STORAGE_KEY);
+  if (stored) {
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
+// Save placements to localStorage
+const savePlacements = (placements: ILPlacement[]) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(IL_STORAGE_KEY, JSON.stringify(placements));
+};
 
 // IL Rules
 const IL_RULES = {
@@ -1204,7 +1155,7 @@ function TeamCard({ teamData, onActivate, isExpanded, onToggle, currentGame, can
 
 export default function InjuredListPage() {
   const { isAuthenticated, user } = useAuth();
-  const [placements, setPlacements] = useState<ILPlacement[]>(samplePlacements);
+  const [placements, setPlacements] = useState<ILPlacement[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'compliant' | 'non-compliant'>('all');
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
@@ -1212,6 +1163,19 @@ export default function InjuredListPage() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [currentGame, setCurrentGame] = useState(10);
+
+  // Load placements from localStorage on mount
+  useEffect(() => {
+    const stored = loadPlacements();
+    setPlacements(stored);
+  }, []);
+
+  // Save placements to localStorage whenever they change
+  useEffect(() => {
+    if (isLoaded) {
+      savePlacements(placements);
+    }
+  }, [placements, isLoaded]);
 
   const isAdmin = user?.isAdmin ?? false;
   const userTeamId = user?.teamId;
