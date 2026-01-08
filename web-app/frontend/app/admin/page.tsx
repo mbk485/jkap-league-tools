@@ -122,7 +122,7 @@ export default function AdminPage() {
     setScoutingData(data);
   }, []);
   
-  const getTeamName = (teamId: string) => {
+  const getScoutingTeamName = (teamId: string) => {
     const team = MLB_TEAMS.find(t => t.id === teamId);
     return team ? team.name : teamId || 'Unknown';
   };
@@ -801,7 +801,7 @@ export default function AdminPage() {
                           <TrendingUp className="w-5 h-5 text-emerald-400" />
                         </div>
                         <div>
-                          <p className="font-semibold text-white">{getTeamName(opponentId)}</p>
+                          <p className="font-semibold text-white">{getScoutingTeamName(opponentId)}</p>
                           <p className="text-xs text-slate-400">{entries.length} analysis {entries.length === 1 ? 'report' : 'reports'}</p>
                         </div>
                       </div>
