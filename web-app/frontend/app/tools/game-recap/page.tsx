@@ -460,6 +460,8 @@ export default function GameRecapPage() {
   const [isPitchingDragging, setIsPitchingDragging] = useState(false);
   const [pitchingFeedback, setPitchingFeedback] = useState<string | null>(null);
   const [isAnalyzingPitching, setIsAnalyzingPitching] = useState(false);
+  const [analysisOpponent, setAnalysisOpponent] = useState(''); // Who they played against
+  const [analysisContext, setAnalysisContext] = useState<'pitching' | 'hitting'>('pitching'); // Were they pitching or hitting
   
   // API Settings State (admin only)
   const [showApiSettings, setShowApiSettings] = useState(false);
@@ -696,9 +698,13 @@ Return ONLY the JSON, no other text.`
   
   // Analyze pitching and save to admin database (data harvesting)
   const handleAnalyzePitching = async () => {
-    if (!pitchingAnalysisImage || !hasApiKey) return;
+    if (!pitchingAnalysisImage || !hasApiKey || !analysisOpponent) return;
     
     setIsAnalyzingPitching(true);
+    
+    const userTeamId = user?.teamId || gameData.homeTeam || 'unknown';
+    const userTeamName = allTeams.find(t => t.id === userTeamId)?.name || 'Your team';
+    const opponentTeamName = allTeams.find(t => t.id === analysisOpponent)?.name || 'Opponent';
     
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -715,12 +721,14 @@ Return ONLY the JSON, no other text.`
               content: [
                 {
                   type: 'text',
-                  text: `Analyze this MLB The Show pitching analysis screenshot. Provide:
-1. A brief summary of what the data shows
-2. 2-3 specific tips for improvement based on the data
-3. What the opponent's tendencies appear to be
+                  text: `Analyze this MLB The Show ${analysisContext} analysis screenshot. The user (${userTeamName}) played against ${opponentTeamName}.
 
-Format as helpful coaching feedback (2-3 paragraphs). Be encouraging but specific.`
+Provide helpful coaching feedback (2-3 paragraphs):
+1. What the data shows overall
+2. 2-3 specific tips for the user to improve
+3. Encouraging conclusion
+
+Be specific about pitch types, locations, and tendencies you can see in the data. Format nicely with clear sections.`
                 },
                 {
                   type: 'image_url',
@@ -729,7 +737,7 @@ Format as helpful coaching feedback (2-3 paragraphs). Be encouraging but specifi
               ],
             },
           ],
-          max_tokens: 500,
+          max_tokens: 600,
         }),
       });
       
@@ -740,20 +748,94 @@ Format as helpful coaching feedback (2-3 paragraphs). Be encouraging but specifi
       
       setPitchingFeedback(feedback || 'Analysis complete. Keep working on your game!');
       
-      // SAVE TO LOCAL STORAGE FOR ADMIN (Data harvesting)
-      // In production, this would go to Supabase
-      const scoutingData = {
+      // SECOND API CALL - Extract structured scouting data (hidden from user)
+      const scoutingResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('jkap_openai_key')}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Analyze this MLB The Show ${analysisContext} analysis screenshot and extract detailed scouting intelligence.
+
+Return ONLY this JSON structure:
+{
+  "uploaderWeaknesses": ["specific weakness 1", "specific weakness 2", "specific weakness 3"],
+  "uploaderStrengths": ["specific strength 1", "specific strength 2"],
+  "opponentWeaknesses": ["what the opponent struggled with 1", "what opponent struggled with 2"],
+  "opponentStrengths": ["what opponent did well 1", "what opponent did well 2"],
+  "pitchTendencies": {
+    "mostUsedPitches": ["pitch type 1", "pitch type 2"],
+    "effectivePitches": ["pitch type that worked"],
+    "ineffectivePitches": ["pitch type that didn't work"],
+    "preferredLocations": ["zone or location tendency"]
+  },
+  "hittingTendencies": {
+    "hotZones": ["zone where they hit well"],
+    "coldZones": ["zone where they struggle"],
+    "pitchesTheyHit": ["pitch types they handle"],
+    "pitchesTheyMiss": ["pitch types they struggle with"]
+  },
+  "keyInsights": ["actionable insight 1", "actionable insight 2", "actionable insight 3"],
+  "recommendedStrategy": "Brief strategy recommendation for playing against this opponent"
+}
+
+Extract as much detail as you can see. Use null for sections with no data visible.`
+                },
+                {
+                  type: 'image_url',
+                  image_url: { url: pitchingAnalysisImage },
+                },
+              ],
+            },
+          ],
+          max_tokens: 800,
+        }),
+      });
+      
+      let scoutingIntel = null;
+      if (scoutingResponse.ok) {
+        const scoutingData = await scoutingResponse.json();
+        const scoutingContent = scoutingData.choices[0]?.message?.content;
+        const jsonMatch = scoutingContent?.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            scoutingIntel = JSON.parse(jsonMatch[0]);
+          } catch (e) {
+            console.error('Failed to parse scouting intel');
+          }
+        }
+      }
+      
+      // SAVE COMPREHENSIVE SCOUTING DATA TO LOCAL STORAGE (Data harvesting)
+      const scoutingEntry = {
         id: Date.now(),
         timestamp: new Date().toISOString(),
+        // WHO submitted
         uploadedBy: user?.username || 'anonymous',
-        teamId: gameData.homeTeam || gameData.awayTeam || 'unknown',
-        opponentTeamId: gameData.awayTeam || gameData.homeTeam || 'unknown',
+        uploaderTeamId: userTeamId,
+        uploaderTeamName: userTeamName,
+        // WHO they played
+        opponentTeamId: analysisOpponent,
+        opponentTeamName: opponentTeamName,
+        // CONTEXT
+        analysisType: analysisContext, // pitching or hitting
+        // RAW DATA
         imageData: pitchingAnalysisImage,
-        aiFeedback: feedback,
+        userFeedback: feedback, // What we showed the user
+        // HIDDEN SCOUTING INTEL
+        scoutingIntel: scoutingIntel,
       };
       
       const existingData = JSON.parse(localStorage.getItem('jkap_scouting_data') || '[]');
-      existingData.push(scoutingData);
+      existingData.push(scoutingEntry);
       localStorage.setItem('jkap_scouting_data', JSON.stringify(existingData));
       
     } catch (error) {
@@ -1615,10 +1697,57 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
                   </Badge>
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Upload your pitching analysis screenshot for AI feedback on your performance
+                  Upload your game analysis screenshot and get AI coaching feedback
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Context Selection */}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setAnalysisContext('pitching')}
+                    className={`p-3 rounded-xl border-2 transition-all text-left ${
+                      analysisContext === 'pitching'
+                        ? 'border-blue-500 bg-blue-500/10'
+                        : 'border-border hover:border-blue-500/30 bg-muted/20'
+                    }`}
+                  >
+                    <p className={`font-semibold text-sm ${analysisContext === 'pitching' ? 'text-blue-400' : 'text-foreground'}`}>
+                      🎯 Pitching
+                    </p>
+                    <p className="text-xs text-muted-foreground">How I pitched</p>
+                  </button>
+                  <button
+                    onClick={() => setAnalysisContext('hitting')}
+                    className={`p-3 rounded-xl border-2 transition-all text-left ${
+                      analysisContext === 'hitting'
+                        ? 'border-blue-500 bg-blue-500/10'
+                        : 'border-border hover:border-blue-500/30 bg-muted/20'
+                    }`}
+                  >
+                    <p className={`font-semibold text-sm ${analysisContext === 'hitting' ? 'text-blue-400' : 'text-foreground'}`}>
+                      ⚾ Hitting
+                    </p>
+                    <p className="text-xs text-muted-foreground">How I hit</p>
+                  </button>
+                </div>
+                
+                {/* Opponent Selection */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Who did you play against?</label>
+                  <select
+                    value={analysisOpponent}
+                    onChange={(e) => setAnalysisOpponent(e.target.value)}
+                    className="w-full bg-background/50 border border-border rounded-xl px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  >
+                    <option value="">Select opponent...</option>
+                    {allTeams.map(team => (
+                      <option key={team.id} value={team.id}>
+                        {team.name} ({team.abbreviation})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
                 {/* Upload Zone */}
                 <div
                   onDrop={handlePitchingDrop}
@@ -1644,7 +1773,7 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
                       <div className="relative aspect-video rounded-lg overflow-hidden bg-background">
                         <img 
                           src={pitchingAnalysisImage} 
-                          alt="Pitching Analysis" 
+                          alt="Game Analysis" 
                           className="w-full h-full object-contain"
                         />
                         <button
@@ -1663,9 +1792,9 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
                       <div className="w-12 h-12 mx-auto rounded-full bg-blue-500/10 flex items-center justify-center">
                         <BarChart3 className="w-6 h-6 text-blue-500" />
                       </div>
-                      <p className="font-medium text-foreground">Upload Pitching Analysis</p>
+                      <p className="font-medium text-foreground">Upload {analysisContext === 'pitching' ? 'Pitching' : 'Hitting'} Analysis</p>
                       <p className="text-xs text-muted-foreground">
-                        Screenshot your post-game pitching breakdown
+                        Screenshot your post-game {analysisContext} breakdown
                       </p>
                     </div>
                   )}
@@ -1687,7 +1816,7 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
                 {/* Analyze Button */}
                 <Button
                   onClick={handleAnalyzePitching}
-                  disabled={!pitchingAnalysisImage || !hasApiKey || isAnalyzingPitching}
+                  disabled={!pitchingAnalysisImage || !hasApiKey || isAnalyzingPitching || !analysisOpponent}
                   fullWidth
                   variant="outline"
                   icon={isAnalyzingPitching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -1695,6 +1824,12 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
                 >
                   {isAnalyzingPitching ? 'Analyzing Performance...' : 'Get AI Feedback'}
                 </Button>
+                
+                {!analysisOpponent && pitchingAnalysisImage && (
+                  <p className="text-xs text-center text-amber-400">
+                    Select your opponent to enable analysis
+                  </p>
+                )}
                 
                 <p className="text-[10px] text-center text-muted-foreground/60">
                   Your analysis helps improve the league experience for everyone

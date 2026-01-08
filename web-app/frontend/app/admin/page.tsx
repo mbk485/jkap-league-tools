@@ -79,17 +79,45 @@ export default function AdminPage() {
   const [flagsSaved, setFlagsSaved] = useState(false);
   
   // Scouting data (harvested from user uploads)
+  interface ScoutingIntel {
+    uploaderWeaknesses?: string[];
+    uploaderStrengths?: string[];
+    opponentWeaknesses?: string[];
+    opponentStrengths?: string[];
+    pitchTendencies?: {
+      mostUsedPitches?: string[];
+      effectivePitches?: string[];
+      ineffectivePitches?: string[];
+      preferredLocations?: string[];
+    };
+    hittingTendencies?: {
+      hotZones?: string[];
+      coldZones?: string[];
+      pitchesTheyHit?: string[];
+      pitchesTheyMiss?: string[];
+    };
+    keyInsights?: string[];
+    recommendedStrategy?: string;
+  }
   interface ScoutingEntry {
     id: number;
     timestamp: string;
     uploadedBy: string;
-    teamId: string;
+    uploaderTeamId?: string;
+    uploaderTeamName?: string;
+    teamId?: string; // Legacy field
     opponentTeamId: string;
+    opponentTeamName?: string;
+    analysisType?: 'pitching' | 'hitting';
     imageData: string;
-    aiFeedback: string;
+    aiFeedback?: string;
+    userFeedback?: string;
+    scoutingIntel?: ScoutingIntel;
   }
   const [scoutingData, setScoutingData] = useState<ScoutingEntry[]>([]);
   const [expandedScouting, setExpandedScouting] = useState<number | null>(null);
+  const [expandedCaseFile, setExpandedCaseFile] = useState<string | null>(null);
+  const [caseFileTab, setCaseFileTab] = useState<'overview' | 'reports'>('overview');
 
   // Protect admin route
   useEffect(() => {
@@ -126,6 +154,101 @@ export default function AdminPage() {
     const team = MLB_TEAMS.find(t => t.id === teamId);
     return team ? team.name : teamId || 'Unknown';
   };
+  
+  // Build comprehensive case files for each team
+  const buildCaseFiles = () => {
+    const caseFiles: Record<string, {
+      teamId: string;
+      teamName: string;
+      theirSubmissions: ScoutingEntry[]; // What this team uploaded (their perspective)
+      reportsAgainstThem: ScoutingEntry[]; // When others played against this team
+      aggregatedWeaknesses: string[];
+      aggregatedStrengths: string[];
+      pitchingTendencies: string[];
+      hittingTendencies: string[];
+      strategies: string[];
+    }> = {};
+    
+    scoutingData.forEach(entry => {
+      // Create case file for the team who uploaded (their own data)
+      const uploaderTeamId = entry.uploaderTeamId || entry.teamId || 'unknown';
+      if (!caseFiles[uploaderTeamId]) {
+        caseFiles[uploaderTeamId] = {
+          teamId: uploaderTeamId,
+          teamName: entry.uploaderTeamName || getScoutingTeamName(uploaderTeamId),
+          theirSubmissions: [],
+          reportsAgainstThem: [],
+          aggregatedWeaknesses: [],
+          aggregatedStrengths: [],
+          pitchingTendencies: [],
+          hittingTendencies: [],
+          strategies: [],
+        };
+      }
+      caseFiles[uploaderTeamId].theirSubmissions.push(entry);
+      
+      // Add uploader's weaknesses to their case file
+      if (entry.scoutingIntel?.uploaderWeaknesses) {
+        caseFiles[uploaderTeamId].aggregatedWeaknesses.push(...entry.scoutingIntel.uploaderWeaknesses);
+      }
+      if (entry.scoutingIntel?.uploaderStrengths) {
+        caseFiles[uploaderTeamId].aggregatedStrengths.push(...entry.scoutingIntel.uploaderStrengths);
+      }
+      
+      // Create/update case file for the opponent (intelligence AGAINST them)
+      const opponentTeamId = entry.opponentTeamId;
+      if (opponentTeamId && opponentTeamId !== 'unknown') {
+        if (!caseFiles[opponentTeamId]) {
+          caseFiles[opponentTeamId] = {
+            teamId: opponentTeamId,
+            teamName: entry.opponentTeamName || getScoutingTeamName(opponentTeamId),
+            theirSubmissions: [],
+            reportsAgainstThem: [],
+            aggregatedWeaknesses: [],
+            aggregatedStrengths: [],
+            pitchingTendencies: [],
+            hittingTendencies: [],
+            strategies: [],
+          };
+        }
+        caseFiles[opponentTeamId].reportsAgainstThem.push(entry);
+        
+        // Add opponent's weaknesses/strengths to their case file
+        if (entry.scoutingIntel?.opponentWeaknesses) {
+          caseFiles[opponentTeamId].aggregatedWeaknesses.push(...entry.scoutingIntel.opponentWeaknesses);
+        }
+        if (entry.scoutingIntel?.opponentStrengths) {
+          caseFiles[opponentTeamId].aggregatedStrengths.push(...entry.scoutingIntel.opponentStrengths);
+        }
+        if (entry.scoutingIntel?.pitchTendencies) {
+          const pt = entry.scoutingIntel.pitchTendencies;
+          if (pt.mostUsedPitches) caseFiles[opponentTeamId].pitchingTendencies.push(...pt.mostUsedPitches);
+          if (pt.ineffectivePitches) caseFiles[opponentTeamId].aggregatedWeaknesses.push(...pt.ineffectivePitches.map(p => `Weak pitch: ${p}`));
+        }
+        if (entry.scoutingIntel?.hittingTendencies) {
+          const ht = entry.scoutingIntel.hittingTendencies;
+          if (ht.coldZones) caseFiles[opponentTeamId].hittingTendencies.push(...ht.coldZones.map(z => `Cold zone: ${z}`));
+          if (ht.pitchesTheyMiss) caseFiles[opponentTeamId].hittingTendencies.push(...ht.pitchesTheyMiss.map(p => `Struggles with: ${p}`));
+        }
+        if (entry.scoutingIntel?.recommendedStrategy) {
+          caseFiles[opponentTeamId].strategies.push(entry.scoutingIntel.recommendedStrategy);
+        }
+      }
+    });
+    
+    // Dedupe arrays
+    Object.values(caseFiles).forEach(cf => {
+      cf.aggregatedWeaknesses = Array.from(new Set(cf.aggregatedWeaknesses));
+      cf.aggregatedStrengths = Array.from(new Set(cf.aggregatedStrengths));
+      cf.pitchingTendencies = Array.from(new Set(cf.pitchingTendencies));
+      cf.hittingTendencies = Array.from(new Set(cf.hittingTendencies));
+      cf.strategies = Array.from(new Set(cf.strategies));
+    });
+    
+    return caseFiles;
+  };
+  
+  const caseFiles = buildCaseFiles();
   
   const handleDeleteScoutingEntry = (id: number) => {
     const updated = scoutingData.filter(s => s.id !== id);
@@ -742,16 +865,19 @@ export default function AdminPage() {
         </Card>
         
         {/* ============================================================= */}
-        {/* SCOUTING DATABASE - Harvested Data from User Uploads */}
+        {/* SCOUTING DATABASE - Team Case Files */}
         {/* ============================================================= */}
         <Card className="bg-slate-800/50 border-slate-700 mt-8">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-white flex items-center gap-2">
                 <Target className="w-5 h-5 text-emerald-400" />
-                Scouting Database
+                Team Case Files
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-emerald-500/50 text-emerald-400 ml-2">
-                  {scoutingData.length} ENTRIES
+                  {Object.keys(caseFiles).length} TEAMS
+                </Badge>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-blue-500/50 text-blue-400 ml-1">
+                  {scoutingData.length} REPORTS
                 </Badge>
               </CardTitle>
               <div className="flex gap-2">
@@ -762,129 +888,276 @@ export default function AdminPage() {
                     onClick={handleExportScoutingData}
                     icon={<Download className="w-4 h-4" />}
                   >
-                    Export
+                    Export All
                   </Button>
                 )}
               </div>
             </div>
             <p className="text-sm text-slate-400 mt-1">
-              Pitching analysis data collected from user uploads. Use this to build scouting reports.
+              Comprehensive scouting intelligence on every team. Sell as premium reports later. 💰
             </p>
           </CardHeader>
           <CardContent>
-            {scoutingData.length === 0 ? (
+            {Object.keys(caseFiles).length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-16 h-16 mx-auto rounded-full bg-slate-700/50 flex items-center justify-center mb-4">
                   <BarChart3 className="w-8 h-8 text-slate-500" />
                 </div>
                 <p className="text-slate-400 font-medium">No scouting data yet</p>
                 <p className="text-sm text-slate-500 mt-1">
-                  Data will appear here as users upload pitching analysis screenshots
+                  Case files build as users upload game analysis screenshots
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Group by Opponent */}
-                {Object.entries(
-                  scoutingData.reduce((acc, entry) => {
-                    const key = entry.opponentTeamId || 'unknown';
-                    if (!acc[key]) acc[key] = [];
-                    acc[key].push(entry);
-                    return acc;
-                  }, {} as Record<string, ScoutingEntry[]>)
-                ).map(([opponentId, entries]) => (
-                  <div key={opponentId} className="border border-slate-600 rounded-xl overflow-hidden">
-                    {/* Opponent Header */}
-                    <div className="bg-slate-700/50 px-4 py-3 flex items-center justify-between">
+                {Object.entries(caseFiles)
+                  .sort((a, b) => (b[1].reportsAgainstThem.length + b[1].theirSubmissions.length) - (a[1].reportsAgainstThem.length + a[1].theirSubmissions.length))
+                  .map(([teamId, caseFile]) => (
+                  <div key={teamId} className="border border-slate-600 rounded-xl overflow-hidden">
+                    {/* Team Header */}
+                    <button
+                      onClick={() => setExpandedCaseFile(expandedCaseFile === teamId ? null : teamId)}
+                      className="w-full bg-slate-700/50 px-4 py-3 flex items-center justify-between hover:bg-slate-700/70 transition-colors"
+                    >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-slate-600 flex items-center justify-center">
-                          <TrendingUp className="w-5 h-5 text-emerald-400" />
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-blue-500/20 border border-emerald-500/30 flex items-center justify-center">
+                          <span className="text-2xl">📁</span>
                         </div>
-                        <div>
-                          <p className="font-semibold text-white">{getScoutingTeamName(opponentId)}</p>
-                          <p className="text-xs text-slate-400">{entries.length} analysis {entries.length === 1 ? 'report' : 'reports'}</p>
+                        <div className="text-left">
+                          <p className="font-bold text-white text-lg">{caseFile.teamName}</p>
+                          <div className="flex gap-3 text-xs">
+                            <span className="text-emerald-400">{caseFile.theirSubmissions.length} self-reports</span>
+                            <span className="text-blue-400">{caseFile.reportsAgainstThem.length} intel reports</span>
+                            <span className="text-amber-400">{caseFile.aggregatedWeaknesses.length} weaknesses found</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                      <div className="flex items-center gap-3">
+                        {caseFile.aggregatedWeaknesses.length > 0 && (
+                          <Badge variant="outline" className="border-red-500/50 text-red-400">
+                            {caseFile.aggregatedWeaknesses.length} Vulnerabilities
+                          </Badge>
+                        )}
+                        {expandedCaseFile === teamId ? (
+                          <ChevronUp className="w-6 h-6 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="w-6 h-6 text-slate-400" />
+                        )}
+                      </div>
+                    </button>
                     
-                    {/* Entries */}
-                    <div className="divide-y divide-slate-700">
-                      {entries.map((entry) => (
-                        <div key={entry.id} className="bg-slate-800/30">
-                          {/* Entry Header */}
+                    {/* Expanded Case File */}
+                    {expandedCaseFile === teamId && (
+                      <div className="bg-slate-800/50 border-t border-slate-600">
+                        {/* Tabs */}
+                        <div className="flex border-b border-slate-600">
                           <button
-                            onClick={() => setExpandedScouting(expandedScouting === entry.id ? null : entry.id)}
-                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700/30 transition-colors"
+                            onClick={() => setCaseFileTab('overview')}
+                            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                              caseFileTab === 'overview' 
+                                ? 'bg-emerald-500/10 text-emerald-400 border-b-2 border-emerald-500' 
+                                : 'text-slate-400 hover:text-white'
+                            }`}
                           >
-                            <div className="flex items-center gap-3 text-left">
-                              <ImageIcon className="w-4 h-4 text-slate-400" />
-                              <div>
-                                <p className="text-sm text-white">
-                                  Uploaded by <span className="text-emerald-400">@{entry.uploadedBy}</span>
-                                </p>
-                                <p className="text-xs text-slate-500">
-                                  {new Date(entry.timestamp).toLocaleString()}
-                                </p>
-                              </div>
-                            </div>
-                            {expandedScouting === entry.id ? (
-                              <ChevronUp className="w-5 h-5 text-slate-400" />
-                            ) : (
-                              <ChevronDown className="w-5 h-5 text-slate-400" />
-                            )}
+                            📊 Scouting Overview
                           </button>
-                          
-                          {/* Expanded Content */}
-                          {expandedScouting === entry.id && (
-                            <div className="px-4 pb-4 space-y-4">
-                              {/* Image Preview */}
-                              {entry.imageData && (
-                                <div className="rounded-lg overflow-hidden border border-slate-600">
-                                  <img 
-                                    src={entry.imageData} 
-                                    alt="Pitching Analysis" 
-                                    className="w-full max-h-80 object-contain bg-slate-900"
-                                  />
-                                </div>
-                              )}
-                              
-                              {/* AI Feedback */}
-                              {entry.aiFeedback && (
-                                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                                  <p className="text-xs font-semibold text-emerald-400 mb-2">AI Analysis:</p>
-                                  <p className="text-sm text-slate-300 whitespace-pre-line">
-                                    {entry.aiFeedback}
-                                  </p>
-                                </div>
-                              )}
-                              
-                              {/* Actions */}
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(entry.aiFeedback || '');
-                                  }}
-                                  icon={<Copy className="w-3 h-3" />}
-                                >
-                                  Copy Analysis
-                                </Button>
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => handleDeleteScoutingEntry(entry.id)}
-                                  icon={<Trash2 className="w-3 h-3" />}
-                                  className="text-red-400 hover:bg-red-500/20"
-                                >
-                                  Delete
-                                </Button>
-                              </div>
-                            </div>
-                          )}
+                          <button
+                            onClick={() => setCaseFileTab('reports')}
+                            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                              caseFileTab === 'reports' 
+                                ? 'bg-blue-500/10 text-blue-400 border-b-2 border-blue-500' 
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            📄 Raw Reports ({caseFile.theirSubmissions.length + caseFile.reportsAgainstThem.length})
+                          </button>
                         </div>
-                      ))}
-                    </div>
+                        
+                        {caseFileTab === 'overview' ? (
+                          <div className="p-4 space-y-4">
+                            {/* Weaknesses */}
+                            {caseFile.aggregatedWeaknesses.length > 0 && (
+                              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                                <h4 className="text-red-400 font-semibold text-sm mb-2 flex items-center gap-2">
+                                  🎯 WEAKNESSES ({caseFile.aggregatedWeaknesses.length})
+                                </h4>
+                                <ul className="space-y-1">
+                                  {caseFile.aggregatedWeaknesses.slice(0, 10).map((w, i) => (
+                                    <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                                      <span className="text-red-400">•</span> {w}
+                                    </li>
+                                  ))}
+                                  {caseFile.aggregatedWeaknesses.length > 10 && (
+                                    <li className="text-xs text-slate-500">+{caseFile.aggregatedWeaknesses.length - 10} more...</li>
+                                  )}
+                                </ul>
+                              </div>
+                            )}
+                            
+                            {/* Strengths */}
+                            {caseFile.aggregatedStrengths.length > 0 && (
+                              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                                <h4 className="text-emerald-400 font-semibold text-sm mb-2 flex items-center gap-2">
+                                  💪 STRENGTHS ({caseFile.aggregatedStrengths.length})
+                                </h4>
+                                <ul className="space-y-1">
+                                  {caseFile.aggregatedStrengths.slice(0, 8).map((s, i) => (
+                                    <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                                      <span className="text-emerald-400">•</span> {s}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            
+                            {/* Hitting Tendencies */}
+                            {caseFile.hittingTendencies.length > 0 && (
+                              <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                                <h4 className="text-blue-400 font-semibold text-sm mb-2 flex items-center gap-2">
+                                  ⚾ HITTING TENDENCIES
+                                </h4>
+                                <ul className="space-y-1">
+                                  {caseFile.hittingTendencies.slice(0, 8).map((t, i) => (
+                                    <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                                      <span className="text-blue-400">•</span> {t}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            
+                            {/* Strategies */}
+                            {caseFile.strategies.length > 0 && (
+                              <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+                                <h4 className="text-purple-400 font-semibold text-sm mb-2 flex items-center gap-2">
+                                  🧠 RECOMMENDED STRATEGIES
+                                </h4>
+                                {caseFile.strategies.map((s, i) => (
+                                  <p key={i} className="text-sm text-slate-300 mb-2 pl-2 border-l-2 border-purple-500/30">
+                                    "{s}"
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                            
+                            {/* No Data */}
+                            {caseFile.aggregatedWeaknesses.length === 0 && 
+                             caseFile.aggregatedStrengths.length === 0 && 
+                             caseFile.strategies.length === 0 && (
+                              <div className="text-center py-6 text-slate-500">
+                                <p>No detailed intel extracted yet.</p>
+                                <p className="text-xs mt-1">Waiting for more analysis uploads...</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="p-4 space-y-3 max-h-96 overflow-y-auto">
+                            {/* All Reports */}
+                            {[...caseFile.theirSubmissions, ...caseFile.reportsAgainstThem]
+                              .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                              .map((entry) => (
+                              <div key={entry.id} className="bg-slate-700/30 rounded-lg overflow-hidden">
+                                <button
+                                  onClick={() => setExpandedScouting(expandedScouting === entry.id ? null : entry.id)}
+                                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700/50 transition-colors"
+                                >
+                                  <div className="flex items-center gap-3 text-left">
+                                    <span className="text-lg">{entry.analysisType === 'hitting' ? '⚾' : '🎯'}</span>
+                                    <div>
+                                      <p className="text-sm text-white">
+                                        <span className="text-slate-400">From:</span> <span className="text-emerald-400">@{entry.uploadedBy}</span>
+                                        <span className="text-slate-500 mx-2">vs</span>
+                                        <span className="text-blue-400">{entry.opponentTeamName || getScoutingTeamName(entry.opponentTeamId)}</span>
+                                      </p>
+                                      <p className="text-xs text-slate-500">
+                                        {new Date(entry.timestamp).toLocaleString()} • {entry.analysisType || 'pitching'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {expandedScouting === entry.id ? (
+                                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                                  ) : (
+                                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                                  )}
+                                </button>
+                                
+                                {expandedScouting === entry.id && (
+                                  <div className="px-4 pb-4 space-y-3 border-t border-slate-600">
+                                    {/* Image */}
+                                    {entry.imageData && (
+                                      <div className="rounded-lg overflow-hidden border border-slate-600 mt-3">
+                                        <img 
+                                          src={entry.imageData} 
+                                          alt="Analysis" 
+                                          className="w-full max-h-60 object-contain bg-slate-900"
+                                        />
+                                      </div>
+                                    )}
+                                    
+                                    {/* User Feedback (what we showed them) */}
+                                    {(entry.userFeedback || entry.aiFeedback) && (
+                                      <div className="p-3 bg-slate-700/50 rounded-lg">
+                                        <p className="text-xs font-semibold text-slate-400 mb-1">Shown to User:</p>
+                                        <p className="text-xs text-slate-300 whitespace-pre-line line-clamp-4">
+                                          {entry.userFeedback || entry.aiFeedback}
+                                        </p>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Hidden Intel */}
+                                    {entry.scoutingIntel && (
+                                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                                        <p className="text-xs font-semibold text-amber-400 mb-2">🔒 Hidden Intel Extracted:</p>
+                                        <div className="grid grid-cols-2 gap-2 text-xs">
+                                          {(entry.scoutingIntel.uploaderWeaknesses?.length ?? 0) > 0 && (
+                                            <div>
+                                              <p className="text-red-400 font-medium">Their Weaknesses:</p>
+                                              <ul className="text-slate-400">
+                                                {entry.scoutingIntel.uploaderWeaknesses?.slice(0, 3).map((w, i) => (
+                                                  <li key={i}>• {w}</li>
+                                                ))}
+                                              </ul>
+                                            </div>
+                                          )}
+                                          {(entry.scoutingIntel.opponentWeaknesses?.length ?? 0) > 0 && (
+                                            <div>
+                                              <p className="text-blue-400 font-medium">Opponent Weaknesses:</p>
+                                              <ul className="text-slate-400">
+                                                {entry.scoutingIntel.opponentWeaknesses?.slice(0, 3).map((w, i) => (
+                                                  <li key={i}>• {w}</li>
+                                                ))}
+                                              </ul>
+                                            </div>
+                                          )}
+                                        </div>
+                                        {entry.scoutingIntel.recommendedStrategy && (
+                                          <p className="mt-2 text-xs text-purple-400">
+                                            <strong>Strategy:</strong> {entry.scoutingIntel.recommendedStrategy}
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
+                                    
+                                    {/* Actions */}
+                                    <div className="flex gap-2">
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => handleDeleteScoutingEntry(entry.id)}
+                                        icon={<Trash2 className="w-3 h-3" />}
+                                        className="text-red-400 hover:bg-red-500/20"
+                                      >
+                                        Delete
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
