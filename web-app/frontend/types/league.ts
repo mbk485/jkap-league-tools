@@ -121,14 +121,24 @@ export interface TeamStream {
   isLive?: boolean;
 }
 
+// User Types
+export type UserType = 'jkap_member' | 'external_commissioner';
+
 // Auth User
 export interface AuthUser {
   id: string;
   username: string;
   displayName: string;
-  teamId: string;
-  teamName: string;
-  teamAbbreviation: string;
+  userType: UserType;
+  // For JKAP members
+  teamId?: string;
+  teamName?: string;
+  teamAbbreviation?: string;
+  // For external commissioners
+  leagueName?: string;
+  // Contact info (for external commissioners primarily)
+  email?: string;
+  phone?: string;
   isAdmin: boolean;
   createdAt: string;
 }

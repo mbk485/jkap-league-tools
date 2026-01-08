@@ -659,9 +659,10 @@ function DashboardContent() {
 }
 
 // Wrap with ProtectedRoute for authentication
+// Dashboard/Ballyard is only for JKAP League Members
 export default function OwnerDashboard() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requireJkapMember>
       <DashboardContent />
     </ProtectedRoute>
   );

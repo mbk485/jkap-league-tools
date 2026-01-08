@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
+import { getFeatureFlags, FeatureFlags } from '@/lib/feature-flags';
 import {
   Clipboard,
   Users,
@@ -33,6 +34,7 @@ interface LeagueTool {
   category: 'management' | 'draft' | 'analytics' | 'admin';
   isNew?: boolean;
   requiresAdmin?: boolean;
+  featureFlag?: keyof FeatureFlags;
 }
 
 const leagueTools: LeagueTool[] = [
@@ -44,6 +46,7 @@ const leagueTools: LeagueTool[] = [
     href: '/draft',
     status: 'available',
     category: 'draft',
+    featureFlag: 'showDraftBoard',
   },
   {
     id: 'injured-list',
@@ -53,6 +56,7 @@ const leagueTools: LeagueTool[] = [
     href: '/tools/injured-list',
     status: 'available',
     category: 'management',
+    featureFlag: 'showInjuredList',
   },
   {
     id: 'game-recap',
@@ -63,6 +67,7 @@ const leagueTools: LeagueTool[] = [
     status: 'available',
     category: 'analytics',
     isNew: true,
+    featureFlag: 'showGameRecap',
   },
   {
     id: 'roster-manager',
@@ -124,14 +129,38 @@ export default function LeagueToolsPage() {
   const { isAuthenticated, user } = useAuth();
   const [isLoaded, setIsLoaded] = useState(false);
   const [filter, setFilter] = useState<string>('all');
+  const [featureFlags, setFeatureFlagsState] = useState<FeatureFlags | null>(null);
 
   useEffect(() => {
     setIsLoaded(true);
+    // Load feature flags
+    setFeatureFlagsState(getFeatureFlags());
+    
+    // Poll for changes (in case admin updates flags)
+    const interval = setInterval(() => {
+      setFeatureFlagsState(getFeatureFlags());
+    }, 2000);
+    
+    return () => clearInterval(interval);
   }, []);
 
+  // Filter tools based on category, admin status, AND feature flags
   const filteredTools = leagueTools.filter((tool) => {
-    if (filter === 'all') return true;
-    return tool.category === filter;
+    // Category filter
+    if (filter !== 'all' && tool.category !== filter) return false;
+    
+    // Admin-only tools require admin status
+    if (tool.requiresAdmin && !user?.isAdmin) return false;
+    
+    // Admins see everything
+    if (user?.isAdmin) return true;
+    
+    // Check feature flag if specified
+    if (tool.featureFlag && featureFlags) {
+      if (!featureFlags[tool.featureFlag]) return false;
+    }
+    
+    return true;
   });
 
   const categories = ['all', 'management', 'draft', 'analytics', 'admin'];

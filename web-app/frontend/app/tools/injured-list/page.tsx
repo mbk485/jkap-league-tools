@@ -59,6 +59,7 @@ interface ILPlacement {
   gamesOnIL: number;
   injury: string;
   status: 'active' | 'completed';
+  activeRosterGames?: number; // Games on active roster before IL placement
 }
 
 interface TeamILData {
@@ -117,6 +118,9 @@ const IL_RULES = {
   REQUIRES_PITCHER: true,
   REQUIRES_POSITION_PLAYER: true,
   PENALTY_LOSSES: 10,
+  // NEW RULES - Anti-circumvention measures
+  ACTIVE_ROSTER_GAMES_REQUIRED: 5,  // Player must be on active roster for 5 games before IL
+  MAX_ACTIVE_PLACEMENTS: 1,          // Only 1 player can be on IL at a time (no stacking)
 };
 
 const STORAGE_KEYS = {
@@ -324,6 +328,29 @@ function RulesCard() {
               <span className="text-foreground font-medium">removed from the active roster</span>.
             </p>
           </div>
+          
+          {/* NEW ANTI-CIRCUMVENTION RULES */}
+          <div className="flex items-start gap-3">
+            <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-amber-500 font-semibold text-xs">5</span>
+            </div>
+            <p className="text-muted-foreground">
+              <span className="text-amber-400 font-medium">Active Roster Requirement:</span> Players must be on your{' '}
+              <span className="text-foreground font-medium">active roster for at least 5 games</span>{' '}
+              before being placed on the IL. No putting unused or common players on IL.
+            </p>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-amber-500 font-semibold text-xs">6</span>
+            </div>
+            <p className="text-muted-foreground">
+              <span className="text-amber-400 font-medium">One at a Time:</span> You can only have{' '}
+              <span className="text-foreground font-medium">one player on the IL at a time</span>.{' '}
+              You must activate your current IL player before placing another. No stacking all 3 at season start.
+            </p>
+          </div>
+
           <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -591,9 +618,10 @@ interface AddPlacementModalProps {
   onAdd: (placement: Omit<ILPlacement, 'id' | 'gamesOnIL' | 'status'>, showAnnouncement: boolean) => void;
   userTeamId?: string;
   isAdmin: boolean;
+  teamActivePlacements: number; // Current number of active IL placements for this team
 }
 
-function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddPlacementModalProps) {
+function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin, teamActivePlacements }: AddPlacementModalProps) {
   const [selectedTeam, setSelectedTeam] = useState(userTeamId || '');
   const [playerName, setPlayerName] = useState('');
   const [position, setPosition] = useState('');
@@ -602,19 +630,39 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddP
   const [startGame, setStartGame] = useState(1);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [announceOnAdd, setAnnounceOnAdd] = useState(true);
+  const [activeRosterGames, setActiveRosterGames] = useState(5);
+  const [validationError, setValidationError] = useState('');
 
   // Reset to user's team when modal opens
   useEffect(() => {
     if (isOpen && userTeamId && !isAdmin) {
       setSelectedTeam(userTeamId);
     }
+    setValidationError('');
   }, [isOpen, userTeamId, isAdmin]);
 
   const positions = ['SP', 'RP', 'CP', 'C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH'];
 
+  // Check if team already has max active placements
+  const hasMaxActivePlacements = teamActivePlacements >= IL_RULES.MAX_ACTIVE_PLACEMENTS;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError('');
+
     if (!selectedTeam || !playerName || !position || !injury) return;
+
+    // Validation: Check max active placements
+    if (hasMaxActivePlacements) {
+      setValidationError(`You already have a player on the IL. You must activate them before placing another player.`);
+      return;
+    }
+
+    // Validation: Check active roster games requirement
+    if (activeRosterGames < IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED) {
+      setValidationError(`Player must be on your active roster for at least ${IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED} games before IL placement. This player has only been on roster for ${activeRosterGames} games.`);
+      return;
+    }
 
     onAdd(
       {
@@ -628,6 +676,7 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddP
         startDate,
         startGame,
         injury,
+        activeRosterGames,
       },
       announceOnAdd
     );
@@ -637,6 +686,7 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddP
     setPlayerType('position');
     setInjury('');
     setStartGame(1);
+    setActiveRosterGames(5);
     onClose();
   };
 
@@ -794,6 +844,59 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddP
             </div>
           </div>
 
+          {/* Active Roster Games - NEW REQUIREMENT */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Games on Active Roster
+              <span className="text-jkap-red-500 ml-1">*</span>
+            </label>
+            <input
+              type="number"
+              value={activeRosterGames}
+              onChange={(e) => setActiveRosterGames(parseInt(e.target.value) || 0)}
+              min={0}
+              className={`w-full px-4 py-3 bg-muted border rounded-lg text-foreground focus:outline-none ${
+                activeRosterGames < IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED
+                  ? 'border-amber-500 focus:border-amber-500'
+                  : 'border-border focus:border-jkap-red-500'
+              }`}
+              required
+            />
+            <p className={`text-xs mt-1 ${
+              activeRosterGames < IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED
+                ? 'text-amber-500'
+                : 'text-muted-foreground'
+            }`}>
+              Player must be on your active roster for at least {IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED} games before IL placement
+            </p>
+          </div>
+
+          {/* Blocked Warning - Already have active placement */}
+          {hasMaxActivePlacements && (
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-red-500 text-sm">One Placement at a Time</p>
+                  <p className="text-xs text-red-400 mt-1">
+                    You already have a player on the IL. You must activate them before placing another player.
+                    This prevents using all IL placements at once.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Validation Error */}
+          {validationError && (
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <div className="flex items-start gap-3">
+                <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-400">{validationError}</p>
+              </div>
+            </div>
+          )}
+
           {/* Announcement Toggle */}
           <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
             <div className="flex items-center gap-3">
@@ -824,7 +927,13 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddP
             <Button type="button" variant="secondary" onClick={onClose} fullWidth>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" fullWidth>
+            <Button 
+              type="submit" 
+              variant="primary" 
+              fullWidth
+              disabled={hasMaxActivePlacements || activeRosterGames < IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED}
+              className={hasMaxActivePlacements ? 'opacity-50 cursor-not-allowed' : ''}
+            >
               <Plus className="w-4 h-4" />
               Add to IL
             </Button>
@@ -1614,6 +1723,11 @@ export default function InjuredListPage() {
         onAdd={handleAddPlacement}
         userTeamId={userTeamId}
         isAdmin={isAdmin}
+        teamActivePlacements={
+          userTeamId 
+            ? placements.filter(p => p.teamId === userTeamId && p.status === 'active').length
+            : 0
+        }
       />
 
       {isAdmin && (

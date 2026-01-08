@@ -1,25 +1,28 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
-import { LogIn, LogOut, User, ChevronDown, Shield, Wrench } from 'lucide-react';
+import { LogIn, LogOut, User, ChevronDown, Shield, Wrench, Globe } from 'lucide-react';
+import { getFeatureFlags, FeatureFlags } from '@/lib/feature-flags';
 
 interface NavLink {
   label: string;
   href: string;
   adminOnly?: boolean;
+  featureFlag?: keyof FeatureFlags;
 }
 
-// Full navigation - some items hidden during soft launch for non-admins
+// Full navigation - controlled by feature flags for regular members
 const navLinks: NavLink[] = [
   { label: 'Home', href: '/' },
-  { label: 'The Ballyard', href: '/dashboard', adminOnly: true }, // Coming soon for non-admins
-  { label: 'League Tools', href: '/tools' },
-  { label: 'Free Agents', href: '/free-agents', adminOnly: true }, // Coming soon
-  { label: 'Documents', href: '/documents', adminOnly: true }, // Coming soon
+  { label: 'The Ballyard', href: '/dashboard', adminOnly: true, featureFlag: 'showDashboard' },
+  { label: 'League Tools', href: '/tools', featureFlag: 'showTools' },
+  { label: 'Free Agents', href: '/free-agents', adminOnly: true, featureFlag: 'showFreeAgents' },
+  { label: 'Documents', href: '/documents', adminOnly: true, featureFlag: 'showDocuments' },
+  { label: 'Admin', href: '/admin', adminOnly: true }, // Always admin-only, no feature flag needed
 ];
 
 export function Navbar() {
@@ -28,6 +31,23 @@ export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlags | null>(null);
+
+  // Load feature flags on mount and when they might change
+  useEffect(() => {
+    const loadFlags = () => setFeatureFlags(getFeatureFlags());
+    loadFlags();
+    
+    // Listen for storage changes (when admin updates flags)
+    window.addEventListener('storage', loadFlags);
+    // Also poll occasionally in case flags change in same tab
+    const interval = setInterval(loadFlags, 2000);
+    
+    return () => {
+      window.removeEventListener('storage', loadFlags);
+      clearInterval(interval);
+    };
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -35,11 +55,36 @@ export function Navbar() {
     router.push('/');
   };
 
-  // Filter nav links based on admin status
+  // Filter nav links based on admin status, user type, and feature flags
   const visibleLinks = navLinks.filter((link) => {
-    if (!link.adminOnly) return true;
-    return user?.isAdmin;
+    // Home is always visible
+    if (link.href === '/') return true;
+    
+    // Admin link is only for admins
+    if (link.href === '/admin') return user?.isAdmin;
+    
+    // Admins see all links
+    if (user?.isAdmin) return true;
+    
+    // Check feature flag if one is specified
+    if (link.featureFlag && featureFlags) {
+      if (!featureFlags[link.featureFlag]) return false;
+    }
+    
+    // Admin-only items (without feature flags) are hidden for non-admins
+    if (link.adminOnly && !link.featureFlag) return false;
+    
+    // The Ballyard is only for JKAP members (not external commissioners)
+    if (link.href === '/dashboard' && user?.userType === 'external_commissioner') return false;
+    
+    return true;
   });
+
+  // Determine user display info
+  const isExternalCommissioner = user?.userType === 'external_commissioner';
+  const userInitials = isExternalCommissioner 
+    ? (user?.leagueName?.substring(0, 2)?.toUpperCase() || 'EX')
+    : user?.teamAbbreviation || 'JK';
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/80 backdrop-blur-xl">
@@ -99,10 +144,14 @@ export function Navbar() {
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                     user.isAdmin 
                       ? 'bg-gradient-to-br from-amber-500 to-amber-600' 
+                      : isExternalCommissioner
+                      ? 'bg-gradient-to-br from-emerald-500 to-emerald-600'
                       : 'bg-gradient-to-br from-jkap-red-500 to-jkap-red-600'
                   }`}>
                     {user.isAdmin ? (
                       <Shield className="w-4 h-4 text-white" />
+                    ) : isExternalCommissioner ? (
+                      <Globe className="w-4 h-4 text-white" />
                     ) : (
                       <span className="text-xs font-bold text-white">{user.teamAbbreviation}</span>
                     )}
@@ -112,7 +161,7 @@ export function Navbar() {
                       {user.displayName?.split(' ')[0] || user.username}
                     </span>
                     <span className="text-[10px] text-muted-foreground block leading-tight">
-                      {user.isAdmin ? 'Commissioner' : user.teamAbbreviation}
+                      {user.isAdmin ? 'Commissioner' : isExternalCommissioner ? 'External' : user.teamAbbreviation}
                     </span>
                   </div>
                   <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
@@ -126,10 +175,14 @@ export function Navbar() {
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                           user.isAdmin 
                             ? 'bg-gradient-to-br from-amber-500 to-amber-600' 
+                            : isExternalCommissioner
+                            ? 'bg-gradient-to-br from-emerald-500 to-emerald-600'
                             : 'bg-gradient-to-br from-jkap-red-500 to-jkap-red-600'
                         }`}>
                           {user.isAdmin ? (
                             <Shield className="w-5 h-5 text-white" />
+                          ) : isExternalCommissioner ? (
+                            <Globe className="w-5 h-5 text-white" />
                           ) : (
                             <span className="text-sm font-bold text-white">{user.teamAbbreviation}</span>
                           )}
@@ -139,11 +192,20 @@ export function Navbar() {
                           <p className="text-xs text-muted-foreground">@{user.username}</p>
                         </div>
                       </div>
-                      {!user.isAdmin && (
+                      {/* JKAP Member: Show team */}
+                      {!user.isAdmin && !isExternalCommissioner && user.teamName && (
                         <div className="mt-2 px-2 py-1 rounded bg-muted text-xs text-muted-foreground">
                           {user.teamName}
                         </div>
                       )}
+                      {/* External Commissioner: Show league name */}
+                      {isExternalCommissioner && user.leagueName && (
+                        <div className="mt-2 px-2 py-1 rounded bg-emerald-500/10 text-xs text-emerald-400 flex items-center gap-1">
+                          <Globe className="w-3 h-3" />
+                          {user.leagueName}
+                        </div>
+                      )}
+                      {/* Admin badge */}
                       {user.isAdmin && (
                         <div className="mt-2 px-2 py-1 rounded bg-amber-500/10 text-xs text-amber-400 flex items-center gap-1">
                           <Shield className="w-3 h-3" />
@@ -159,7 +221,8 @@ export function Navbar() {
                       <Wrench className="w-4 h-4" />
                       League Tools
                     </Link>
-                    {user.isAdmin && (
+                    {/* Show dashboard link for JKAP members and admins only */}
+                    {(user.isAdmin || user.userType === 'jkap_member') && (
                       <Link
                         href="/dashboard"
                         onClick={() => setUserMenuOpen(false)}
@@ -244,10 +307,14 @@ export function Navbar() {
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                         user.isAdmin 
                           ? 'bg-gradient-to-br from-amber-500 to-amber-600' 
+                          : isExternalCommissioner
+                          ? 'bg-gradient-to-br from-emerald-500 to-emerald-600'
                           : 'bg-gradient-to-br from-jkap-red-500 to-jkap-red-600'
                       }`}>
                         {user.isAdmin ? (
                           <Shield className="w-4 h-4 text-white" />
+                        ) : isExternalCommissioner ? (
+                          <Globe className="w-4 h-4 text-white" />
                         ) : (
                           <span className="text-xs font-bold text-white">{user.teamAbbreviation}</span>
                         )}
@@ -255,7 +322,7 @@ export function Navbar() {
                       <div>
                         <p className="text-sm font-medium text-foreground">{user.displayName}</p>
                         <p className="text-xs text-muted-foreground">
-                          {user.isAdmin ? 'Commissioner' : user.teamName}
+                          {user.isAdmin ? 'Commissioner' : isExternalCommissioner ? user.leagueName : user.teamName}
                         </p>
                       </div>
                     </div>
