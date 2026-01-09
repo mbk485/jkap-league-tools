@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { MLB_TEAMS } from '@/types/league';
+import { getLeagueSettings, saveLeagueSettings, LeagueSettings } from '@/lib/supabase';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -1289,12 +1290,13 @@ export default function InjuredListPage() {
   const isAdmin = user?.isAdmin ?? false;
   const userTeamId = user?.teamId;
 
-  // Webhook settings
+  // Webhook settings (now loaded from Supabase - central for all users)
   const [webhookSettings, setWebhookSettings] = useState<WebhookSettings>({
     discordWebhookUrl: '',
     autoPostToDiscord: false,
     announcementStyle: 'espn',
   });
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
 
   // Announcement state
   const [showAnnouncementPreview, setShowAnnouncementPreview] = useState(false);
@@ -1308,21 +1310,51 @@ export default function InjuredListPage() {
     }
   }, [userTeamId, isAdmin]);
 
-  // Load settings from localStorage
+  // Load settings from Supabase (central settings for all users)
   useEffect(() => {
     setIsLoaded(true);
-    const storedSettings = localStorage.getItem(STORAGE_KEYS.WEBHOOK_SETTINGS);
-    if (storedSettings) {
+    
+    const loadSettings = async () => {
+      setIsLoadingSettings(true);
       try {
-        setWebhookSettings(JSON.parse(storedSettings));
-      } catch {}
-    }
+        const settings = await getLeagueSettings();
+        setWebhookSettings({
+          discordWebhookUrl: settings.discord_webhook_url || '',
+          autoPostToDiscord: settings.auto_post_discord,
+          announcementStyle: settings.announcement_style,
+        });
+      } catch (err) {
+        console.error('Failed to load settings:', err);
+        // Fallback to localStorage for backwards compatibility
+        const storedSettings = localStorage.getItem(STORAGE_KEYS.WEBHOOK_SETTINGS);
+        if (storedSettings) {
+          try {
+            setWebhookSettings(JSON.parse(storedSettings));
+          } catch {}
+        }
+      }
+      setIsLoadingSettings(false);
+    };
+    
+    loadSettings();
   }, []);
 
-  // Save settings to localStorage
-  const handleSaveSettings = (settings: WebhookSettings) => {
+  // Save settings to Supabase (admin only)
+  const handleSaveSettings = async (settings: WebhookSettings) => {
     setWebhookSettings(settings);
-    localStorage.setItem(STORAGE_KEYS.WEBHOOK_SETTINGS, JSON.stringify(settings));
+    
+    // Save to Supabase
+    const result = await saveLeagueSettings({
+      discord_webhook_url: settings.discordWebhookUrl || null,
+      auto_post_discord: settings.autoPostToDiscord,
+      announcement_style: settings.announcementStyle,
+    });
+    
+    if (!result.success) {
+      console.error('Failed to save to Supabase:', result.error);
+      // Fallback to localStorage
+      localStorage.setItem(STORAGE_KEYS.WEBHOOK_SETTINGS, JSON.stringify(settings));
+    }
   };
 
   // Update gamesOnIL for active placements based on current game

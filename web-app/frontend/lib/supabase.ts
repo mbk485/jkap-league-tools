@@ -207,3 +207,93 @@ export async function updateUser(
   return { success: true };
 }
 
+// =============================================================================
+// LEAGUE SETTINGS (Central configuration for all users)
+// =============================================================================
+
+export interface LeagueSettings {
+  id?: string;
+  discord_webhook_url: string | null;
+  auto_post_discord: boolean;
+  announcement_style: 'espn' | 'simple';
+  updated_at?: string;
+}
+
+const DEFAULT_SETTINGS: LeagueSettings = {
+  discord_webhook_url: null,
+  auto_post_discord: false,
+  announcement_style: 'espn',
+};
+
+export async function getLeagueSettings(): Promise<LeagueSettings> {
+  try {
+    const { data, error } = await supabase
+      .from('league_settings')
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      // Return defaults if no settings exist
+      return DEFAULT_SETTINGS;
+    }
+
+    return {
+      id: data.id,
+      discord_webhook_url: data.discord_webhook_url,
+      auto_post_discord: data.auto_post_discord ?? false,
+      announcement_style: data.announcement_style ?? 'espn',
+      updated_at: data.updated_at,
+    };
+  } catch (err) {
+    console.error('Error fetching league settings:', err);
+    return DEFAULT_SETTINGS;
+  }
+}
+
+export async function saveLeagueSettings(
+  settings: Partial<LeagueSettings>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Try to get existing settings
+    const { data: existing } = await supabase
+      .from('league_settings')
+      .select('id')
+      .single();
+
+    if (existing) {
+      // Update existing
+      const { error } = await supabase
+        .from('league_settings')
+        .update({
+          discord_webhook_url: settings.discord_webhook_url,
+          auto_post_discord: settings.auto_post_discord,
+          announcement_style: settings.announcement_style,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    } else {
+      // Insert new
+      const { error } = await supabase
+        .from('league_settings')
+        .insert({
+          discord_webhook_url: settings.discord_webhook_url,
+          auto_post_discord: settings.auto_post_discord ?? false,
+          announcement_style: settings.announcement_style ?? 'espn',
+        });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error saving league settings:', err);
+    return { success: false, error: err.message || 'Failed to save settings' };
+  }
+}
+
