@@ -1657,8 +1657,14 @@ export default function InjuredListPage() {
 
               {/* Admin-only settings button */}
               {isAdmin && (
-                <Button variant="ghost" size="sm" onClick={() => setShowSettingsModal(true)}>
+                <Button 
+                  variant="secondary" 
+                  size="sm" 
+                  onClick={() => setShowSettingsModal(true)}
+                  className="flex items-center gap-1"
+                >
                   <Settings className="w-4 h-4" />
+                  <span className="hidden sm:inline">Settings</span>
                 </Button>
               )}
               {isAdmin && (
