@@ -297,3 +297,124 @@ export async function saveLeagueSettings(
   }
 }
 
+// =============================================================================
+// IL PLACEMENTS (Central storage for all teams)
+// =============================================================================
+
+export interface DBILPlacement {
+  id: string;
+  team_id: string;
+  player_id: string;
+  player_name: string;
+  player_position: string;
+  player_type: 'pitcher' | 'position';
+  injury_type: string;
+  start_game: number;
+  start_date: string;
+  end_game: number | null;
+  end_date: string | null;
+  games_on_il: number;
+  status: 'active' | 'completed';
+  created_at: string;
+  created_by: string | null;
+}
+
+export async function getILPlacements(): Promise<DBILPlacement[]> {
+  try {
+    const { data, error } = await supabase
+      .from('il_placements')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching IL placements:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching IL placements:', err);
+    return [];
+  }
+}
+
+export async function addILPlacement(
+  placement: Omit<DBILPlacement, 'created_at'>
+): Promise<{ success: boolean; placement?: DBILPlacement; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('il_placements')
+      .insert({
+        id: placement.id,
+        team_id: placement.team_id,
+        player_id: placement.player_id,
+        player_name: placement.player_name,
+        player_position: placement.player_position,
+        player_type: placement.player_type,
+        injury_type: placement.injury_type,
+        start_game: placement.start_game,
+        start_date: placement.start_date,
+        end_game: placement.end_game,
+        end_date: placement.end_date,
+        games_on_il: placement.games_on_il,
+        status: placement.status,
+        created_by: placement.created_by,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding IL placement:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, placement: data };
+  } catch (err: any) {
+    console.error('Error adding IL placement:', err);
+    return { success: false, error: err.message || 'Failed to add placement' };
+  }
+}
+
+export async function updateILPlacement(
+  id: string,
+  updates: Partial<DBILPlacement>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('il_placements')
+      .update(updates)
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating IL placement:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating IL placement:', err);
+    return { success: false, error: err.message || 'Failed to update placement' };
+  }
+}
+
+export async function deleteILPlacement(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('il_placements')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting IL placement:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting IL placement:', err);
+    return { success: false, error: err.message || 'Failed to delete placement' };
+  }
+}
+

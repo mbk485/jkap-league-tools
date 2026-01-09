@@ -7,7 +7,16 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { MLB_TEAMS } from '@/types/league';
-import { getLeagueSettings, saveLeagueSettings, LeagueSettings } from '@/lib/supabase';
+import { 
+  getLeagueSettings, 
+  saveLeagueSettings, 
+  LeagueSettings,
+  getILPlacements,
+  addILPlacement,
+  updateILPlacement,
+  deleteILPlacement,
+  DBILPlacement,
+} from '@/lib/supabase';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -60,7 +69,6 @@ interface ILPlacement {
   gamesOnIL: number;
   injury: string;
   status: 'active' | 'completed';
-  activeRosterGames?: number; // Games on active roster before IL placement
 }
 
 interface TeamILData {
@@ -120,7 +128,7 @@ const IL_RULES = {
   REQUIRES_POSITION_PLAYER: true,
   PENALTY_LOSSES: 10,
   // NEW RULES - Anti-circumvention measures
-  ACTIVE_ROSTER_GAMES_REQUIRED: 5,  // Player must be on active roster for 5 games before IL
+  POST_ACTIVATION_GAMES_REQUIRED: 5,  // Player must stay on roster for 5 games AFTER being activated from IL
   MAX_ACTIVE_PLACEMENTS: 1,          // Only 1 player can be on IL at a time (no stacking)
 };
 
@@ -336,9 +344,9 @@ function RulesCard() {
               <span className="text-amber-500 font-semibold text-xs">5</span>
             </div>
             <p className="text-muted-foreground">
-              <span className="text-amber-400 font-medium">Active Roster Requirement:</span> Players must be on your{' '}
-              <span className="text-foreground font-medium">active roster for at least 5 games</span>{' '}
-              before being placed on the IL. No putting unused or common players on IL.
+              <span className="text-amber-400 font-medium">Post-Activation Cooldown:</span> Once a player is activated from the IL,{' '}
+              <span className="text-foreground font-medium">they must remain on your active roster for at least 5 games</span>{' '}
+              before they can be placed back on the IL.
             </p>
           </div>
           <div className="flex items-start gap-3">
@@ -620,9 +628,10 @@ interface AddPlacementModalProps {
   userTeamId?: string;
   isAdmin: boolean;
   teamActivePlacements: number; // Current number of active IL placements for this team
+  existingPlacements: ILPlacement[]; // All placements to check post-activation cooldown
 }
 
-function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin, teamActivePlacements }: AddPlacementModalProps) {
+function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin, teamActivePlacements, existingPlacements }: AddPlacementModalProps) {
   const [selectedTeam, setSelectedTeam] = useState(userTeamId || '');
   const [playerName, setPlayerName] = useState('');
   const [position, setPosition] = useState('');
@@ -631,7 +640,6 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin, teamAc
   const [startGame, setStartGame] = useState(1);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [announceOnAdd, setAnnounceOnAdd] = useState(true);
-  const [activeRosterGames, setActiveRosterGames] = useState(5);
   const [validationError, setValidationError] = useState('');
 
   // Reset to user's team when modal opens
@@ -659,10 +667,27 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin, teamAc
       return;
     }
 
-    // Validation: Check active roster games requirement
-    if (activeRosterGames < IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED) {
-      setValidationError(`Player must be on your active roster for at least ${IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED} games before IL placement. This player has only been on roster for ${activeRosterGames} games.`);
-      return;
+    // Validation: Check post-activation cooldown
+    // Find the most recent completed IL placement for this player on this team
+    const recentActivation = existingPlacements
+      .filter(p => 
+        p.teamId === selectedTeam && 
+        p.player.name.toLowerCase() === playerName.toLowerCase() &&
+        p.status === 'completed' &&
+        p.endGame !== undefined
+      )
+      .sort((a, b) => (b.endGame || 0) - (a.endGame || 0))[0];
+    
+    if (recentActivation && recentActivation.endGame) {
+      const gamesSinceActivation = startGame - recentActivation.endGame;
+      if (gamesSinceActivation < IL_RULES.POST_ACTIVATION_GAMES_REQUIRED) {
+        setValidationError(
+          `${playerName} was activated from the IL in Game ${recentActivation.endGame}. ` +
+          `They must remain on your active roster for at least ${IL_RULES.POST_ACTIVATION_GAMES_REQUIRED} games before being placed back on the IL. ` +
+          `Only ${gamesSinceActivation} game(s) have passed since activation.`
+        );
+        return;
+      }
     }
 
     onAdd(
@@ -677,7 +702,6 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin, teamAc
         startDate,
         startGame,
         injury,
-        activeRosterGames,
       },
       announceOnAdd
     );
@@ -687,7 +711,6 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin, teamAc
     setPlayerType('position');
     setInjury('');
     setStartGame(1);
-    setActiveRosterGames(5);
     onClose();
   };
 
@@ -845,30 +868,12 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin, teamAc
             </div>
           </div>
 
-          {/* Active Roster Games - NEW REQUIREMENT */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
-              Games on Active Roster
-              <span className="text-jkap-red-500 ml-1">*</span>
-            </label>
-            <input
-              type="number"
-              value={activeRosterGames}
-              onChange={(e) => setActiveRosterGames(parseInt(e.target.value) || 0)}
-              min={0}
-              className={`w-full px-4 py-3 bg-muted border rounded-lg text-foreground focus:outline-none ${
-                activeRosterGames < IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED
-                  ? 'border-amber-500 focus:border-amber-500'
-                  : 'border-border focus:border-jkap-red-500'
-              }`}
-              required
-            />
-            <p className={`text-xs mt-1 ${
-              activeRosterGames < IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED
-                ? 'text-amber-500'
-                : 'text-muted-foreground'
-            }`}>
-              Player must be on your active roster for at least {IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED} games before IL placement
+          {/* Post-Activation Cooldown Info */}
+          <div className="p-3 bg-muted/50 rounded-lg border border-border">
+            <p className="text-xs text-muted-foreground">
+              <span className="text-amber-400 font-medium">Note:</span> If this player was recently activated from the IL, 
+              they must have been on your active roster for at least {IL_RULES.POST_ACTIVATION_GAMES_REQUIRED} games 
+              before being placed back on the IL.
             </p>
           </div>
 
@@ -932,7 +937,7 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin, teamAc
               type="submit" 
               variant="primary" 
               fullWidth
-              disabled={hasMaxActivePlacements || activeRosterGames < IL_RULES.ACTIVE_ROSTER_GAMES_REQUIRED}
+              disabled={hasMaxActivePlacements}
               className={hasMaxActivePlacements ? 'opacity-50 cursor-not-allowed' : ''}
             >
               <Plus className="w-4 h-4" />
@@ -1273,19 +1278,51 @@ export default function InjuredListPage() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [currentGame, setCurrentGame] = useState(10);
+  const [isLoadingPlacements, setIsLoadingPlacements] = useState(true);
 
-  // Load placements from localStorage on mount
+  // Load placements from Supabase on mount
   useEffect(() => {
-    const stored = loadPlacements();
-    setPlacements(stored);
+    const loadFromSupabase = async () => {
+      setIsLoadingPlacements(true);
+      try {
+        const dbPlacements = await getILPlacements();
+        // Convert DB format to local format
+        const localPlacements: ILPlacement[] = dbPlacements.map(p => ({
+          id: p.id,
+          teamId: p.team_id,
+          player: {
+            id: p.player_id,
+            name: p.player_name,
+            position: p.player_position,
+            type: p.player_type,
+          },
+          injury: p.injury_type,
+          startGame: p.start_game,
+          startDate: p.start_date,
+          endGame: p.end_game ?? undefined,
+          endDate: p.end_date ?? undefined,
+          gamesOnIL: p.games_on_il,
+          status: p.status,
+        }));
+        setPlacements(localPlacements);
+      } catch (err) {
+        console.error('Failed to load from Supabase, trying localStorage:', err);
+        // Fallback to localStorage
+        const stored = loadPlacements();
+        setPlacements(stored);
+      }
+      setIsLoadingPlacements(false);
+    };
+    
+    loadFromSupabase();
   }, []);
 
-  // Save placements to localStorage whenever they change
+  // Also save to localStorage as backup (removed auto-save to Supabase here - handled in add/update functions)
   useEffect(() => {
-    if (isLoaded) {
+    if (isLoaded && !isLoadingPlacements) {
       savePlacements(placements);
     }
-  }, [placements, isLoaded]);
+  }, [placements, isLoaded, isLoadingPlacements]);
 
   const isAdmin = user?.isAdmin ?? false;
   const userTeamId = user?.teamId;
@@ -1425,12 +1462,38 @@ export default function InjuredListPage() {
       newPlacement: Omit<ILPlacement, 'id' | 'gamesOnIL' | 'status'>,
       showAnnouncement: boolean
     ) => {
+      const placementId = `il-${Date.now()}`;
       const placement: ILPlacement = {
         ...newPlacement,
-        id: `il-${Date.now()}`,
+        id: placementId,
         gamesOnIL: Math.max(0, currentGame - newPlacement.startGame + 1),
         status: 'active',
       };
+      
+      // Save to Supabase first
+      const dbPlacement: Omit<DBILPlacement, 'created_at'> = {
+        id: placementId,
+        team_id: newPlacement.teamId,
+        player_id: newPlacement.player.id,
+        player_name: newPlacement.player.name,
+        player_position: newPlacement.player.position,
+        player_type: newPlacement.player.type,
+        injury_type: newPlacement.injury,
+        start_game: newPlacement.startGame,
+        start_date: newPlacement.startDate,
+        end_game: null,
+        end_date: null,
+        games_on_il: placement.gamesOnIL,
+        status: 'active',
+        created_by: user?.username || null,
+      };
+      
+      const result = await addILPlacement(dbPlacement);
+      if (!result.success) {
+        console.error('Failed to save to Supabase:', result.error);
+      }
+      
+      // Update local state
       setPlacements((prev) => [...prev, placement]);
 
       // Generate announcement
@@ -1449,49 +1512,59 @@ export default function InjuredListPage() {
         setShowAnnouncementPreview(true);
       }
     },
-    [currentGame, webhookSettings]
+    [currentGame, webhookSettings, user]
   );
 
   const handleActivatePlayer = useCallback(
     async (placementId: string, endGame: number) => {
-      let activatedPlacement: ILPlacement | null = null;
+      const endDate = new Date().toISOString().split('T')[0];
+      
+      // Find the placement first to calculate values
+      const originalPlacement = placements.find(p => p.id === placementId);
+      if (!originalPlacement) return;
+      
+      const gamesOnIL = endGame - originalPlacement.startGame + 1;
+      const activatedPlacement: ILPlacement = {
+        ...originalPlacement,
+        status: 'completed',
+        endGame,
+        endDate,
+        gamesOnIL,
+      };
 
+      // Update local state
       setPlacements((prev) =>
-        prev.map((p) => {
-          if (p.id === placementId) {
-            const gamesOnIL = endGame - p.startGame + 1;
-            activatedPlacement = {
-              ...p,
-              status: 'completed',
-              endGame,
-              endDate: new Date().toISOString().split('T')[0],
-              gamesOnIL,
-            };
-            return activatedPlacement;
-          }
-          return p;
-        })
+        prev.map((p) => p.id === placementId ? activatedPlacement : p)
       );
 
+      // Update in Supabase
+      const result = await updateILPlacement(placementId, {
+        status: 'completed',
+        end_game: endGame,
+        end_date: endDate,
+        games_on_il: gamesOnIL,
+      });
+      if (!result.success) {
+        console.error('Failed to update in Supabase:', result.error);
+      }
+
       // Generate activation announcement
-      if (activatedPlacement) {
-        const team = allTeams.find((t) => t.id === activatedPlacement!.teamId);
-        if (team) {
-          const announcement =
-            webhookSettings.announcementStyle === 'espn'
-              ? generateESPNAnnouncement('activation', activatedPlacement, team.name, team.abbreviation)
-              : generateSimpleAnnouncement('activation', activatedPlacement, team.name);
+      const team = allTeams.find((t) => t.id === activatedPlacement.teamId);
+      if (team) {
+        const announcement =
+          webhookSettings.announcementStyle === 'espn'
+            ? generateESPNAnnouncement('activation', activatedPlacement, team.name, team.abbreviation)
+            : generateSimpleAnnouncement('activation', activatedPlacement, team.name);
 
-          if (webhookSettings.autoPostToDiscord && webhookSettings.discordWebhookUrl) {
-            await postToDiscord(webhookSettings.discordWebhookUrl, announcement);
-          }
-
-          setPendingAnnouncement(announcement);
-          setShowAnnouncementPreview(true);
+        if (webhookSettings.autoPostToDiscord && webhookSettings.discordWebhookUrl) {
+          await postToDiscord(webhookSettings.discordWebhookUrl, announcement);
         }
+
+        setPendingAnnouncement(announcement);
+        setShowAnnouncementPreview(true);
       }
     },
-    [webhookSettings]
+    [webhookSettings, placements]
   );
 
   const handlePostAnnouncement = async () => {
@@ -1760,6 +1833,7 @@ export default function InjuredListPage() {
             ? placements.filter(p => p.teamId === userTeamId && p.status === 'active').length
             : 0
         }
+        existingPlacements={placements}
       />
 
       {isAdmin && (
