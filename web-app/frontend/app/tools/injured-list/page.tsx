@@ -128,7 +128,7 @@ const IL_RULES = {
   REQUIRES_POSITION_PLAYER: true,
   PENALTY_LOSSES: 10,
   // NEW RULES - Anti-circumvention measures
-  POST_ACTIVATION_GAMES_REQUIRED: 5,  // Once activated, player must be on ACTIVE ROSTER for 5 games before returning to IL
+  POST_ACTIVATION_GAMES_REQUIRED: 5,  // Once activated, player must remain on active roster for 5 games. Period.
   MAX_ACTIVE_PLACEMENTS: 1,          // Only 1 player can be on IL at a time (no stacking)
 };
 
@@ -344,9 +344,8 @@ function RulesCard() {
               <span className="text-amber-500 font-semibold text-xs">5</span>
             </div>
             <p className="text-muted-foreground">
-              <span className="text-amber-400 font-medium">5-Game Active Roster Rule:</span> Once a player is activated from the IL,{' '}
-              <span className="text-foreground font-medium">they must be on your active roster for at least 5 games</span>{' '}
-              before they can return to the IL. This prevents cycling unused players through IL spots.
+              <span className="text-amber-400 font-medium">5-Game Active Roster Rule:</span> Once activated from the IL,{' '}
+              <span className="text-foreground font-medium">a player must remain on your active roster for 5 games</span>. Period.
             </p>
           </div>
           <div className="flex items-start gap-3">
@@ -684,8 +683,8 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin, teamAc
         const gamesRemaining = IL_RULES.POST_ACTIVATION_GAMES_REQUIRED - gamesSinceActivation;
         setValidationError(
           `🚫 ${playerName} was activated in Game ${recentActivation.endGame}. ` +
-          `They must be on your ACTIVE ROSTER for ${IL_RULES.POST_ACTIVATION_GAMES_REQUIRED} games before returning to the IL. ` +
-          `${gamesRemaining} more game(s) required (can return to IL in Game ${recentActivation.endGame + IL_RULES.POST_ACTIVATION_GAMES_REQUIRED + 1}).`
+          `They must remain on your active roster for ${IL_RULES.POST_ACTIVATION_GAMES_REQUIRED} games. ` +
+          `${gamesRemaining} more game(s) to go.`
         );
         return;
       }
@@ -872,9 +871,8 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin, teamAc
           {/* 5-Game Active Roster Rule Info */}
           <div className="p-3 bg-muted/50 rounded-lg border border-border">
             <p className="text-xs text-muted-foreground">
-              <span className="text-amber-400 font-medium">⚠️ 5-Game Rule:</span> If this player was recently activated from the IL, 
-              they must have been on your <span className="text-foreground font-medium">active roster for at least {IL_RULES.POST_ACTIVATION_GAMES_REQUIRED} games</span> before 
-              returning to the IL. No cycling unused players!
+              <span className="text-amber-400 font-medium">⚠️ 5-Game Rule:</span> Once activated from the IL, 
+              a player <span className="text-foreground font-medium">must remain on your active roster for {IL_RULES.POST_ACTIVATION_GAMES_REQUIRED} games</span>.
             </p>
           </div>
 
