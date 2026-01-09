@@ -385,18 +385,25 @@ export default function AdminPage() {
   const filteredUsers = users.filter(u => 
     u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
     u.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    getTeamName(u.team_id).toLowerCase().includes(searchQuery.toLowerCase())
+    getTeamName(u.team_id).toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (u.email && u.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (u.phone && u.phone.includes(searchQuery)) ||
+    (u.league_name && u.league_name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const claimedTeams = users.filter(u => u.team_id).map(u => u.team_id);
   const availableTeams = MLB_TEAMS.filter(t => !claimedTeams.includes(t.id));
 
   const exportToCSV = () => {
-    const headers = ['Username', 'Display Name', 'Team', 'Admin', 'Created At'];
+    const headers = ['Username', 'Display Name', 'Team', 'League', 'Email', 'Phone', 'Type', 'Admin', 'Created At'];
     const rows = users.map(u => [
       u.username,
       u.display_name,
       getTeamName(u.team_id),
+      u.league_name || '-',
+      u.email || '-',
+      u.phone || '-',
+      u.user_type || 'jkap_member',
       u.is_admin ? 'Yes' : 'No',
       new Date(u.created_at).toLocaleDateString(),
     ]);
@@ -566,7 +573,8 @@ export default function AdminPage() {
                     <tr className="border-b border-slate-700">
                       <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">Username</th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">Name</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">Team</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">Team/League</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">Contact</th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">Password</th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">Joined</th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">Actions</th>
@@ -587,8 +595,31 @@ export default function AdminPage() {
                         <td className="py-3 px-4">
                           {member.team_id ? (
                             <Badge variant="active">{getTeamAbbr(member.team_id)}</Badge>
+                          ) : member.league_name ? (
+                            <div>
+                              <Badge variant="outline" className="border-purple-500/50 text-purple-400">Commissioner</Badge>
+                              <p className="text-xs text-slate-400 mt-1">{member.league_name}</p>
+                            </div>
                           ) : (
                             <span className="text-slate-500">-</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {(member.email || member.phone) ? (
+                            <div className="space-y-1">
+                              {member.email && (
+                                <a href={`mailto:${member.email}`} className="text-sm text-blue-400 hover:underline block truncate max-w-32">
+                                  {member.email}
+                                </a>
+                              )}
+                              {member.phone && (
+                                <a href={`tel:${member.phone}`} className="text-sm text-emerald-400 hover:underline block">
+                                  {member.phone}
+                                </a>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-500 text-sm">-</span>
                           )}
                         </td>
                         <td className="py-3 px-4">

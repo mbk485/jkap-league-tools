@@ -14,6 +14,11 @@ export interface DBUser {
   team_id: string | null;
   is_admin: boolean;
   created_at: string;
+  // Commissioner/contact fields
+  email?: string | null;
+  phone?: string | null;
+  league_name?: string | null;
+  user_type?: 'jkap_member' | 'external_commissioner' | null;
 }
 
 export interface DBTeam {
@@ -23,14 +28,35 @@ export interface DBTeam {
   claimed_by: string | null;
 }
 
+// Extended user creation options
+export interface CreateUserOptions {
+  username: string;
+  password: string;
+  displayName: string;
+  teamId?: string | null;
+  isAdmin?: boolean;
+  email?: string | null;
+  phone?: string | null;
+  leagueName?: string | null;
+  userType?: 'jkap_member' | 'external_commissioner' | null;
+}
+
 // Helper functions for user management
 export async function createUser(
-  username: string,
-  password: string,
-  displayName: string,
-  teamId: string | null,
-  isAdmin: boolean = false
+  options: CreateUserOptions
 ): Promise<{ success: boolean; user?: DBUser; error?: string }> {
+  const {
+    username,
+    password,
+    displayName,
+    teamId = null,
+    isAdmin = false,
+    email = null,
+    phone = null,
+    leagueName = null,
+    userType = null,
+  } = options;
+
   try {
     // Check if username already exists
     const { data: existing } = await supabase
@@ -65,6 +91,10 @@ export async function createUser(
         display_name: displayName,
         team_id: teamId,
         is_admin: isAdmin,
+        email: email,
+        phone: phone,
+        league_name: leagueName,
+        user_type: userType,
       })
       .select()
       .single();

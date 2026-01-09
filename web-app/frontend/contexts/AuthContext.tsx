@@ -234,7 +234,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Try Supabase first
     try {
-      const result = await createUser(username, password, displayName, teamId || null, false);
+      const result = await createUser({
+        username,
+        password,
+        displayName,
+        teamId: teamId || null,
+        isAdmin: false,
+        email: email || null,
+        phone: phone || null,
+        leagueName: leagueName || null,
+        userType: userType || null,
+      });
       
       if (result.success && result.user) {
         // Modify the auth user to include the correct type info
@@ -248,8 +258,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           teamName: team?.name,
           teamAbbreviation: team?.abbreviation,
           leagueName: userType === 'external_commissioner' ? leagueName : undefined,
-          email: userType === 'external_commissioner' ? email : undefined,
-          phone: userType === 'external_commissioner' ? phone : undefined,
+          email: email || undefined,
+          phone: phone || undefined,
           isAdmin: false,
           createdAt: result.user.created_at.split('T')[0],
         };
