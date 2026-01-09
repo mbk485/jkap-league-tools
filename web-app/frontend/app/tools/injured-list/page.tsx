@@ -128,7 +128,7 @@ const IL_RULES = {
   REQUIRES_POSITION_PLAYER: true,
   PENALTY_LOSSES: 10,
   // NEW RULES - Anti-circumvention measures
-  POST_ACTIVATION_GAMES_REQUIRED: 5,  // Once activated, player must remain on active roster for 5 games. Period.
+  POST_ACTIVATION_GAMES_REQUIRED: 5,  // Once activated, player must remain on active roster for 5 games
   MAX_ACTIVE_PLACEMENTS: 1,          // Only 1 player can be on IL at a time (no stacking)
 };
 
@@ -345,7 +345,7 @@ function RulesCard() {
             </div>
             <p className="text-muted-foreground">
               <span className="text-amber-400 font-medium">5-Game Active Roster Rule:</span> Once activated from the IL,{' '}
-              <span className="text-foreground font-medium">a player must remain on your active roster for 5 games</span>. Period.
+              <span className="text-foreground font-medium">a player must remain on your active roster for 5 games</span>.
             </p>
           </div>
           <div className="flex items-start gap-3">
