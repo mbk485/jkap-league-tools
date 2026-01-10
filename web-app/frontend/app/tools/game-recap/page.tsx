@@ -10,8 +10,10 @@ import { MLB_TEAMS } from '@/types/league';
 import { 
   generateRecap as generateAIRecap, 
   isOpenAIConfigured, 
+  isOpenAIConfiguredAsync,
   saveApiKey, 
-  removeApiKey 
+  removeApiKey,
+  initializeApiKey 
 } from '@/lib/openai';
 import {
   ArrowLeft,
@@ -475,8 +477,13 @@ export default function GameRecapPage() {
   
   useEffect(() => {
     setIsLoaded(true);
-    // Check if API key is configured
-    setHasApiKey(isOpenAIConfigured());
+    // Initialize and check if API key is configured (from Supabase)
+    const checkApiKey = async () => {
+      await initializeApiKey();
+      const configured = await isOpenAIConfiguredAsync();
+      setHasApiKey(configured);
+    };
+    checkApiKey();
   }, []);
   
   const handleAddPlayer = () => {
@@ -521,19 +528,27 @@ export default function GameRecapPage() {
     }));
   };
   
-  const handleSaveApiKey = () => {
+  const handleSaveApiKey = async () => {
     if (apiKeyInput.trim()) {
-      saveApiKey(apiKeyInput.trim());
-      setHasApiKey(true);
-      setApiKeyInput('');
-      setShowApiSettings(false);
+      const result = await saveApiKey(apiKeyInput.trim());
+      if (result.success) {
+        setHasApiKey(true);
+        setApiKeyInput('');
+        setShowApiSettings(false);
+      } else {
+        alert('Failed to save API key: ' + (result.error || 'Unknown error'));
+      }
     }
   };
   
-  const handleRemoveApiKey = () => {
-    removeApiKey();
-    setHasApiKey(false);
-    setApiKeyInput('');
+  const handleRemoveApiKey = async () => {
+    const result = await removeApiKey();
+    if (result.success) {
+      setHasApiKey(false);
+      setApiKeyInput('');
+    } else {
+      alert('Failed to remove API key: ' + (result.error || 'Unknown error'));
+    }
   };
   
   // Image Upload Handlers

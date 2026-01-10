@@ -1,6 +1,13 @@
 // OpenAI API Integration for JKAP Memorial League
 // Used for generating game recaps and other AI-powered content
 
+import { getOpenAIApiKey, saveOpenAIApiKey as saveApiKeyToSupabase } from './supabase';
+
+// Cache for the API key (to avoid repeated database calls)
+let cachedApiKey: string | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_DURATION = 60000; // 1 minute cache
+
 interface GameRecapInput {
   homeTeam: string;
   homeTeamName: string;
@@ -33,9 +40,24 @@ interface GeneratedRecap {
 
 type RecapStyle = 'espn' | 'newspaper' | 'social';
 
-// Check if OpenAI is configured
+// Check if OpenAI is configured (async version - checks Supabase)
+export async function isOpenAIConfiguredAsync(): Promise<boolean> {
+  const key = await getApiKeyAsync();
+  return !!key;
+}
+
+// Sync version for immediate checks (uses cache)
 export function isOpenAIConfigured(): boolean {
-  return !!getApiKey();
+  // Check cache first
+  if (cachedApiKey && Date.now() - cacheTimestamp < CACHE_DURATION) {
+    return true;
+  }
+  // Fall back to localStorage for backwards compatibility during migration
+  if (typeof window !== 'undefined') {
+    const localKey = localStorage.getItem('jkap_openai_api_key');
+    if (localKey) return true;
+  }
+  return !!cachedApiKey;
 }
 
 // Alias for isOpenAIConfigured
@@ -43,22 +65,91 @@ export function hasApiKey(): boolean {
   return isOpenAIConfigured();
 }
 
-// Get API key from localStorage (admin-only setting)
+// Get API key from Supabase (centralized for whole league)
+async function getApiKeyAsync(): Promise<string | null> {
+  // Check cache first
+  if (cachedApiKey && Date.now() - cacheTimestamp < CACHE_DURATION) {
+    return cachedApiKey;
+  }
+  
+  try {
+    const key = await getOpenAIApiKey();
+    if (key) {
+      cachedApiKey = key;
+      cacheTimestamp = Date.now();
+      return key;
+    }
+  } catch (err) {
+    console.error('Error fetching API key from Supabase:', err);
+  }
+  
+  // Fall back to localStorage for backwards compatibility
+  if (typeof window !== 'undefined') {
+    const localKey = localStorage.getItem('jkap_openai_api_key');
+    if (localKey) {
+      // Migrate localStorage key to Supabase (will be saved by admin)
+      cachedApiKey = localKey;
+      cacheTimestamp = Date.now();
+      return localKey;
+    }
+  }
+  
+  return null;
+}
+
+// Sync version that uses cache (for components that need immediate response)
 function getApiKey(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('jkap_openai_api_key');
+  if (cachedApiKey && Date.now() - cacheTimestamp < CACHE_DURATION) {
+    return cachedApiKey;
+  }
+  // Fall back to localStorage
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('jkap_openai_api_key');
+  }
+  return null;
 }
 
-// Save API key to localStorage
-export function saveApiKey(apiKey: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('jkap_openai_api_key', apiKey);
+// Save API key to Supabase (admin-only)
+export async function saveApiKey(apiKey: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const result = await saveApiKeyToSupabase(apiKey);
+    if (result.success) {
+      // Update cache
+      cachedApiKey = apiKey;
+      cacheTimestamp = Date.now();
+      // Also save to localStorage as backup
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('jkap_openai_api_key', apiKey);
+      }
+    }
+    return result;
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to save API key' };
+  }
 }
 
-// Remove API key
-export function removeApiKey(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem('jkap_openai_api_key');
+// Remove API key (admin-only)
+export async function removeApiKey(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const result = await saveApiKeyToSupabase(null);
+    if (result.success) {
+      // Clear cache
+      cachedApiKey = null;
+      cacheTimestamp = 0;
+      // Also clear localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('jkap_openai_api_key');
+      }
+    }
+    return result;
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to remove API key' };
+  }
+}
+
+// Initialize/refresh the API key cache (call on app load)
+export async function initializeApiKey(): Promise<void> {
+  await getApiKeyAsync();
 }
 
 // Generate system prompt based on style
@@ -155,10 +246,10 @@ export async function generateRecap(
   data: GameRecapInput,
   style: RecapStyle
 ): Promise<GeneratedRecap> {
-  const apiKey = getApiKey();
+  const apiKey = await getApiKeyAsync();
   
   if (!apiKey) {
-    throw new Error('OpenAI API key not configured. Please add your API key in settings.');
+    throw new Error('OpenAI API key not configured. Ask your league commissioner to set it up.');
   }
 
   const systemPrompt = getSystemPrompt(style);
@@ -244,10 +335,10 @@ export function generateImagePrompt(data: GameRecapInput): string {
 
 // Analyze image with AI (GPT-4 Vision)
 export async function analyzeImageWithAI(imageBase64: string, prompt: string): Promise<string> {
-  const apiKey = getApiKey();
+  const apiKey = await getApiKeyAsync();
   
   if (!apiKey) {
-    throw new Error('OpenAI API key not configured. Please add your API key in settings.');
+    throw new Error('OpenAI API key not configured. Ask your league commissioner to set it up.');
   }
 
   try {

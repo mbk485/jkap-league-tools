@@ -216,6 +216,7 @@ export interface LeagueSettings {
   discord_webhook_url: string | null;
   auto_post_discord: boolean;
   announcement_style: 'espn' | 'simple';
+  openai_api_key: string | null;  // Centralized API key for whole league
   updated_at?: string;
 }
 
@@ -223,6 +224,7 @@ const DEFAULT_SETTINGS: LeagueSettings = {
   discord_webhook_url: null,
   auto_post_discord: false,
   announcement_style: 'espn',
+  openai_api_key: null,
 };
 
 export async function getLeagueSettings(): Promise<LeagueSettings> {
@@ -242,11 +244,76 @@ export async function getLeagueSettings(): Promise<LeagueSettings> {
       discord_webhook_url: data.discord_webhook_url,
       auto_post_discord: data.auto_post_discord ?? false,
       announcement_style: data.announcement_style ?? 'espn',
+      openai_api_key: data.openai_api_key ?? null,
       updated_at: data.updated_at,
     };
   } catch (err) {
     console.error('Error fetching league settings:', err);
     return DEFAULT_SETTINGS;
+  }
+}
+
+// Get just the OpenAI API key (for use by all users)
+export async function getOpenAIApiKey(): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('league_settings')
+      .select('openai_api_key')
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data.openai_api_key;
+  } catch (err) {
+    console.error('Error fetching OpenAI API key:', err);
+    return null;
+  }
+}
+
+// Save just the OpenAI API key (admin only)
+export async function saveOpenAIApiKey(apiKey: string | null): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Try to get existing settings
+    const { data: existing } = await supabase
+      .from('league_settings')
+      .select('id')
+      .single();
+
+    if (existing) {
+      // Update existing
+      const { error } = await supabase
+        .from('league_settings')
+        .update({
+          openai_api_key: apiKey,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    } else {
+      // Insert new with defaults
+      const { error } = await supabase
+        .from('league_settings')
+        .insert({
+          openai_api_key: apiKey,
+          discord_webhook_url: null,
+          auto_post_discord: false,
+          announcement_style: 'espn',
+        });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error saving OpenAI API key:', err);
+    return { success: false, error: err.message || 'Failed to save API key' };
   }
 }
 
@@ -261,15 +328,18 @@ export async function saveLeagueSettings(
       .single();
 
     if (existing) {
-      // Update existing
+      // Update existing - only update fields that are provided
+      const updateData: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (settings.discord_webhook_url !== undefined) updateData.discord_webhook_url = settings.discord_webhook_url;
+      if (settings.auto_post_discord !== undefined) updateData.auto_post_discord = settings.auto_post_discord;
+      if (settings.announcement_style !== undefined) updateData.announcement_style = settings.announcement_style;
+      if (settings.openai_api_key !== undefined) updateData.openai_api_key = settings.openai_api_key;
+
       const { error } = await supabase
         .from('league_settings')
-        .update({
-          discord_webhook_url: settings.discord_webhook_url,
-          auto_post_discord: settings.auto_post_discord,
-          announcement_style: settings.announcement_style,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', existing.id);
 
       if (error) {
@@ -280,9 +350,10 @@ export async function saveLeagueSettings(
       const { error } = await supabase
         .from('league_settings')
         .insert({
-          discord_webhook_url: settings.discord_webhook_url,
+          discord_webhook_url: settings.discord_webhook_url ?? null,
           auto_post_discord: settings.auto_post_discord ?? false,
           announcement_style: settings.announcement_style ?? 'espn',
+          openai_api_key: settings.openai_api_key ?? null,
         });
 
       if (error) {

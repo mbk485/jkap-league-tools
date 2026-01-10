@@ -31,7 +31,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { MLB_TEAMS } from '@/types/league';
-import { analyzeImageWithAI, isOpenAIConfigured } from '@/lib/openai';
+import { analyzeImageWithAI, isOpenAIConfiguredAsync, initializeApiKey } from '@/lib/openai';
 import { 
   saveScoutingReport, 
   getScoutingReports, 
@@ -121,23 +121,26 @@ function ScoutingHub({ userId, userTeamId }: { userId: string; userTeamId?: stri
   const [viewMode, setViewMode] = useState<'upload' | 'my-reports' | 'opponent-files'>('upload');
   const [selectedOpponentForFiles, setSelectedOpponentForFiles] = useState('');
 
-  // Check API key on mount and when window gains focus (client-side only)
+  // Check API key on mount (from Supabase - centralized for whole league)
   useEffect(() => {
-    const checkApiKey = () => {
-      setHasApiKey(isOpenAIConfigured());
+    const checkApiKey = async () => {
+      await initializeApiKey();
+      const configured = await isOpenAIConfiguredAsync();
+      setHasApiKey(configured);
     };
     
     // Check immediately
     checkApiKey();
     
-    // Re-check when window gains focus (in case user set it in another tab)
-    window.addEventListener('focus', checkApiKey);
+    // Re-check when window gains focus (in case admin set it)
+    const handleFocus = () => checkApiKey();
+    window.addEventListener('focus', handleFocus);
     
-    // Also check periodically in case it was just set
-    const interval = setInterval(checkApiKey, 2000);
+    // Also check periodically in case admin just set it
+    const interval = setInterval(checkApiKey, 5000);
     
     return () => {
-      window.removeEventListener('focus', checkApiKey);
+      window.removeEventListener('focus', handleFocus);
       clearInterval(interval);
     };
   }, []);
