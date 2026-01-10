@@ -589,7 +589,7 @@ Format your response as JSON:
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <Badge variant={report.analysis_type === 'hitting' ? 'default' : 'secondary'}>
+                        <Badge variant={report.analysis_type === 'hitting' ? 'default' : 'outline'}>
                           {report.analysis_type === 'hitting' ? <Crosshair className="w-3 h-3 mr-1" /> : <Target className="w-3 h-3 mr-1" />}
                           {report.analysis_type}
                         </Badge>
