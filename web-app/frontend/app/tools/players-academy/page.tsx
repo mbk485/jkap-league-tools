@@ -60,6 +60,8 @@ interface AnalysisResult {
   tendencies: string[];
   recommendations: string[];
   rawAnalysis: string;
+  encouragement: string;  // What they did well - positive feedback
+  improvement: string;    // What to work on - constructive feedback
 }
 
 // =============================================================================
@@ -173,12 +175,16 @@ function ScoutingHub({ userId, userTeamId }: { userId: string; userTeamId?: stri
     try {
       const opponentTeam = allTeams.find(t => t.id === opponentTeamId);
       const prompt = analysisType === 'hitting' 
-        ? `Analyze this MLB The Show hitting analysis screenshot. Extract:
+        ? `Analyze this MLB The Show hitting analysis screenshot. You're a supportive coach giving feedback to a player.
+
+Extract and provide:
 1. What pitch types did the player struggle against (high outs, low avg)?
 2. What pitch types did they hit well?
 3. Batting average by pitch type if visible
 4. Any tendencies you notice (early/late timing, pull heavy, etc.)
-5. 2-3 specific recommendations to improve
+5. 2-3 specific, actionable recommendations to improve
+6. ENCOURAGEMENT: What did they do WELL this game? Be specific and positive!
+7. IMPROVEMENT: What's ONE key thing to focus on next game? Be constructive, not discouraging.
 
 Format your response as JSON:
 {
@@ -187,14 +193,20 @@ Format your response as JSON:
   "battingAvgByPitch": {"Fastball": ".250", "Slider": ".150"},
   "tendencies": ["tendency1", "tendency2"],
   "recommendations": ["rec1", "rec2"],
-  "rawAnalysis": "Brief summary paragraph"
+  "rawAnalysis": "Brief 1-2 sentence game summary",
+  "encouragement": "Great job on [specific positive thing]! You showed real skill when...",
+  "improvement": "For next game, focus on [one specific thing]. Try [actionable tip]."
 }`
-        : `Analyze this MLB The Show pitching analysis screenshot. Extract:
+        : `Analyze this MLB The Show pitching analysis screenshot. You're a supportive pitching coach giving feedback.
+
+Extract and provide:
 1. What pitch types were most effective (high outs, low avg against)?
 2. What pitch types got hit hard?
 3. Opponent batting average by pitch type if visible
 4. Any patterns you notice (certain counts, locations, sequences)
-5. 2-3 specific recommendations
+5. 2-3 specific, actionable recommendations
+6. ENCOURAGEMENT: What did they do WELL this game? Be specific and positive!
+7. IMPROVEMENT: What's ONE key thing to focus on next game? Be constructive, not discouraging.
 
 Format your response as JSON:
 {
@@ -203,7 +215,9 @@ Format your response as JSON:
   "battingAvgByPitch": {"Fastball": ".250", "Slider": ".150"},
   "tendencies": ["tendency1", "tendency2"],
   "recommendations": ["rec1", "rec2"],
-  "rawAnalysis": "Brief summary paragraph"
+  "rawAnalysis": "Brief 1-2 sentence game summary",
+  "encouragement": "Excellent work with [specific positive thing]! Your [pitch/strategy] was really effective...",
+  "improvement": "Next time, try [one specific adjustment]. This will help you..."
 }`;
 
       const response = await analyzeImageWithAI(uploadedImage, prompt);
@@ -248,6 +262,8 @@ Format your response as JSON:
           tendencies: [],
           recommendations: [],
           rawAnalysis: response,
+          encouragement: '',
+          improvement: '',
         });
       }
     } catch (err: any) {
@@ -573,6 +589,26 @@ Format your response as JSON:
                     <div>
                       <h4 className="text-sm font-medium text-foreground mb-2">Summary</h4>
                       <p className="text-sm text-muted-foreground">{analysisResult.rawAnalysis}</p>
+                    </div>
+                  )}
+
+                  {/* Encouragement - What you did well! */}
+                  {analysisResult.encouragement && (
+                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                      <h4 className="text-sm font-semibold text-emerald-400 mb-2 flex items-center gap-2">
+                        🌟 What You Did Well
+                      </h4>
+                      <p className="text-sm text-emerald-200">{analysisResult.encouragement}</p>
+                    </div>
+                  )}
+
+                  {/* Improvement - What to work on */}
+                  {analysisResult.improvement && (
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                      <h4 className="text-sm font-semibold text-amber-400 mb-2 flex items-center gap-2">
+                        🎯 Focus For Next Game
+                      </h4>
+                      <p className="text-sm text-amber-200">{analysisResult.improvement}</p>
                     </div>
                   )}
 
