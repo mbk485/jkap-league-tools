@@ -121,9 +121,25 @@ function ScoutingHub({ userId, userTeamId }: { userId: string; userTeamId?: stri
   const [viewMode, setViewMode] = useState<'upload' | 'my-reports' | 'opponent-files'>('upload');
   const [selectedOpponentForFiles, setSelectedOpponentForFiles] = useState('');
 
-  // Check API key on mount (client-side only)
+  // Check API key on mount and when window gains focus (client-side only)
   useEffect(() => {
-    setHasApiKey(isOpenAIConfigured());
+    const checkApiKey = () => {
+      setHasApiKey(isOpenAIConfigured());
+    };
+    
+    // Check immediately
+    checkApiKey();
+    
+    // Re-check when window gains focus (in case user set it in another tab)
+    window.addEventListener('focus', checkApiKey);
+    
+    // Also check periodically in case it was just set
+    const interval = setInterval(checkApiKey, 2000);
+    
+    return () => {
+      window.removeEventListener('focus', checkApiKey);
+      clearInterval(interval);
+    };
   }, []);
 
   // Load reports on mount
@@ -548,9 +564,17 @@ Format your response as JSON:
               </Button>
 
               {!hasApiKey && (
-                <p className="text-xs text-amber-500 text-center">
-                  ⚠️ OpenAI API key required. Add it in Game Recap settings.
-                </p>
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-center">
+                  <p className="text-amber-400 text-sm mb-2">
+                    ⚠️ OpenAI API key required for AI analysis
+                  </p>
+                  <a 
+                    href="/tools/game-recap" 
+                    className="text-xs text-amber-300 underline hover:text-amber-200"
+                  >
+                    Click here to add your API key in Game Recap settings →
+                  </a>
+                </div>
               )}
 
               {analysisError && (
