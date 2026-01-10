@@ -418,3 +418,164 @@ export async function deleteILPlacement(
   }
 }
 
+// =============================================================================
+// SCOUTING REPORTS
+// =============================================================================
+
+export interface DBScoutingReport {
+  id: string;
+  user_id: string;
+  team_id: string;
+  opponent_team_id: string;
+  analysis_type: 'hitting' | 'pitching';
+  pitches_struggled: string[];
+  pitches_hit_well: string[];
+  batting_avg_by_pitch: Record<string, string>;
+  tendencies: string[];
+  recommendations: string[];
+  raw_analysis: string;
+  screenshot_url: string | null;
+  created_at: string;
+}
+
+export async function saveScoutingReport(
+  report: Omit<DBScoutingReport, 'id' | 'created_at'>
+): Promise<{ success: boolean; report?: DBScoutingReport; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('scouting_reports')
+      .insert({
+        user_id: report.user_id,
+        team_id: report.team_id,
+        opponent_team_id: report.opponent_team_id,
+        analysis_type: report.analysis_type,
+        pitches_struggled: report.pitches_struggled,
+        pitches_hit_well: report.pitches_hit_well,
+        batting_avg_by_pitch: report.batting_avg_by_pitch,
+        tendencies: report.tendencies,
+        recommendations: report.recommendations,
+        raw_analysis: report.raw_analysis,
+        screenshot_url: report.screenshot_url,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error saving scouting report:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, report: data };
+  } catch (err: any) {
+    console.error('Error saving scouting report:', err);
+    return { success: false, error: err.message || 'Failed to save report' };
+  }
+}
+
+export async function getScoutingReports(userId: string): Promise<DBScoutingReport[]> {
+  try {
+    const { data, error } = await supabase
+      .from('scouting_reports')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching scouting reports:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching scouting reports:', err);
+    return [];
+  }
+}
+
+export async function getOpponentReports(userId: string, opponentTeamId: string): Promise<DBScoutingReport[]> {
+  try {
+    const { data, error } = await supabase
+      .from('scouting_reports')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('opponent_team_id', opponentTeamId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching opponent reports:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching opponent reports:', err);
+    return [];
+  }
+}
+
+// Get all scouting reports for admin view (league-wide intel)
+export async function getAllScoutingReports(): Promise<DBScoutingReport[]> {
+  try {
+    const { data, error } = await supabase
+      .from('scouting_reports')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching all scouting reports:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching all scouting reports:', err);
+    return [];
+  }
+}
+
+// Get aggregated intel on a specific team (for admin)
+export async function getTeamIntel(teamId: string): Promise<{
+  totalReports: number;
+  commonWeaknesses: string[];
+  commonStrengths: string[];
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('scouting_reports')
+      .select('*')
+      .eq('opponent_team_id', teamId);
+
+    if (error || !data) {
+      return { totalReports: 0, commonWeaknesses: [], commonStrengths: [] };
+    }
+
+    // Aggregate weaknesses
+    const weaknessCounts: Record<string, number> = {};
+    const strengthCounts: Record<string, number> = {};
+
+    data.forEach(report => {
+      report.pitches_struggled?.forEach((pitch: string) => {
+        weaknessCounts[pitch] = (weaknessCounts[pitch] || 0) + 1;
+      });
+      report.pitches_hit_well?.forEach((pitch: string) => {
+        strengthCounts[pitch] = (strengthCounts[pitch] || 0) + 1;
+      });
+    });
+
+    const sortByCount = (counts: Record<string, number>) => 
+      Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([pitch]) => pitch);
+
+    return {
+      totalReports: data.length,
+      commonWeaknesses: sortByCount(weaknessCounts),
+      commonStrengths: sortByCount(strengthCounts),
+    };
+  } catch (err) {
+    console.error('Error getting team intel:', err);
+    return { totalReports: 0, commonWeaknesses: [], commonStrengths: [] };
+  }
+}
+

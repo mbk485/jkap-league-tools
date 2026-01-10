@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Newspaper,
+  GraduationCap,
 } from 'lucide-react';
 
 interface LeagueTool {
@@ -94,6 +95,18 @@ const leagueTools: LeagueTool[] = [
     category: 'analytics',
     isNew: true,
     featureFlag: 'showGameRecap',
+    forUserType: 'jkap_member', // Only for JKAP members
+  },
+  {
+    id: 'players-academy',
+    name: 'Players Academy',
+    description: 'Level up your game with scouting reports, roster advice, and tutorials from top players.',
+    icon: <GraduationCap className="w-7 h-7" />,
+    href: '/tools/players-academy',
+    status: 'available',
+    category: 'analytics',
+    isNew: true,
+    featureFlag: 'showPlayersAcademy',
     forUserType: 'jkap_member', // Only for JKAP members
   },
   {
