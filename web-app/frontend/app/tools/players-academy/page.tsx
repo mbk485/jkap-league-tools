@@ -98,10 +98,13 @@ const allTeams = MLB_TEAMS;
 // SCOUTING HUB COMPONENT
 // =============================================================================
 
+// Maximum images allowed per analysis
+const MAX_IMAGES = 4;
+
 function ScoutingHub({ userId, userTeamId }: { userId: string; userTeamId?: string }) {
   const [analysisType, setAnalysisType] = useState<'hitting' | 'pitching'>('hitting');
   const [opponentTeamId, setOpponentTeamId] = useState('');
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState('');
@@ -179,21 +182,48 @@ function ScoutingHub({ userId, userTeamId }: { userId: string; userTeamId?: stri
   }, [selectedOpponentForFiles, userId]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setUploadedImage(event.target?.result as string);
-      setAnalysisResult(null);
-      setAnalysisError('');
-      setSaveStatus('idle');
-    };
-    reader.readAsDataURL(file);
+    // Check how many more images we can add
+    const remainingSlots = MAX_IMAGES - uploadedImages.length;
+    if (remainingSlots <= 0) {
+      setAnalysisError(`Maximum ${MAX_IMAGES} images allowed`);
+      return;
+    }
+
+    // Process files (up to remaining slots)
+    const filesToProcess = Array.from(files).slice(0, remainingSlots);
+    
+    filesToProcess.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const imageData = event.target?.result as string;
+        setUploadedImages(prev => [...prev, imageData]);
+        setAnalysisResult(null);
+        setAnalysisError('');
+        setSaveStatus('idle');
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Remove a specific image from the array
+  const handleRemoveImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+    setAnalysisResult(null);
+    setAnalysisError('');
+  };
+
+  // Clear all images
+  const handleClearAllImages = () => {
+    setUploadedImages([]);
+    setAnalysisResult(null);
+    setAnalysisError('');
   };
 
   const handleAnalyze = async () => {
-    if (!uploadedImage || !opponentTeamId) return;
+    if (uploadedImages.length === 0 || !opponentTeamId) return;
     
     setIsAnalyzing(true);
     setAnalysisError('');
@@ -247,7 +277,7 @@ Format your response as JSON:
   "improvement": "Next time, try [one specific adjustment]. This will help you..."
 }`;
 
-      const response = await analyzeImageWithAI(uploadedImage, prompt);
+      const response = await analyzeImageWithAI(uploadedImages, prompt);
       
       // Try to parse JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -506,64 +536,95 @@ Format your response as JSON:
                 </select>
               </div>
 
-              {/* Image Upload */}
+              {/* Image Upload - Multiple Images */}
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Upload Screenshot
-                </label>
-                <div 
-                  className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${
-                    uploadedImage 
-                      ? 'border-jkap-red-500 bg-jkap-red-500/5' 
-                      : 'border-border hover:border-muted-foreground'
-                  }`}
-                >
-                  {uploadedImage ? (
-                    <div className="space-y-3">
-                      <img 
-                        src={uploadedImage} 
-                        alt="Uploaded analysis" 
-                        className="max-h-48 mx-auto rounded-lg"
-                      />
-                      <Button 
-                        variant="secondary" 
-                        size="sm"
-                        onClick={() => {
-                          setUploadedImage(null);
-                          setAnalysisResult(null);
-                        }}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  ) : (
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-foreground">
+                    Upload Screenshots ({uploadedImages.length}/{MAX_IMAGES})
+                  </label>
+                  {uploadedImages.length > 0 && (
+                    <button
+                      onClick={handleClearAllImages}
+                      className="text-xs text-red-400 hover:text-red-300"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
+                
+                {/* Uploaded Images Grid */}
+                {uploadedImages.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    {uploadedImages.map((img, index) => (
+                      <div key={index} className="relative group">
+                        <img 
+                          src={img} 
+                          alt={`Screenshot ${index + 1}`} 
+                          className="w-full h-24 object-cover rounded-lg border border-border"
+                        />
+                        <button
+                          onClick={() => handleRemoveImage(index)}
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          ×
+                        </button>
+                        <span className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
+                          {index + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload Dropzone */}
+                {uploadedImages.length < MAX_IMAGES && (
+                  <div 
+                    className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${
+                      uploadedImages.length > 0 
+                        ? 'border-jkap-red-500/50 bg-jkap-red-500/5' 
+                        : 'border-border hover:border-muted-foreground'
+                    }`}
+                  >
                     <label className="cursor-pointer block">
-                      <ImageIcon className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                      <p className="text-sm text-muted-foreground mb-2">
-                        Drag & drop or click to upload
+                      <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground mb-1">
+                        {uploadedImages.length === 0 
+                          ? 'Click to upload screenshots' 
+                          : `Add more (${MAX_IMAGES - uploadedImages.length} remaining)`
+                        }
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        PNG, JPG up to 10MB
+                        PNG, JPG up to 10MB • Up to {MAX_IMAGES} images
                       </p>
                       <input
                         type="file"
                         accept="image/*"
+                        multiple
                         onChange={handleImageUpload}
                         className="hidden"
                       />
                     </label>
-                  )}
-                </div>
+                  </div>
+                )}
+                
+                {uploadedImages.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    💡 Upload multiple screenshots for more comprehensive analysis
+                  </p>
+                )}
               </div>
 
               {/* Analyze Button */}
               <Button
                 onClick={handleAnalyze}
-                disabled={!uploadedImage || !opponentTeamId || isAnalyzing || !hasApiKey}
+                disabled={uploadedImages.length === 0 || !opponentTeamId || isAnalyzing || !hasApiKey}
                 fullWidth
                 icon={isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
               >
-                {isAnalyzing ? 'Analyzing...' : '✨ Analyze with AI'}
+                {isAnalyzing 
+                  ? 'Analyzing...' 
+                  : `✨ Analyze ${uploadedImages.length > 1 ? `${uploadedImages.length} Screenshots` : 'with AI'}`
+                }
               </Button>
 
               {!hasApiKey && (

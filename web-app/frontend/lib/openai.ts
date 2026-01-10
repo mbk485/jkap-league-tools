@@ -333,16 +333,45 @@ export function generateImagePrompt(data: GameRecapInput): string {
   return `Hyper-realistic sports photography style image: ${winner} baseball victory celebration. ${starPlayer ? `Focus on a player celebrating after ${starPlayer.stats}.` : 'Team celebration on the field.'} Professional MLB stadium atmosphere, dramatic lighting, action shot, high quality sports photography, 4K, photorealistic.`;
 }
 
-// Analyze image with AI (GPT-4 Vision)
-export async function analyzeImageWithAI(imageBase64: string, prompt: string): Promise<string> {
+// Analyze image(s) with AI (GPT-4 Vision)
+// Supports single image (string) or multiple images (string[])
+export async function analyzeImageWithAI(images: string | string[], prompt: string): Promise<string> {
   const apiKey = await getApiKeyAsync();
   
   if (!apiKey) {
     throw new Error('OpenAI API key not configured. Ask your league commissioner to set it up.');
   }
 
+  // Normalize to array
+  const imageArray = Array.isArray(images) ? images : [images];
+  
+  if (imageArray.length === 0) {
+    throw new Error('At least one image is required');
+  }
+
+  // Build message content array with text prompt and all images
+  const messageContent: Array<{ type: string; text?: string; image_url?: { url: string; detail: string } }> = [
+    {
+      type: 'text',
+      text: imageArray.length > 1 
+        ? `${prompt}\n\nNote: Analyzing ${imageArray.length} screenshots together. Consider all images as part of the same game analysis.`
+        : prompt,
+    },
+  ];
+  
+  // Add each image
+  imageArray.forEach((img) => {
+    messageContent.push({
+      type: 'image_url',
+      image_url: {
+        url: img,
+        detail: 'high',
+      },
+    });
+  });
+
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const apiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -353,44 +382,32 @@ export async function analyzeImageWithAI(imageBase64: string, prompt: string): P
         messages: [
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: prompt,
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: imageBase64,
-                  detail: 'high',
-                },
-              },
-            ],
+            content: messageContent,
           },
         ],
-        max_tokens: 2000,
+        max_tokens: 2500, // Increased for multiple images
       }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      if (response.status === 401) {
+    if (!apiResponse.ok) {
+      const errorData = await apiResponse.json();
+      if (apiResponse.status === 401) {
         throw new Error('Invalid API key. Please check your OpenAI API key.');
       }
-      if (response.status === 429) {
+      if (apiResponse.status === 429) {
         throw new Error('Rate limit exceeded. Please try again in a moment.');
       }
-      throw new Error(error.error?.message || 'Failed to analyze image');
+      throw new Error(errorData.error?.message || 'Failed to analyze image');
     }
 
-    const result = await response.json();
-    const content = result.choices[0]?.message?.content;
+    const resultData = await apiResponse.json();
+    const responseContent = resultData.choices[0]?.message?.content;
 
-    if (!content) {
+    if (!responseContent) {
       throw new Error('No analysis generated');
     }
 
-    return content;
+    return responseContent;
   } catch (error) {
     if (error instanceof Error) {
       throw error;
