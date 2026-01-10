@@ -38,6 +38,11 @@ export function isOpenAIConfigured(): boolean {
   return !!getApiKey();
 }
 
+// Alias for isOpenAIConfigured
+export function hasApiKey(): boolean {
+  return isOpenAIConfigured();
+}
+
 // Get API key from localStorage (admin-only setting)
 function getApiKey(): string | null {
   if (typeof window === 'undefined') return null;
@@ -235,5 +240,71 @@ export function generateImagePrompt(data: GameRecapInput): string {
   const starPlayer = data.keyPlayers.find(p => p.isStarOfGame);
   
   return `Hyper-realistic sports photography style image: ${winner} baseball victory celebration. ${starPlayer ? `Focus on a player celebrating after ${starPlayer.stats}.` : 'Team celebration on the field.'} Professional MLB stadium atmosphere, dramatic lighting, action shot, high quality sports photography, 4K, photorealistic.`;
+}
+
+// Analyze image with AI (GPT-4 Vision)
+export async function analyzeImageWithAI(imageBase64: string, prompt: string): Promise<string> {
+  const apiKey = getApiKey();
+  
+  if (!apiKey) {
+    throw new Error('OpenAI API key not configured. Please add your API key in settings.');
+  }
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini', // Vision-capable model
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: prompt,
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: imageBase64,
+                  detail: 'high',
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 2000,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      if (response.status === 401) {
+        throw new Error('Invalid API key. Please check your OpenAI API key.');
+      }
+      if (response.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again in a moment.');
+      }
+      throw new Error(error.error?.message || 'Failed to analyze image');
+    }
+
+    const result = await response.json();
+    const content = result.choices[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('No analysis generated');
+    }
+
+    return content;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Failed to analyze image with AI');
+  }
 }
 

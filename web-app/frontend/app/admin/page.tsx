@@ -346,6 +346,7 @@ export default function AdminPage() {
       showInjuredList: true,
       showGameRecap: true,
       showDraftBoard: true,
+      showPlayersAcademy: true,
     };
     setFeatureFlagsState(allEnabled);
     setFeatureFlags(allEnabled);
