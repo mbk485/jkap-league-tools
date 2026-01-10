@@ -31,7 +31,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { MLB_TEAMS } from '@/types/league';
-import { analyzeImageWithAI, hasApiKey } from '@/lib/openai';
+import { analyzeImageWithAI, isOpenAIConfigured } from '@/lib/openai';
 import { 
   saveScoutingReport, 
   getScoutingReports, 
@@ -106,6 +106,9 @@ function ScoutingHub({ userId, userTeamId }: { userId: string; userTeamId?: stri
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState('');
   
+  // API key state - check on client side only
+  const [hasApiKey, setHasApiKey] = useState(false);
+  
   // Tutorial video URL - commissioner can update this later
   // Set to empty string for "coming soon" or a YouTube embed URL like "https://www.youtube.com/embed/VIDEO_ID"
   const tutorialVideoUrl = ''; // TODO: Replace with actual video URL when ready
@@ -117,6 +120,11 @@ function ScoutingHub({ userId, userTeamId }: { userId: string; userTeamId?: stri
   const [isLoadingReports, setIsLoadingReports] = useState(true);
   const [viewMode, setViewMode] = useState<'upload' | 'my-reports' | 'opponent-files'>('upload');
   const [selectedOpponentForFiles, setSelectedOpponentForFiles] = useState('');
+
+  // Check API key on mount (client-side only)
+  useEffect(() => {
+    setHasApiKey(isOpenAIConfigured());
+  }, []);
 
   // Load reports on mount
   useEffect(() => {
@@ -532,14 +540,14 @@ Format your response as JSON:
               {/* Analyze Button */}
               <Button
                 onClick={handleAnalyze}
-                disabled={!uploadedImage || !opponentTeamId || isAnalyzing || !hasApiKey()}
+                disabled={!uploadedImage || !opponentTeamId || isAnalyzing || !hasApiKey}
                 fullWidth
                 icon={isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
               >
                 {isAnalyzing ? 'Analyzing...' : '✨ Analyze with AI'}
               </Button>
 
-              {!hasApiKey() && (
+              {!hasApiKey && (
                 <p className="text-xs text-amber-500 text-center">
                   ⚠️ OpenAI API key required. Add it in Game Recap settings.
                 </p>
