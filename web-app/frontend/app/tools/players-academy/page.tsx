@@ -28,6 +28,7 @@ import {
   Crosshair,
   BarChart3,
   Zap,
+  HelpCircle,
 } from 'lucide-react';
 import { MLB_TEAMS } from '@/types/league';
 import { analyzeImageWithAI, hasApiKey } from '@/lib/openai';
@@ -102,6 +103,10 @@ function ScoutingHub({ userId, userTeamId }: { userId: string; userTeamId?: stri
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState('');
+  
+  // Tutorial video URL - commissioner can update this later
+  // Set to empty string for "coming soon" or a YouTube embed URL like "https://www.youtube.com/embed/VIDEO_ID"
+  const tutorialVideoUrl = ''; // TODO: Replace with actual video URL when ready
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   
   // Reports state
@@ -300,7 +305,105 @@ Format your response as JSON:
 
       {/* Upload New Analysis View */}
       {viewMode === 'upload' && (
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
+          {/* Tutorial Section */}
+          <Card className="border-blue-500/30 bg-blue-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-blue-400">
+                <HelpCircle className="w-5 h-5" />
+                How to Get Your Screenshots
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Hitting Analysis */}
+                <div className="p-4 bg-background/50 rounded-lg border border-border">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Crosshair className="w-5 h-5 text-jkap-red-500" />
+                    <h4 className="font-medium text-foreground">Hitting Analysis</h4>
+                  </div>
+                  <ol className="text-sm text-muted-foreground space-y-2">
+                    <li className="flex gap-2">
+                      <span className="text-jkap-red-500 font-bold">1.</span>
+                      After the game ends, go to <span className="text-foreground font-medium">Post-Game Summary</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-jkap-red-500 font-bold">2.</span>
+                      Select <span className="text-foreground font-medium">Hitting Analysis</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-jkap-red-500 font-bold">3.</span>
+                      Screenshot the <span className="text-foreground font-medium">pitch type chart</span> showing your results
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-jkap-red-500 font-bold">4.</span>
+                      Upload it here!
+                    </li>
+                  </ol>
+                </div>
+
+                {/* Pitching Analysis */}
+                <div className="p-4 bg-background/50 rounded-lg border border-border">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Target className="w-5 h-5 text-jkap-red-500" />
+                    <h4 className="font-medium text-foreground">Pitching Analysis</h4>
+                  </div>
+                  <ol className="text-sm text-muted-foreground space-y-2">
+                    <li className="flex gap-2">
+                      <span className="text-jkap-red-500 font-bold">1.</span>
+                      After the game ends, go to <span className="text-foreground font-medium">Post-Game Summary</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-jkap-red-500 font-bold">2.</span>
+                      Select <span className="text-foreground font-medium">Pitching Analysis</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-jkap-red-500 font-bold">3.</span>
+                      Screenshot showing <span className="text-foreground font-medium">opponent's batting avg by pitch type</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-jkap-red-500 font-bold">4.</span>
+                      Upload it here!
+                    </li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* Video Tutorial Placeholder */}
+              {tutorialVideoUrl ? (
+                <div className="mt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Play className="w-4 h-4 text-jkap-red-500" />
+                    <span className="text-sm font-medium text-foreground">Video Tutorial</span>
+                  </div>
+                  <div className="aspect-video rounded-lg overflow-hidden bg-black">
+                    <iframe
+                      src={tutorialVideoUrl}
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 p-4 bg-muted/50 rounded-lg border border-dashed border-border text-center">
+                  <Play className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Video tutorial coming soon!
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    We'll walk you through exactly how to capture and upload your game analysis.
+                  </p>
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground text-center pt-2">
+                💡 <strong>Pro tip:</strong> On PlayStation, hold the Share button to screenshot. On Xbox, press the Xbox button + Y.
+              </p>
+            </CardContent>
+          </Card>
+
+          <div className="grid lg:grid-cols-2 gap-6">
           {/* Left: Upload Form */}
           <Card>
             <CardHeader>
@@ -549,6 +652,7 @@ Format your response as JSON:
               )}
             </CardContent>
           </Card>
+        </div>
         </div>
       )}
 
