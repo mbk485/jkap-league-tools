@@ -282,7 +282,7 @@ Format your response as JSON:
           <FileText className="w-4 h-4" />
           My Reports
           {myReports.length > 0 && (
-            <Badge variant="secondary" className="text-xs">{myReports.length}</Badge>
+            <Badge variant="outline" className="text-xs">{myReports.length}</Badge>
           )}
         </button>
         <button
@@ -479,7 +479,7 @@ Format your response as JSON:
                       <h4 className="text-sm font-medium text-red-400 mb-2">❌ Struggled Against</h4>
                       <div className="flex flex-wrap gap-2">
                         {analysisResult.pitchesStruggled.map((pitch, i) => (
-                          <Badge key={i} variant="secondary" className="bg-red-500/10 text-red-400 border-red-500/30">
+                          <Badge key={i} variant="outline" className="bg-red-500/10 text-red-400 border-red-500/30">
                             {pitch}
                           </Badge>
                         ))}
@@ -493,7 +493,7 @@ Format your response as JSON:
                       <h4 className="text-sm font-medium text-emerald-400 mb-2">✅ Hit Well</h4>
                       <div className="flex flex-wrap gap-2">
                         {analysisResult.pitchesHitWell.map((pitch, i) => (
-                          <Badge key={i} variant="secondary" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                          <Badge key={i} variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
                             {pitch}
                           </Badge>
                         ))}
@@ -559,7 +559,7 @@ Format your response as JSON:
             <CardTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-jkap-red-500" />
               My Game Reports
-              <Badge variant="secondary" className="ml-2">{myReports.length}</Badge>
+              <Badge variant="outline" className="ml-2">{myReports.length}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -611,12 +611,12 @@ Format your response as JSON:
 
                     <div className="flex flex-wrap gap-2">
                       {report.pitches_struggled?.slice(0, 3).map((pitch, i) => (
-                        <Badge key={i} variant="secondary" className="text-xs bg-red-500/10 text-red-400">
+                        <Badge key={i} variant="outline" className="text-xs bg-red-500/10 text-red-400">
                           ❌ {pitch}
                         </Badge>
                       ))}
                       {report.pitches_hit_well?.slice(0, 3).map((pitch, i) => (
-                        <Badge key={i} variant="secondary" className="text-xs bg-emerald-500/10 text-emerald-400">
+                        <Badge key={i} variant="outline" className="text-xs bg-emerald-500/10 text-emerald-400">
                           ✅ {pitch}
                         </Badge>
                       ))}
@@ -683,7 +683,7 @@ Format your response as JSON:
                           <div className="flex flex-wrap gap-1">
                             {/* Aggregate common pitches they struggled against */}
                             {Array.from(new Set(opponentReports.flatMap(r => r.pitches_struggled || []))).slice(0, 3).map((pitch, i) => (
-                              <Badge key={i} variant="secondary" className="text-xs bg-red-500/10 text-red-400">
+                              <Badge key={i} variant="outline" className="text-xs bg-red-500/10 text-red-400">
                                 {pitch}
                               </Badge>
                             ))}
@@ -701,7 +701,7 @@ Format your response as JSON:
                           className="p-3 bg-muted rounded-lg text-sm"
                         >
                           <div className="flex items-center justify-between mb-1">
-                            <Badge variant="secondary" className="text-xs">
+                            <Badge variant="outline" className="text-xs">
                               {report.analysis_type}
                             </Badge>
                             <span className="text-xs text-muted-foreground">
@@ -735,7 +735,7 @@ function ComingSoon({ title, description }: { title: string; description: string
       </div>
       <h3 className="text-2xl font-display text-foreground mb-2">{title}</h3>
       <p className="text-muted-foreground max-w-md mx-auto mb-6">{description}</p>
-      <Badge variant="secondary" className="text-sm">
+      <Badge variant="outline" className="text-sm">
         <Clock className="w-3 h-3 mr-1" />
         Coming Soon
       </Badge>
@@ -830,7 +830,7 @@ export default function PlayersAcademyPage() {
                 {tab.icon}
                 {tab.label}
                 {!tab.available && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                     Soon
                   </Badge>
                 )}
