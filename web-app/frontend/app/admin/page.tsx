@@ -53,6 +53,9 @@ import {
   deleteUser,
   updateUserPassword,
   DBUser,
+  getAllScoutingReports,
+  getTeamIntel,
+  DBScoutingReport,
 } from '@/lib/supabase';
 
 export default function AdminPage() {
@@ -115,6 +118,8 @@ export default function AdminPage() {
     scoutingIntel?: ScoutingIntel;
   }
   const [scoutingData, setScoutingData] = useState<ScoutingEntry[]>([]);
+  const [supabaseReports, setSupabaseReports] = useState<DBScoutingReport[]>([]);
+  const [isLoadingIntel, setIsLoadingIntel] = useState(true);
   const [expandedScouting, setExpandedScouting] = useState<number | null>(null);
   const [expandedCaseFile, setExpandedCaseFile] = useState<string | null>(null);
   const [caseFileTab, setCaseFileTab] = useState<'overview' | 'reports'>('overview');
@@ -144,10 +149,24 @@ export default function AdminPage() {
     setFeatureFlagsState(getFeatureFlags());
   }, []);
   
-  // Load scouting data from localStorage (harvested data)
+  // Load scouting data from localStorage AND Supabase
   useEffect(() => {
+    // Load from localStorage (legacy game recap uploads)
     const data = JSON.parse(localStorage.getItem('jkap_scouting_data') || '[]');
     setScoutingData(data);
+    
+    // Load from Supabase (Players Academy uploads)
+    const loadSupabaseReports = async () => {
+      setIsLoadingIntel(true);
+      try {
+        const reports = await getAllScoutingReports();
+        setSupabaseReports(reports);
+      } catch (err) {
+        console.error('Failed to load scouting reports:', err);
+      }
+      setIsLoadingIntel(false);
+    };
+    loadSupabaseReports();
   }, []);
   
   const getScoutingTeamName = (teamId: string) => {
@@ -232,6 +251,86 @@ export default function AdminPage() {
         }
         if (entry.scoutingIntel?.recommendedStrategy) {
           caseFiles[opponentTeamId].strategies.push(entry.scoutingIntel.recommendedStrategy);
+        }
+      }
+    });
+    
+    // Also incorporate Supabase reports (Players Academy)
+    supabaseReports.forEach(report => {
+      const opponentTeamId = report.opponent_team_id;
+      if (opponentTeamId) {
+        if (!caseFiles[opponentTeamId]) {
+          caseFiles[opponentTeamId] = {
+            teamId: opponentTeamId,
+            teamName: getScoutingTeamName(opponentTeamId),
+            theirSubmissions: [],
+            reportsAgainstThem: [],
+            aggregatedWeaknesses: [],
+            aggregatedStrengths: [],
+            pitchingTendencies: [],
+            hittingTendencies: [],
+            strategies: [],
+          };
+        }
+        
+        // Add weaknesses (pitches they struggled against = opponent's strength against them)
+        if (report.pitches_struggled && report.pitches_struggled.length > 0) {
+          caseFiles[opponentTeamId].aggregatedStrengths.push(
+            ...report.pitches_struggled.map(p => `Effective pitch: ${p}`)
+          );
+        }
+        
+        // Add strengths (pitches they hit well = opponent's weakness)
+        if (report.pitches_hit_well && report.pitches_hit_well.length > 0) {
+          caseFiles[opponentTeamId].aggregatedWeaknesses.push(
+            ...report.pitches_hit_well.map(p => `Gets hit on: ${p}`)
+          );
+        }
+        
+        // Add tendencies
+        if (report.tendencies && report.tendencies.length > 0) {
+          if (report.analysis_type === 'pitching') {
+            caseFiles[opponentTeamId].pitchingTendencies.push(...report.tendencies);
+          } else {
+            caseFiles[opponentTeamId].hittingTendencies.push(...report.tendencies);
+          }
+        }
+        
+        // Add recommendations as strategies
+        if (report.recommendations && report.recommendations.length > 0) {
+          caseFiles[opponentTeamId].strategies.push(...report.recommendations);
+        }
+      }
+      
+      // Also track the uploader's team weaknesses (what THEY struggled against)
+      const uploaderTeamId = report.team_id;
+      if (uploaderTeamId) {
+        if (!caseFiles[uploaderTeamId]) {
+          caseFiles[uploaderTeamId] = {
+            teamId: uploaderTeamId,
+            teamName: getScoutingTeamName(uploaderTeamId),
+            theirSubmissions: [],
+            reportsAgainstThem: [],
+            aggregatedWeaknesses: [],
+            aggregatedStrengths: [],
+            pitchingTendencies: [],
+            hittingTendencies: [],
+            strategies: [],
+          };
+        }
+        
+        // The uploader's struggles are THEIR weaknesses
+        if (report.pitches_struggled && report.pitches_struggled.length > 0) {
+          caseFiles[uploaderTeamId].aggregatedWeaknesses.push(
+            ...report.pitches_struggled.map(p => `Struggles against: ${p}`)
+          );
+        }
+        
+        // The uploader's successes are THEIR strengths
+        if (report.pitches_hit_well && report.pitches_hit_well.length > 0) {
+          caseFiles[uploaderTeamId].aggregatedStrengths.push(
+            ...report.pitches_hit_well.map(p => `Hits well: ${p}`)
+          );
         }
       }
     });
@@ -898,23 +997,26 @@ export default function AdminPage() {
         </Card>
         
         {/* ============================================================= */}
-        {/* SCOUTING DATABASE - Team Case Files */}
+        {/* LEAGUE INTEL CENTER - Central Scouting Database */}
         {/* ============================================================= */}
         <Card className="bg-slate-800/50 border-slate-700 mt-8">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-white flex items-center gap-2">
                 <Target className="w-5 h-5 text-emerald-400" />
-                Team Case Files
+                League Intel Center
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-emerald-500/50 text-emerald-400 ml-2">
                   {Object.keys(caseFiles).length} TEAMS
                 </Badge>
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-blue-500/50 text-blue-400 ml-1">
-                  {scoutingData.length} REPORTS
+                  {scoutingData.length + supabaseReports.length} REPORTS
                 </Badge>
+                {isLoadingIntel && (
+                  <span className="text-xs text-slate-400 animate-pulse">Loading...</span>
+                )}
               </CardTitle>
               <div className="flex gap-2">
-                {scoutingData.length > 0 && (
+                {(scoutingData.length > 0 || supabaseReports.length > 0) && (
                   <Button
                     variant="secondary"
                     size="sm"
