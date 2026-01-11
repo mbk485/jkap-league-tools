@@ -9,7 +9,6 @@ interface CardProps {
   accentColor?: 'red' | 'navy' | 'success' | 'warning';
   hover?: boolean;
   onClick?: () => void;
-  style?: React.CSSProperties;
 }
 
 export function Card({
@@ -19,7 +18,6 @@ export function Card({
   accentColor,
   hover = true,
   onClick,
-  style,
 }: CardProps) {
   const baseStyles = 'rounded-2xl transition-all duration-200';
   
@@ -45,7 +43,6 @@ export function Card({
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
-      style={style}
     >
       {children}
     </div>

@@ -622,10 +622,16 @@ Format your response as JSON:
                 icon={isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
               >
                 {isAnalyzing 
-                  ? 'Analyzing...' 
+                  ? 'Analyzing... Please wait' 
                   : `✨ Analyze ${uploadedImages.length > 1 ? `${uploadedImages.length} Screenshots` : 'with AI'}`
                 }
               </Button>
+              
+              {isAnalyzing && (
+                <p className="text-xs text-center text-muted-foreground animate-pulse">
+                  🔄 Processing images with AI... This may take 10-30 seconds
+                </p>
+              )}
 
               {!hasApiKey && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-center">
@@ -642,11 +648,26 @@ Format your response as JSON:
               )}
 
               {analysisError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg space-y-2">
                   <p className="text-sm text-red-400 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
                     {analysisError}
                   </p>
+                  {(analysisError.includes('Rate limit') || analysisError.includes('Too many') || analysisError.includes('wait')) && (
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>💡 <strong>Quick fixes:</strong></p>
+                      <ul className="list-disc list-inside ml-2">
+                        <li>Wait 60 seconds and try again</li>
+                        <li>Upload fewer images (try 1-2 instead of 4)</li>
+                        <li>Use smaller/lower resolution screenshots</li>
+                      </ul>
+                    </div>
+                  )}
+                  {analysisError.includes('quota') && (
+                    <div className="text-xs text-amber-400">
+                      ⚠️ The OpenAI account may need more credits. Contact the commissioner.
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

@@ -22,7 +22,6 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Newspaper,
-  GraduationCap,
 } from 'lucide-react';
 
 interface LeagueTool {
@@ -36,12 +35,9 @@ interface LeagueTool {
   isNew?: boolean;
   requiresAdmin?: boolean;
   featureFlag?: keyof FeatureFlags;
-  // Who can see this tool
-  forUserType?: 'jkap_member' | 'external_commissioner' | 'both';
 }
 
 const leagueTools: LeagueTool[] = [
-  // === COMMISSIONER TOOLS (for external commissioners) ===
   {
     id: 'draft-board',
     name: 'Draft Board',
@@ -51,29 +47,7 @@ const leagueTools: LeagueTool[] = [
     status: 'available',
     category: 'draft',
     featureFlag: 'showDraftBoard',
-    forUserType: 'external_commissioner', // Only for external commissioners
   },
-  {
-    id: 'schedule-builder',
-    name: 'Schedule Builder',
-    description: 'Generate balanced schedules, manage matchups, and handle postponements.',
-    icon: <Calendar className="w-7 h-7" />,
-    href: '/tools/schedule',
-    status: 'coming-soon',
-    category: 'admin',
-    forUserType: 'external_commissioner',
-  },
-  {
-    id: 'roster-manager',
-    name: 'Roster Manager',
-    description: 'Full roster management with position tracking, player cards, and transaction history.',
-    icon: <Users className="w-7 h-7" />,
-    href: '/tools/roster',
-    status: 'coming-soon',
-    category: 'management',
-    forUserType: 'external_commissioner',
-  },
-  // === JKAP MEMBER TOOLS ===
   {
     id: 'injured-list',
     name: 'Injured List Manager',
@@ -83,7 +57,6 @@ const leagueTools: LeagueTool[] = [
     status: 'available',
     category: 'management',
     featureFlag: 'showInjuredList',
-    forUserType: 'jkap_member', // Only for JKAP members
   },
   {
     id: 'game-recap',
@@ -95,19 +68,15 @@ const leagueTools: LeagueTool[] = [
     category: 'analytics',
     isNew: true,
     featureFlag: 'showGameRecap',
-    forUserType: 'jkap_member', // Only for JKAP members
   },
   {
-    id: 'players-academy',
-    name: 'Players Academy',
-    description: 'Level up your game with scouting reports, roster advice, and tutorials from top players.',
-    icon: <GraduationCap className="w-7 h-7" />,
-    href: '/tools/players-academy',
-    status: 'available',
-    category: 'analytics',
-    isNew: true,
-    featureFlag: 'showPlayersAcademy',
-    forUserType: 'jkap_member', // Only for JKAP members
+    id: 'roster-manager',
+    name: 'Roster Manager',
+    description: 'Full roster management with position tracking, player cards, and transaction history.',
+    icon: <Users className="w-7 h-7" />,
+    href: '/tools/roster',
+    status: 'coming-soon',
+    category: 'management',
   },
   {
     id: 'standings-tracker',
@@ -117,9 +86,17 @@ const leagueTools: LeagueTool[] = [
     href: '/tools/standings',
     status: 'coming-soon',
     category: 'analytics',
-    forUserType: 'jkap_member',
   },
-  // === TOOLS FOR BOTH ===
+  {
+    id: 'schedule-builder',
+    name: 'Schedule Builder',
+    description: 'Generate balanced schedules, manage matchups, and handle postponements.',
+    icon: <Calendar className="w-7 h-7" />,
+    href: '/tools/schedule',
+    status: 'coming-soon',
+    category: 'admin',
+    requiresAdmin: true,
+  },
   {
     id: 'trade-analyzer',
     name: 'Trade Analyzer',
@@ -128,7 +105,6 @@ const leagueTools: LeagueTool[] = [
     href: '/tools/trade-analyzer',
     status: 'coming-soon',
     category: 'analytics',
-    forUserType: 'both',
   },
   {
     id: 'league-settings',
@@ -139,7 +115,6 @@ const leagueTools: LeagueTool[] = [
     status: 'coming-soon',
     category: 'admin',
     requiresAdmin: true,
-    forUserType: 'both',
   },
 ];
 
@@ -169,11 +144,7 @@ export default function LeagueToolsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Determine user type
-  const userType = user?.userType || 'jkap_member';
-  const isExternalCommissioner = userType === 'external_commissioner';
-  
-  // Filter tools based on category, admin status, user type, AND feature flags
+  // Filter tools based on category, admin status, AND feature flags
   const filteredTools = leagueTools.filter((tool) => {
     // Category filter
     if (filter !== 'all' && tool.category !== filter) return false;
@@ -184,13 +155,8 @@ export default function LeagueToolsPage() {
     // Admins see everything
     if (user?.isAdmin) return true;
     
-    // Filter by user type
-    if (tool.forUserType && tool.forUserType !== 'both') {
-      if (tool.forUserType !== userType) return false;
-    }
-    
-    // Check feature flag if specified (only for JKAP members)
-    if (!isExternalCommissioner && tool.featureFlag && featureFlags) {
+    // Check feature flag if specified
+    if (tool.featureFlag && featureFlags) {
       if (!featureFlags[tool.featureFlag]) return false;
     }
     
@@ -257,25 +223,11 @@ export default function LeagueToolsPage() {
               </div>
 
               <h1 className="font-display text-5xl sm:text-6xl text-foreground mb-4">
-                {isExternalCommissioner ? 'COMMISSIONER TOOLS' : 'LEAGUE TOOLS'}
+                LEAGUE TOOLS
               </h1>
               <p className="text-lg text-muted-foreground max-w-2xl">
-                {isExternalCommissioner ? (
-                  <>
-                    Welcome, Commissioner! These tools help you run your league smoothly. 
-                    Draft players, manage rosters, and build your dynasty.
-                    {user?.leagueName && (
-                      <span className="block mt-2 text-jkap-red-400 font-medium">
-                        Managing: {user.leagueName}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    Your command center for managing your JKAP Memorial League franchise. 
-                    Track injuries, create game recaps, and stay on top of your roster.
-                  </>
-                )}
+                Your command center for managing the JKAP Memorial League. Draft players, 
+                track injuries, analyze trades, and keep your franchise running smoothly.
               </p>
 
               {user && (
@@ -283,9 +235,6 @@ export default function LeagueToolsPage() {
                   Signed in as <span className="text-foreground font-medium">{user.displayName}</span>
                   {user.isAdmin && (
                     <Badge variant="delinquent" className="ml-2 text-xs">Admin</Badge>
-                  )}
-                  {isExternalCommissioner && (
-                    <Badge variant="outline" className="ml-2 text-xs border-purple-500/50 text-purple-400">Commissioner</Badge>
                   )}
                 </p>
               )}

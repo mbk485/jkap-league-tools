@@ -333,8 +333,52 @@ export function generateImagePrompt(data: GameRecapInput): string {
   return `Hyper-realistic sports photography style image: ${winner} baseball victory celebration. ${starPlayer ? `Focus on a player celebrating after ${starPlayer.stats}.` : 'Team celebration on the field.'} Professional MLB stadium atmosphere, dramatic lighting, action shot, high quality sports photography, 4K, photorealistic.`;
 }
 
+// Helper function to wait
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Helper function to compress image if too large
+function compressImage(base64Image: string, maxSizeKB: number = 500): Promise<string> {
+  return new Promise((resolve) => {
+    // If it's not too large, return as-is
+    const sizeInKB = (base64Image.length * 3) / 4 / 1024;
+    if (sizeInKB <= maxSizeKB) {
+      resolve(base64Image);
+      return;
+    }
+
+    // Create an image element
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Calculate new dimensions (reduce to 70% if too large)
+      let width = img.width;
+      let height = img.height;
+      const scaleFactor = Math.sqrt(maxSizeKB / sizeInKB);
+      
+      width = Math.floor(width * scaleFactor);
+      height = Math.floor(height * scaleFactor);
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      ctx?.drawImage(img, 0, 0, width, height);
+      
+      // Get compressed base64
+      const compressed = canvas.toDataURL('image/jpeg', 0.7);
+      resolve(compressed);
+    };
+    img.onerror = () => resolve(base64Image); // On error, return original
+    img.src = base64Image;
+  });
+}
+
 // Analyze image(s) with AI (GPT-4 Vision)
 // Supports single image (string) or multiple images (string[])
+// Includes retry logic with exponential backoff for rate limits
 export async function analyzeImageWithAI(images: string | string[], prompt: string): Promise<string> {
   const apiKey = await getApiKeyAsync();
   
@@ -349,6 +393,11 @@ export async function analyzeImageWithAI(images: string | string[], prompt: stri
     throw new Error('At least one image is required');
   }
 
+  // Compress images if they're too large (reduces rate limit issues)
+  const compressedImages = await Promise.all(
+    imageArray.map(img => compressImage(img, 400)) // 400KB max per image
+  );
+
   // Build message content array with text prompt and all images
   const messageContent: Array<{ type: string; text?: string; image_url?: { url: string; detail: string } }> = [
     {
@@ -359,60 +408,103 @@ export async function analyzeImageWithAI(images: string | string[], prompt: stri
     },
   ];
   
-  // Add each image
-  imageArray.forEach((img) => {
+  // Add each image with 'low' detail for faster processing and lower token usage
+  compressedImages.forEach((img) => {
     messageContent.push({
       type: 'image_url',
       image_url: {
         url: img,
-        detail: 'high',
+        detail: 'low', // Use 'low' to reduce token usage and rate limit issues
       },
     });
   });
 
-  try {
-    const apiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini', // Vision-capable model
-        messages: [
-          {
-            role: 'user',
-            content: messageContent,
-          },
-        ],
-        max_tokens: 2500, // Increased for multiple images
-      }),
-    });
+  // Retry configuration
+  const maxRetries = 3;
+  let lastError: Error | null = null;
 
-    if (!apiResponse.ok) {
-      const errorData = await apiResponse.json();
-      if (apiResponse.status === 401) {
-        throw new Error('Invalid API key. Please check your OpenAI API key.');
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const apiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini', // Vision-capable model
+          messages: [
+            {
+              role: 'user',
+              content: messageContent,
+            },
+          ],
+          max_tokens: 2000, // Reduced for better rate limit compliance
+        }),
+      });
+
+      if (!apiResponse.ok) {
+        const errorData = await apiResponse.json();
+        
+        if (apiResponse.status === 401) {
+          throw new Error('Invalid API key. Please check your OpenAI API key.');
+        }
+        
+        if (apiResponse.status === 429) {
+          // Rate limit - parse retry-after or use exponential backoff
+          const retryAfter = apiResponse.headers.get('retry-after');
+          const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 2000;
+          
+          if (attempt < maxRetries) {
+            console.log(`Rate limit hit, retrying in ${waitTime/1000}s (attempt ${attempt}/${maxRetries})`);
+            await delay(waitTime);
+            continue;
+          }
+          
+          // Check for specific rate limit type
+          const errorMessage = errorData.error?.message || '';
+          if (errorMessage.includes('quota')) {
+            throw new Error('OpenAI quota exceeded. Your API key may need more credits. Check your OpenAI billing.');
+          }
+          if (errorMessage.includes('RPM') || errorMessage.includes('requests per minute')) {
+            throw new Error('Too many requests. Please wait 60 seconds and try again.');
+          }
+          if (errorMessage.includes('TPM') || errorMessage.includes('tokens per minute')) {
+            throw new Error('Token limit reached. Try uploading fewer or smaller images.');
+          }
+          throw new Error('Rate limit exceeded. Please wait a minute and try again, or try with fewer images.');
+        }
+        
+        throw new Error(errorData.error?.message || 'Failed to analyze image');
       }
-      if (apiResponse.status === 429) {
-        throw new Error('Rate limit exceeded. Please try again in a moment.');
+
+      const resultData = await apiResponse.json();
+      const responseContent = resultData.choices[0]?.message?.content;
+
+      if (!responseContent) {
+        throw new Error('No analysis generated');
       }
-      throw new Error(errorData.error?.message || 'Failed to analyze image');
-    }
 
-    const resultData = await apiResponse.json();
-    const responseContent = resultData.choices[0]?.message?.content;
-
-    if (!responseContent) {
-      throw new Error('No analysis generated');
+      return responseContent;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Failed to analyze image with AI');
+      
+      // Don't retry on auth errors
+      if (lastError.message.includes('Invalid API key') || 
+          lastError.message.includes('quota exceeded') ||
+          lastError.message.includes('billing')) {
+        throw lastError;
+      }
+      
+      // If not last attempt, continue
+      if (attempt < maxRetries) {
+        console.log(`Attempt ${attempt} failed, retrying...`);
+        await delay(Math.pow(2, attempt) * 1000);
+        continue;
+      }
     }
-
-    return responseContent;
-  } catch (error) {
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('Failed to analyze image with AI');
   }
+
+  throw lastError || new Error('Failed to analyze image with AI after multiple attempts');
 }
 
