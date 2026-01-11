@@ -650,3 +650,474 @@ export async function getTeamIntel(teamId: string): Promise<{
   }
 }
 
+// =============================================================================
+// MEMBER MANAGEMENT SYSTEM
+// =============================================================================
+
+// Registration Queue - Players awaiting approval
+export interface DBRegistrationRequest {
+  id: string;
+  username: string;
+  display_name: string;
+  email: string;
+  phone: string;
+  psn_id?: string;
+  discord_username?: string;
+  requested_team_id: string;
+  approval_code?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejection_reason?: string;
+  created_at: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
+}
+
+export async function getRegistrationQueue(): Promise<DBRegistrationRequest[]> {
+  try {
+    const { data, error } = await supabase
+      .from('registration_queue')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching registration queue:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching registration queue:', err);
+    return [];
+  }
+}
+
+export async function addRegistrationRequest(
+  request: Omit<DBRegistrationRequest, 'id' | 'created_at' | 'status'>
+): Promise<{ success: boolean; request?: DBRegistrationRequest; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('registration_queue')
+      .insert({
+        ...request,
+        status: 'pending',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding registration request:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, request: data };
+  } catch (err: any) {
+    console.error('Error adding registration request:', err);
+    return { success: false, error: err.message || 'Failed to submit request' };
+  }
+}
+
+export async function updateRegistrationRequest(
+  id: string,
+  updates: Partial<DBRegistrationRequest>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('registration_queue')
+      .update(updates)
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating registration request:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating registration request:', err);
+    return { success: false, error: err.message || 'Failed to update request' };
+  }
+}
+
+export async function deleteRegistrationRequest(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('registration_queue')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting registration request:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting registration request:', err);
+    return { success: false, error: err.message || 'Failed to delete request' };
+  }
+}
+
+// Ban List - Blocked players who cannot re-register
+export interface DBBannedPlayer {
+  id: string;
+  username: string;
+  email?: string;
+  phone?: string;
+  psn_id?: string;
+  discord_username?: string;
+  original_team_id?: string;
+  ban_type: 'removed' | 'banned'; // removed = can appeal, banned = permanent
+  ban_reason: string;
+  banned_at: string;
+  banned_by: string;
+  can_appeal: boolean;
+  appeal_notes?: string;
+}
+
+export async function getBanList(): Promise<DBBannedPlayer[]> {
+  try {
+    const { data, error } = await supabase
+      .from('ban_list')
+      .select('*')
+      .order('banned_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching ban list:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching ban list:', err);
+    return [];
+  }
+}
+
+export async function addToBanList(
+  player: Omit<DBBannedPlayer, 'id' | 'banned_at'>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('ban_list')
+      .insert({
+        ...player,
+        banned_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      console.error('Error adding to ban list:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error adding to ban list:', err);
+    return { success: false, error: err.message || 'Failed to add to ban list' };
+  }
+}
+
+export async function removeFromBanList(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('ban_list')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error removing from ban list:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error removing from ban list:', err);
+    return { success: false, error: err.message || 'Failed to remove from ban list' };
+  }
+}
+
+// Check if a user is banned (by username, email, or phone)
+export async function checkIfBanned(
+  username?: string,
+  email?: string,
+  phone?: string,
+  psnId?: string
+): Promise<{ isBanned: boolean; banInfo?: DBBannedPlayer }> {
+  try {
+    // Build OR query for any matching identifier
+    let query = supabase.from('ban_list').select('*');
+    
+    const conditions: string[] = [];
+    if (username) conditions.push(`username.eq.${username.toLowerCase()}`);
+    if (email) conditions.push(`email.eq.${email.toLowerCase()}`);
+    if (phone) conditions.push(`phone.eq.${phone}`);
+    if (psnId) conditions.push(`psn_id.eq.${psnId.toLowerCase()}`);
+    
+    if (conditions.length === 0) {
+      return { isBanned: false };
+    }
+
+    // Check each condition separately (Supabase OR is tricky)
+    for (const field of ['username', 'email', 'phone', 'psn_id']) {
+      const value = field === 'username' ? username?.toLowerCase() :
+                    field === 'email' ? email?.toLowerCase() :
+                    field === 'phone' ? phone :
+                    psnId?.toLowerCase();
+      
+      if (!value) continue;
+      
+      const { data, error } = await supabase
+        .from('ban_list')
+        .select('*')
+        .eq(field, value)
+        .single();
+      
+      if (data && !error) {
+        return { isBanned: true, banInfo: data };
+      }
+    }
+
+    return { isBanned: false };
+  } catch (err) {
+    console.error('Error checking ban status:', err);
+    return { isBanned: false };
+  }
+}
+
+// Team Status - Track team availability
+export type TeamStatus = 'occupied' | 'open' | 'reserved';
+
+export interface DBTeamStatus {
+  team_id: string;
+  status: TeamStatus;
+  occupied_by?: string; // user_id
+  reserved_for?: string; // Name or reason
+  reserved_until?: string;
+  notes?: string;
+  updated_at: string;
+}
+
+export async function getTeamStatuses(): Promise<DBTeamStatus[]> {
+  try {
+    const { data, error } = await supabase
+      .from('team_statuses')
+      .select('*');
+
+    if (error) {
+      console.error('Error fetching team statuses:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching team statuses:', err);
+    return [];
+  }
+}
+
+export async function updateTeamStatus(
+  teamId: string,
+  updates: Partial<DBTeamStatus>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Upsert - insert or update
+    const { error } = await supabase
+      .from('team_statuses')
+      .upsert({
+        team_id: teamId,
+        ...updates,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'team_id' });
+
+    if (error) {
+      console.error('Error updating team status:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating team status:', err);
+    return { success: false, error: err.message || 'Failed to update team status' };
+  }
+}
+
+// Member Activity Tracking
+export interface DBMemberActivity {
+  id: string;
+  user_id: string;
+  team_id: string;
+  activity_type: 'game_played' | 'game_recap' | 'analysis_upload' | 'login' | 'il_move';
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export async function logMemberActivity(
+  activity: Omit<DBMemberActivity, 'id' | 'created_at'>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('member_activity')
+      .insert(activity);
+
+    if (error) {
+      console.error('Error logging activity:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error logging activity:', err);
+    return { success: false, error: err.message || 'Failed to log activity' };
+  }
+}
+
+export async function getMemberActivity(
+  userId?: string,
+  teamId?: string,
+  startDate?: string,
+  endDate?: string
+): Promise<DBMemberActivity[]> {
+  try {
+    let query = supabase
+      .from('member_activity')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (userId) query = query.eq('user_id', userId);
+    if (teamId) query = query.eq('team_id', teamId);
+    if (startDate) query = query.gte('created_at', startDate);
+    if (endDate) query = query.lte('created_at', endDate);
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching member activity:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching member activity:', err);
+    return [];
+  }
+}
+
+// Get activity summary for a period (e.g., weekly activity check)
+export async function getActivitySummary(
+  startDate: string,
+  endDate: string
+): Promise<Record<string, { gamesPlayed: number; recapsCreated: number; analysisUploads: number; lastActive: string }>> {
+  try {
+    const { data, error } = await supabase
+      .from('member_activity')
+      .select('*')
+      .gte('created_at', startDate)
+      .lte('created_at', endDate);
+
+    if (error) {
+      console.error('Error fetching activity summary:', error);
+      return {};
+    }
+
+    // Aggregate by user
+    const summary: Record<string, { gamesPlayed: number; recapsCreated: number; analysisUploads: number; lastActive: string }> = {};
+    
+    (data || []).forEach(activity => {
+      if (!summary[activity.user_id]) {
+        summary[activity.user_id] = {
+          gamesPlayed: 0,
+          recapsCreated: 0,
+          analysisUploads: 0,
+          lastActive: activity.created_at,
+        };
+      }
+      
+      const userSummary = summary[activity.user_id];
+      
+      switch (activity.activity_type) {
+        case 'game_played':
+          userSummary.gamesPlayed++;
+          break;
+        case 'game_recap':
+          userSummary.recapsCreated++;
+          break;
+        case 'analysis_upload':
+          userSummary.analysisUploads++;
+          break;
+      }
+      
+      // Track most recent activity
+      if (activity.created_at > userSummary.lastActive) {
+        userSummary.lastActive = activity.created_at;
+      }
+    });
+
+    return summary;
+  } catch (err) {
+    console.error('Error fetching activity summary:', err);
+    return {};
+  }
+}
+
+// Welcome Packet - Store welcome message templates
+export interface DBWelcomePacket {
+  id: string;
+  title: string;
+  welcome_message: string;
+  rules_link?: string;
+  discord_link?: string;
+  facebook_link?: string;
+  schedule_link?: string;
+  is_active: boolean;
+  updated_at: string;
+}
+
+export async function getWelcomePacket(): Promise<DBWelcomePacket | null> {
+  try {
+    const { data, error } = await supabase
+      .from('welcome_packets')
+      .select('*')
+      .eq('is_active', true)
+      .single();
+
+    if (error) {
+      console.error('Error fetching welcome packet:', error);
+      return null;
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Error fetching welcome packet:', err);
+    return null;
+  }
+}
+
+export async function saveWelcomePacket(
+  packet: Omit<DBWelcomePacket, 'id' | 'updated_at'>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Deactivate all existing packets first
+    await supabase
+      .from('welcome_packets')
+      .update({ is_active: false })
+      .eq('is_active', true);
+
+    // Insert new packet
+    const { error } = await supabase
+      .from('welcome_packets')
+      .insert({
+        ...packet,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      console.error('Error saving welcome packet:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error saving welcome packet:', err);
+    return { success: false, error: err.message || 'Failed to save welcome packet' };
+  }
+}

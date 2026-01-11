@@ -38,6 +38,16 @@ import {
   Image as ImageIcon,
   ChevronDown,
   ChevronUp,
+  UserPlus,
+  Ban,
+  Clock,
+  AlertTriangle,
+  Mail,
+  Phone,
+  Gamepad2,
+  MessageSquare,
+  FileText,
+  Send,
 } from 'lucide-react';
 import { setZapierWebhookUrl, getZapierWebhookUrl } from '@/contexts/AuthContext';
 import { 
@@ -56,6 +66,23 @@ import {
   getAllScoutingReports,
   getTeamIntel,
   DBScoutingReport,
+  // Member Management
+  getRegistrationQueue,
+  updateRegistrationRequest,
+  deleteRegistrationRequest,
+  DBRegistrationRequest,
+  getBanList,
+  addToBanList,
+  removeFromBanList,
+  DBBannedPlayer,
+  getTeamStatuses,
+  updateTeamStatus,
+  DBTeamStatus,
+  TeamStatus,
+  getWelcomePacket,
+  saveWelcomePacket,
+  DBWelcomePacket,
+  createUser,
 } from '@/lib/supabase';
 
 export default function AdminPage() {
@@ -80,6 +107,37 @@ export default function AdminPage() {
   // Feature flags
   const [featureFlags, setFeatureFlagsState] = useState<FeatureFlags>(getFeatureFlags());
   const [flagsSaved, setFlagsSaved] = useState(false);
+  
+  // Member Management State
+  const [registrationQueue, setRegistrationQueue] = useState<DBRegistrationRequest[]>([]);
+  const [banList, setBanList] = useState<DBBannedPlayer[]>([]);
+  const [teamStatuses, setTeamStatuses] = useState<DBTeamStatus[]>([]);
+  const [welcomePacket, setWelcomePacket] = useState<DBWelcomePacket | null>(null);
+  const [isLoadingMemberManagement, setIsLoadingMemberManagement] = useState(true);
+  
+  // Member management modals
+  const [removePlayerModal, setRemovePlayerModal] = useState<{
+    user: DBUser;
+    action: 'remove' | 'ban';
+    reason: string;
+  } | null>(null);
+  const [approveModal, setApproveModal] = useState<DBRegistrationRequest | null>(null);
+  const [rejectModal, setRejectModal] = useState<{
+    request: DBRegistrationRequest;
+    reason: string;
+  } | null>(null);
+  const [editWelcomePacket, setEditWelcomePacket] = useState(false);
+  const [welcomePacketForm, setWelcomePacketForm] = useState({
+    title: '',
+    welcome_message: '',
+    rules_link: '',
+    discord_link: '',
+    facebook_link: '',
+    schedule_link: '',
+  });
+  
+  // Active admin tab
+  const [adminTab, setAdminTab] = useState<'members' | 'queue' | 'teams' | 'banlist' | 'welcome' | 'intel' | 'settings'>('members');
   
   // Scouting data (harvested from user uploads)
   interface ScoutingIntel {
@@ -147,6 +205,39 @@ export default function AdminPage() {
   // Load feature flags
   useEffect(() => {
     setFeatureFlagsState(getFeatureFlags());
+  }, []);
+  
+  // Load member management data
+  useEffect(() => {
+    const loadMemberManagementData = async () => {
+      setIsLoadingMemberManagement(true);
+      try {
+        const [queue, bans, statuses, packet] = await Promise.all([
+          getRegistrationQueue(),
+          getBanList(),
+          getTeamStatuses(),
+          getWelcomePacket(),
+        ]);
+        setRegistrationQueue(queue);
+        setBanList(bans);
+        setTeamStatuses(statuses);
+        setWelcomePacket(packet);
+        if (packet) {
+          setWelcomePacketForm({
+            title: packet.title,
+            welcome_message: packet.welcome_message,
+            rules_link: packet.rules_link || '',
+            discord_link: packet.discord_link || '',
+            facebook_link: packet.facebook_link || '',
+            schedule_link: packet.schedule_link || '',
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load member management data:', err);
+      }
+      setIsLoadingMemberManagement(false);
+    };
+    loadMemberManagementData();
   }, []);
   
   // Load scouting data from localStorage AND Supabase
@@ -396,6 +487,134 @@ export default function AdminPage() {
     setActionLoading(false);
   };
 
+  // ===== MEMBER MANAGEMENT HANDLERS =====
+  
+  // Handle removing/banning a player
+  const handleRemovePlayer = async () => {
+    if (!removePlayerModal) return;
+    setActionLoading(true);
+    
+    const { user: targetUser, action, reason } = removePlayerModal;
+    
+    // Add to ban list
+    const banResult = await addToBanList({
+      username: targetUser.username,
+      email: targetUser.email || undefined,
+      phone: targetUser.phone || undefined,
+      original_team_id: targetUser.team_id || undefined,
+      ban_type: action === 'ban' ? 'banned' : 'removed',
+      ban_reason: reason,
+      banned_by: user?.username || 'admin',
+      can_appeal: action === 'remove', // Removed can appeal, banned cannot
+    });
+    
+    if (!banResult.success) {
+      setError(banResult.error || 'Failed to add to ban list');
+      setActionLoading(false);
+      return;
+    }
+    
+    // Delete the user
+    const deleteResult = await deleteUser(targetUser.id);
+    if (deleteResult.success) {
+      setUsers(users.filter(u => u.id !== targetUser.id));
+      setBanList(await getBanList());
+      setRemovePlayerModal(null);
+    } else {
+      setError(deleteResult.error || 'Failed to remove user');
+    }
+    
+    setActionLoading(false);
+  };
+  
+  // Handle approving a registration
+  const handleApproveRegistration = async () => {
+    if (!approveModal) return;
+    setActionLoading(true);
+    
+    // Create the user
+    const createResult = await createUser({
+      username: approveModal.username,
+      password: Math.random().toString(36).slice(-8), // Generate random password
+      displayName: approveModal.display_name,
+      teamId: approveModal.requested_team_id,
+      isAdmin: false,
+      email: approveModal.email,
+      phone: approveModal.phone,
+      userType: 'jkap_member',
+    });
+    
+    if (!createResult.success) {
+      setError(createResult.error || 'Failed to create user');
+      setActionLoading(false);
+      return;
+    }
+    
+    // Update registration status
+    await updateRegistrationRequest(approveModal.id, {
+      status: 'approved',
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: user?.id,
+    });
+    
+    // Refresh data
+    setRegistrationQueue(await getRegistrationQueue());
+    setUsers(await getAllUsers());
+    setApproveModal(null);
+    setActionLoading(false);
+  };
+  
+  // Handle rejecting a registration
+  const handleRejectRegistration = async () => {
+    if (!rejectModal) return;
+    setActionLoading(true);
+    
+    await updateRegistrationRequest(rejectModal.request.id, {
+      status: 'rejected',
+      rejection_reason: rejectModal.reason,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: user?.id,
+    });
+    
+    setRegistrationQueue(await getRegistrationQueue());
+    setRejectModal(null);
+    setActionLoading(false);
+  };
+  
+  // Handle saving welcome packet
+  const handleSaveWelcomePacket = async () => {
+    setActionLoading(true);
+    
+    const result = await saveWelcomePacket({
+      ...welcomePacketForm,
+      is_active: true,
+    });
+    
+    if (result.success) {
+      setWelcomePacket(await getWelcomePacket());
+      setEditWelcomePacket(false);
+    } else {
+      setError(result.error || 'Failed to save welcome packet');
+    }
+    
+    setActionLoading(false);
+  };
+  
+  // Handle reinstating a player from ban list
+  const handleReinstate = async (id: string) => {
+    setActionLoading(true);
+    const result = await removeFromBanList(id);
+    if (result.success) {
+      setBanList(await getBanList());
+    } else {
+      setError(result.error || 'Failed to reinstate player');
+    }
+    setActionLoading(false);
+  };
+  
+  // Get pending count
+  const pendingRegistrations = registrationQueue.filter(r => r.status === 'pending');
+
   const handleResetPassword = async () => {
     if (!resetPasswordModal || !newPassword) return;
     setActionLoading(true);
@@ -577,6 +796,79 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Admin Navigation Tabs */}
+        <div className="mb-6 flex flex-wrap gap-2 p-1 bg-slate-800/50 rounded-xl border border-slate-700">
+          <button
+            onClick={() => setAdminTab('members')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'members' ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Members
+          </button>
+          <button
+            onClick={() => setAdminTab('queue')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'queue' ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <UserPlus className="w-4 h-4" />
+            Queue
+            {pendingRegistrations.length > 0 && (
+              <Badge variant="active" className="text-xs">{pendingRegistrations.length}</Badge>
+            )}
+          </button>
+          <button
+            onClick={() => setAdminTab('teams')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'teams' ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <Gamepad2 className="w-4 h-4" />
+            Teams
+          </button>
+          <button
+            onClick={() => setAdminTab('banlist')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'banlist' ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <Ban className="w-4 h-4" />
+            Ban List
+            {banList.length > 0 && (
+              <Badge variant="outline" className="text-xs border-red-500/50 text-red-400">{banList.length}</Badge>
+            )}
+          </button>
+          <button
+            onClick={() => setAdminTab('welcome')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'welcome' ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <Send className="w-4 h-4" />
+            Welcome
+          </button>
+          <button
+            onClick={() => setAdminTab('intel')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'intel' ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <Target className="w-4 h-4" />
+            Intel
+          </button>
+          <button
+            onClick={() => setAdminTab('settings')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'settings' ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            Settings
+          </button>
+        </div>
+
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card className="bg-slate-800/50 border-slate-700">
@@ -636,21 +928,24 @@ export default function AdminPage() {
           </Card>
         </div>
 
-        {/* Search */}
-        <div className="mb-6">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by username, name, or team..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-            />
-          </div>
-        </div>
+        {/* ======================= MEMBERS TAB ======================= */}
+        {adminTab === 'members' && (
+          <>
+            {/* Search */}
+            <div className="mb-6">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by username, name, or team..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                />
+              </div>
+            </div>
 
-        {/* Members Table */}
+            {/* Members Table */}
         <Card className="bg-slate-800/50 border-slate-700 mb-8">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
@@ -805,7 +1100,384 @@ export default function AdminPage() {
             </div>
           </CardContent>
         </Card>
+          </>
+        )}
 
+        {/* ======================= REGISTRATION QUEUE TAB ======================= */}
+        {adminTab === 'queue' && (
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-green-400" />
+                Registration Queue
+                {pendingRegistrations.length > 0 && (
+                  <Badge variant="active" className="ml-2">{pendingRegistrations.length} pending</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoadingMemberManagement ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
+                </div>
+              ) : registrationQueue.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <UserPlus className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                  <p>No registration requests yet</p>
+                  <p className="text-sm mt-1">New player applications will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {registrationQueue.map((request) => (
+                    <div
+                      key={request.id}
+                      className={`p-4 rounded-xl border ${
+                        request.status === 'pending' ? 'bg-amber-500/5 border-amber-500/30' :
+                        request.status === 'approved' ? 'bg-green-500/5 border-green-500/30' :
+                        'bg-red-500/5 border-red-500/30'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-bold text-white">@{request.username}</span>
+                            <Badge variant={
+                              request.status === 'pending' ? 'outline' :
+                              request.status === 'approved' ? 'active' : 'outline'
+                            } className={
+                              request.status === 'rejected' ? 'border-red-500/50 text-red-400' : ''
+                            }>
+                              {request.status}
+                            </Badge>
+                          </div>
+                          <p className="text-slate-300">{request.display_name}</p>
+                          <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                            <div className="flex items-center gap-1 text-slate-400">
+                              <Mail className="w-3 h-3" />
+                              {request.email}
+                            </div>
+                            <div className="flex items-center gap-1 text-slate-400">
+                              <Phone className="w-3 h-3" />
+                              {request.phone}
+                            </div>
+                            <div className="flex items-center gap-1 text-slate-400">
+                              <Gamepad2 className="w-3 h-3" />
+                              {request.psn_id || 'No PSN'}
+                            </div>
+                            <div className="flex items-center gap-1 text-slate-400">
+                              <MessageSquare className="w-3 h-3" />
+                              {request.discord_username || 'No Discord'}
+                            </div>
+                          </div>
+                          <div className="mt-2">
+                            <Badge variant="outline" className="border-blue-500/50 text-blue-400">
+                              Wants: {getTeamName(request.requested_team_id)}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-2">
+                            <Clock className="w-3 h-3 inline mr-1" />
+                            Applied: {new Date(request.created_at).toLocaleString()}
+                          </p>
+                          {request.rejection_reason && (
+                            <p className="text-xs text-red-400 mt-1">
+                              Reason: {request.rejection_reason}
+                            </p>
+                          )}
+                        </div>
+                        {request.status === 'pending' && (
+                          <div className="flex flex-col gap-2">
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => setApproveModal(request)}
+                              className="bg-green-600 hover:bg-green-500"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              Approve
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setRejectModal({ request, reason: '' })}
+                              className="text-red-400"
+                            >
+                              <XCircle className="w-4 h-4" />
+                              Reject
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ======================= TEAMS STATUS TAB ======================= */}
+        {adminTab === 'teams' && (
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Gamepad2 className="w-5 h-5 text-blue-400" />
+                Team Status Board
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {MLB_TEAMS.map((team) => {
+                  const claimedBy = users.find(u => u.team_id === team.id);
+                  const status: TeamStatus = claimedBy ? 'occupied' : 'open';
+                  
+                  return (
+                    <div
+                      key={team.id}
+                      className={`p-4 rounded-xl border text-center transition-all ${
+                        status === 'occupied' ? 'bg-blue-500/10 border-blue-500/30' :
+                        'bg-green-500/10 border-green-500/30 hover:border-green-500/50'
+                      }`}
+                    >
+                      <p className="font-bold text-white">{team.abbreviation}</p>
+                      <p className="text-xs text-slate-400 truncate">{team.name}</p>
+                      <Badge
+                        variant="outline"
+                        className={`mt-2 text-xs ${
+                          status === 'occupied' ? 'border-blue-500/50 text-blue-400' :
+                          'border-green-500/50 text-green-400'
+                        }`}
+                      >
+                        {status === 'occupied' ? 'Occupied' : 'Open'}
+                      </Badge>
+                      {claimedBy && (
+                        <p className="text-xs text-slate-500 mt-1 truncate">
+                          @{claimedBy.username}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ======================= BAN LIST TAB ======================= */}
+        {adminTab === 'banlist' && (
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Ban className="w-5 h-5 text-red-400" />
+                Ban List
+                {banList.length > 0 && (
+                  <Badge variant="outline" className="ml-2 border-red-500/50 text-red-400">
+                    {banList.length} entries
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {banList.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <Ban className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                  <p>No banned players</p>
+                  <p className="text-sm mt-1">Players removed or banned will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {banList.map((ban) => (
+                    <div
+                      key={ban.id}
+                      className={`p-4 rounded-xl border ${
+                        ban.ban_type === 'banned' ? 'bg-red-500/10 border-red-500/30' :
+                        'bg-amber-500/10 border-amber-500/30'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-bold text-white">@{ban.username}</span>
+                            <Badge variant="outline" className={
+                              ban.ban_type === 'banned' ? 'border-red-500/50 text-red-400' :
+                              'border-amber-500/50 text-amber-400'
+                            }>
+                              {ban.ban_type === 'banned' ? '🚫 BANNED' : '⚠️ REMOVED'}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-slate-300 mb-2">{ban.ban_reason}</p>
+                          <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                            {ban.email && <span>📧 {ban.email}</span>}
+                            {ban.phone && <span>📱 {ban.phone}</span>}
+                            {ban.original_team_id && <span>🎮 {getTeamName(ban.original_team_id)}</span>}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-2">
+                            Banned by {ban.banned_by} on {new Date(ban.banned_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        {ban.can_appeal && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleReinstate(ban.id)}
+                            disabled={actionLoading}
+                          >
+                            Reinstate
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ======================= WELCOME PACKET TAB ======================= */}
+        {adminTab === 'welcome' && (
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Send className="w-5 h-5 text-emerald-400" />
+                  Welcome Packet
+                </CardTitle>
+                <Button
+                  variant={editWelcomePacket ? 'primary' : 'secondary'}
+                  size="sm"
+                  onClick={() => setEditWelcomePacket(!editWelcomePacket)}
+                >
+                  {editWelcomePacket ? 'Cancel' : 'Edit'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {editWelcomePacket ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Title</label>
+                    <input
+                      type="text"
+                      value={welcomePacketForm.title}
+                      onChange={(e) => setWelcomePacketForm(prev => ({ ...prev, title: e.target.value }))}
+                      className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white"
+                      placeholder="Welcome to JKAP Memorial League!"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Welcome Message</label>
+                    <textarea
+                      value={welcomePacketForm.welcome_message}
+                      onChange={(e) => setWelcomePacketForm(prev => ({ ...prev, welcome_message: e.target.value }))}
+                      className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white h-48"
+                      placeholder="Use {{name}} and {{team}} as placeholders..."
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Use {'{{name}}'} and {'{{team}}'} as placeholders</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Discord Link</label>
+                      <input
+                        type="url"
+                        value={welcomePacketForm.discord_link}
+                        onChange={(e) => setWelcomePacketForm(prev => ({ ...prev, discord_link: e.target.value }))}
+                        className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white"
+                        placeholder="https://discord.gg/..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Facebook Link</label>
+                      <input
+                        type="url"
+                        value={welcomePacketForm.facebook_link}
+                        onChange={(e) => setWelcomePacketForm(prev => ({ ...prev, facebook_link: e.target.value }))}
+                        className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white"
+                        placeholder="https://facebook.com/groups/..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Rules Link</label>
+                      <input
+                        type="url"
+                        value={welcomePacketForm.rules_link}
+                        onChange={(e) => setWelcomePacketForm(prev => ({ ...prev, rules_link: e.target.value }))}
+                        className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white"
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Schedule Link</label>
+                      <input
+                        type="url"
+                        value={welcomePacketForm.schedule_link}
+                        onChange={(e) => setWelcomePacketForm(prev => ({ ...prev, schedule_link: e.target.value }))}
+                        className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white"
+                        placeholder="https://..."
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    variant="primary"
+                    onClick={handleSaveWelcomePacket}
+                    disabled={actionLoading || !welcomePacketForm.title}
+                    className="w-full"
+                  >
+                    {actionLoading ? 'Saving...' : 'Save Welcome Packet'}
+                  </Button>
+                </div>
+              ) : welcomePacket ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                    <h3 className="font-bold text-emerald-400 mb-2">{welcomePacket.title}</h3>
+                    <pre className="text-sm text-slate-300 whitespace-pre-wrap font-sans">
+                      {welcomePacket.welcome_message}
+                    </pre>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {welcomePacket.discord_link && (
+                      <a href={welcomePacket.discord_link} target="_blank" rel="noopener noreferrer" 
+                         className="flex items-center gap-2 p-3 bg-slate-700/50 rounded-lg text-blue-400 hover:bg-slate-700">
+                        <MessageSquare className="w-4 h-4" /> Discord
+                        <ExternalLink className="w-3 h-3 ml-auto" />
+                      </a>
+                    )}
+                    {welcomePacket.facebook_link && (
+                      <a href={welcomePacket.facebook_link} target="_blank" rel="noopener noreferrer"
+                         className="flex items-center gap-2 p-3 bg-slate-700/50 rounded-lg text-blue-400 hover:bg-slate-700">
+                        <Users className="w-4 h-4" /> Facebook
+                        <ExternalLink className="w-3 h-3 ml-auto" />
+                      </a>
+                    )}
+                    {welcomePacket.rules_link && (
+                      <a href={welcomePacket.rules_link} target="_blank" rel="noopener noreferrer"
+                         className="flex items-center gap-2 p-3 bg-slate-700/50 rounded-lg text-blue-400 hover:bg-slate-700">
+                        <FileText className="w-4 h-4" /> Rules
+                        <ExternalLink className="w-3 h-3 ml-auto" />
+                      </a>
+                    )}
+                    {welcomePacket.schedule_link && (
+                      <a href={welcomePacket.schedule_link} target="_blank" rel="noopener noreferrer"
+                         className="flex items-center gap-2 p-3 bg-slate-700/50 rounded-lg text-blue-400 hover:bg-slate-700">
+                        <Calendar className="w-4 h-4" /> Schedule
+                        <ExternalLink className="w-3 h-3 ml-auto" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-400">
+                  <Send className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                  <p>No welcome packet configured</p>
+                  <p className="text-sm mt-1">Click Edit to create one</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ======================= SETTINGS TAB ======================= */}
+        {adminTab === 'settings' && (
+          <>
         {/* Integration Settings */}
         <Card className="bg-slate-800/50 border-slate-700 mt-8">
           <CardHeader>
@@ -995,7 +1667,12 @@ export default function AdminPage() {
             </div>
           </CardContent>
         </Card>
-        
+          </>
+        )}
+
+        {/* ======================= INTEL TAB ======================= */}
+        {adminTab === 'intel' && (
+          <>
         {/* ============================================================= */}
         {/* LEAGUE INTEL CENTER - Central Scouting Database */}
         {/* ============================================================= */}
@@ -1299,6 +1976,8 @@ export default function AdminPage() {
             )}
           </CardContent>
         </Card>
+          </>
+        )}
       </div>
 
       {/* Reset Password Modal */}
@@ -1347,38 +2026,243 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal - Now opens enhanced removal modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <Card className="bg-slate-800 border-slate-700 w-full max-w-md">
+          <Card className="bg-slate-800 border-slate-700 w-full max-w-lg">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <UserX className="w-5 h-5 text-red-400" />
-                Remove Member
+                Remove or Ban Member
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-slate-300">
-                Are you sure you want to remove <span className="font-semibold text-red-400">@{deleteConfirm.username}</span>?
+                What action do you want to take on <span className="font-semibold text-red-400">@{deleteConfirm.username}</span>?
               </p>
-              <p className="text-sm text-slate-400">
-                This will free up their team for another member to claim.
-              </p>
+              
+              <div className="grid grid-cols-2 gap-4">
+                {/* Remove Option */}
+                <button
+                  onClick={() => {
+                    const targetUser = users.find(u => u.id === deleteConfirm.userId);
+                    if (targetUser) {
+                      setRemovePlayerModal({
+                        user: targetUser,
+                        action: 'remove',
+                        reason: '',
+                      });
+                      setDeleteConfirm(null);
+                    }
+                  }}
+                  className="p-4 rounded-xl border-2 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 transition-all text-left"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-400" />
+                    <span className="font-bold text-amber-400">Remove</span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Player can appeal and potentially return. Use for inactivity or minor issues.
+                  </p>
+                </button>
+                
+                {/* Ban Option */}
+                <button
+                  onClick={() => {
+                    const targetUser = users.find(u => u.id === deleteConfirm.userId);
+                    if (targetUser) {
+                      setRemovePlayerModal({
+                        user: targetUser,
+                        action: 'ban',
+                        reason: '',
+                      });
+                      setDeleteConfirm(null);
+                    }
+                  }}
+                  className="p-4 rounded-xl border-2 border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all text-left"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Ban className="w-5 h-5 text-red-400" />
+                    <span className="font-bold text-red-400">Ban</span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Permanent block. Cannot re-register. Use for serious violations.
+                  </p>
+                </button>
+              </div>
+              
+              <Button
+                variant="secondary"
+                onClick={() => setDeleteConfirm(null)}
+                className="w-full"
+              >
+                Cancel
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Enhanced Remove/Ban Modal */}
+      {removePlayerModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <Card className={`bg-slate-800 border-slate-700 w-full max-w-md ${
+            removePlayerModal.action === 'ban' ? 'border-red-500/50' : 'border-amber-500/50'
+          }`}>
+            <CardHeader>
+              <CardTitle className={`text-white flex items-center gap-2 ${
+                removePlayerModal.action === 'ban' ? 'text-red-400' : 'text-amber-400'
+              }`}>
+                {removePlayerModal.action === 'ban' ? <Ban className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+                {removePlayerModal.action === 'ban' ? 'Ban Member' : 'Remove Member'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-3 bg-slate-700/50 rounded-lg">
+                <p className="text-slate-300">
+                  <span className="font-bold">@{removePlayerModal.user.username}</span>
+                </p>
+                <p className="text-sm text-slate-400">{removePlayerModal.user.display_name}</p>
+                {removePlayerModal.user.team_id && (
+                  <p className="text-sm text-slate-500">Team: {getTeamName(removePlayerModal.user.team_id)}</p>
+                )}
+              </div>
+              
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">
+                  Reason for {removePlayerModal.action === 'ban' ? 'ban' : 'removal'} *
+                </label>
+                <textarea
+                  value={removePlayerModal.reason}
+                  onChange={(e) => setRemovePlayerModal(prev => prev ? { ...prev, reason: e.target.value } : null)}
+                  className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white h-24"
+                  placeholder={removePlayerModal.action === 'ban' 
+                    ? 'e.g., Repeated rule violations, toxic behavior...'
+                    : 'e.g., Inactivity, failed to meet game minimums...'
+                  }
+                />
+              </div>
+              
+              {removePlayerModal.action === 'ban' && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-sm text-red-400">
+                    ⚠️ <strong>This is permanent.</strong> The player will be blocked from re-registering using their username, email, or phone number.
+                  </p>
+                </div>
+              )}
+              
               <div className="flex gap-3">
                 <Button
                   variant="secondary"
-                  onClick={() => setDeleteConfirm(null)}
+                  onClick={() => setRemovePlayerModal(null)}
                   className="flex-1"
                 >
                   Cancel
                 </Button>
                 <Button
                   variant="primary"
-                  onClick={handleDeleteUser}
+                  onClick={handleRemovePlayer}
+                  disabled={actionLoading || !removePlayerModal.reason.trim()}
+                  className={`flex-1 ${
+                    removePlayerModal.action === 'ban' ? 'bg-red-600 hover:bg-red-500' : 'bg-amber-600 hover:bg-amber-500'
+                  }`}
+                >
+                  {actionLoading ? 'Processing...' : removePlayerModal.action === 'ban' ? 'Ban Member' : 'Remove Member'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Approve Registration Modal */}
+      {approveModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <Card className="bg-slate-800 border-slate-700 border-green-500/50 w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-400" />
+                Approve Registration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                <p className="font-bold text-white">@{approveModal.username}</p>
+                <p className="text-slate-300">{approveModal.display_name}</p>
+                <p className="text-sm text-slate-400 mt-2">
+                  Will be assigned: <span className="text-blue-400">{getTeamName(approveModal.requested_team_id)}</span>
+                </p>
+              </div>
+              
+              <p className="text-sm text-slate-400">
+                A random password will be generated. The welcome packet will be sent to their email.
+              </p>
+              
+              <div className="flex gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => setApproveModal(null)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleApproveRegistration}
+                  disabled={actionLoading}
+                  className="flex-1 bg-green-600 hover:bg-green-500"
+                >
+                  {actionLoading ? 'Approving...' : 'Approve & Create Account'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Reject Registration Modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <Card className="bg-slate-800 border-slate-700 border-red-500/50 w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-red-400" />
+                Reject Registration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <p className="font-bold text-white">@{rejectModal.request.username}</p>
+                <p className="text-slate-300">{rejectModal.request.display_name}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">
+                  Reason for rejection (optional)
+                </label>
+                <textarea
+                  value={rejectModal.reason}
+                  onChange={(e) => setRejectModal(prev => prev ? { ...prev, reason: e.target.value } : null)}
+                  className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white h-24"
+                  placeholder="e.g., Team already taken, incomplete information..."
+                />
+              </div>
+              
+              <div className="flex gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => setRejectModal(null)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleRejectRegistration}
                   disabled={actionLoading}
                   className="flex-1 bg-red-600 hover:bg-red-500"
                 >
-                  {actionLoading ? 'Removing...' : 'Remove Member'}
+                  {actionLoading ? 'Rejecting...' : 'Reject'}
                 </Button>
               </div>
             </CardContent>
