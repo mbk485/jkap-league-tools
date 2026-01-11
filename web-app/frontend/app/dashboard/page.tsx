@@ -602,16 +602,15 @@ function DashboardContent() {
                 </p>
               </div>
             </div>
-            <Button 
-              as="link" 
+            <a 
               href={MEMBERS_SMS_SIGNUP_URL}
               target="_blank"
-              variant="outline"
-              className="border-green-500/50 text-green-400 hover:bg-green-500/10 flex-shrink-0"
-              icon={<ExternalLink className="w-4 h-4" />}
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-green-500/50 text-green-400 hover:bg-green-500/10 flex-shrink-0 transition-colors"
             >
+              <ExternalLink className="w-4 h-4" />
               Sign Up for SMS
-            </Button>
+            </a>
           </div>
         </div>
 

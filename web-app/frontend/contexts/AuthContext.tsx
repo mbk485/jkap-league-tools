@@ -234,7 +234,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Try Supabase first
     try {
-      const result = await createUser(username, password, displayName, teamId || null, false);
+      const result = await createUser({
+        username,
+        password,
+        displayName,
+        teamId: teamId || null,
+        isAdmin: false,
+        email: userType === 'external_commissioner' ? email : null,
+        phone: userType === 'external_commissioner' ? phone : null,
+        leagueName: userType === 'external_commissioner' ? leagueName : null,
+        userType: userType || 'jkap_member',
+      });
       
       if (result.success && result.user) {
         // Modify the auth user to include the correct type info

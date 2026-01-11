@@ -17,6 +17,7 @@ export interface FeatureFlags {
   showInjuredList: boolean;    // IL Manager tool
   showGameRecap: boolean;      // Game Recap Creator
   showDraftBoard: boolean;     // Draft Board tool
+  showPlayersAcademy: boolean; // Players Academy tool
 }
 
 const FEATURE_FLAGS_KEY = 'jkap_feature_flags';
@@ -31,6 +32,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   showInjuredList: true,       // Show - ready to use
   showGameRecap: true,         // Show - ready to use
   showDraftBoard: false,       // Hide for now
+  showPlayersAcademy: true,    // Show - Players Academy
 };
 
 /**
@@ -127,6 +129,11 @@ export const FEATURE_LABELS: Record<keyof FeatureFlags, { name: string; descript
   showDraftBoard: {
     name: 'Draft Board',
     description: 'Draft tracking and management',
+    category: 'Tools',
+  },
+  showPlayersAcademy: {
+    name: 'Players Academy',
+    description: 'Scouting hub, tutorials, and game analysis',
     category: 'Tools',
   },
 };

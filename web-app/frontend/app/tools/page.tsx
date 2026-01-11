@@ -277,12 +277,14 @@ export default function LeagueToolsPage() {
                 const categoryInfo = categoryLabels[tool.category];
 
                 return (
-                  <Card
+                  <div 
                     key={tool.id}
-                    className={`group relative overflow-hidden transition-all duration-300 ${
+                    style={{ animationDelay: `${index * 0.05}s` }}
+                  >
+                  <Card
+                    className={`group relative overflow-hidden transition-all duration-300 h-full ${
                       isDisabled ? 'opacity-60' : 'hover:border-jkap-red-500/50'
                     }`}
-                    style={{ animationDelay: `${index * 0.05}s` }}
                   >
                     {/* Glow effect on hover */}
                     {!isDisabled && (
@@ -347,6 +349,7 @@ export default function LeagueToolsPage() {
                       )}
                     </div>
                   </Card>
+                  </div>
                 );
               })}
             </div>
