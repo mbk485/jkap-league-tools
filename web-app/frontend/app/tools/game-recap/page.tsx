@@ -15,7 +15,7 @@ import {
   removeApiKey,
   initializeApiKey 
 } from '@/lib/openai';
-import { logMemberActivity, awardActivity, recordGameResult, getRecapCredits, useRecapCredit, RecapCredits } from '@/lib/supabase';
+import { logMemberActivity, awardActivity, recordGameResult, getRecapCredits, useRecapCredit, RecapCredits, getRecentGames, RecentGame, getSavedPlayers, SavedPlayers } from '@/lib/supabase';
 import {
   ArrowLeft,
   Newspaper,
@@ -52,6 +52,7 @@ import {
   TrendingUp,
   Target,
   BarChart3,
+  History,
 } from 'lucide-react';
 
 // =============================================================================
@@ -474,6 +475,10 @@ export default function GameRecapPage() {
   // Recap Credits State
   const [recapCredits, setRecapCredits] = useState<RecapCredits | null>(null);
   
+  // Recent Games State (from Game Logger)
+  const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
+  const [savedPlayers, setSavedPlayers] = useState<SavedPlayers>({ pitchers: [], hitters: [], lastUpdated: '' });
+  
   const isAdmin = user?.isAdmin ?? false;
   
   // All registered JKAP members with a team get full access to Game Recap
@@ -500,7 +505,36 @@ export default function GameRecapPage() {
     
     // Load recap credits
     loadRecapCredits();
+    
+    // Load recent games and saved players
+    if (user?.id) {
+      setRecentGames(getRecentGames(user.id));
+      setSavedPlayers(getSavedPlayers(user.id));
+    }
   }, [user?.id]);
+  
+  // Load a recent game into the form
+  const loadRecentGame = (game: RecentGame) => {
+    setGameData({
+      homeTeam: game.isWin ? game.userTeamId : game.opponentTeamId,
+      awayTeam: game.isWin ? game.opponentTeamId : game.userTeamId,
+      homeScore: game.isWin ? game.userScore : game.opponentScore,
+      awayScore: game.isWin ? game.opponentScore : game.userScore,
+      gameDate: game.gameDate,
+      gameNumber: game.gameNumber || 1,
+      innings: 9,
+      keyPlayers: game.homeRuns?.map(hr => ({
+        name: hr.player,
+        team: 'home' as const,
+        stats: `${hr.count} HR`,
+        isStarOfGame: false,
+      })) || [],
+      highlights: [],
+      winningPitcher: game.winningPitcher || '',
+      losingPitcher: game.losingPitcher || '',
+      saveBy: game.savePitcher || '',
+    });
+  };
   
   const handleAddPlayer = () => {
     setGameData(prev => ({
@@ -1346,6 +1380,38 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Use Recent Game Dropdown */}
+                {recentGames.length > 0 && (
+                  <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                    <div className="flex items-center gap-2 mb-2">
+                      <History className="w-4 h-4 text-purple-400" />
+                      <span className="text-sm font-medium text-purple-400">Quick Fill from Game Logger</span>
+                    </div>
+                    <select
+                      onChange={(e) => {
+                        const game = recentGames.find(g => g.id === e.target.value);
+                        if (game) loadRecentGame(game);
+                      }}
+                      className="w-full bg-background/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50 cursor-pointer"
+                      defaultValue=""
+                    >
+                      <option value="">Select a recent game to auto-fill...</option>
+                      {recentGames.map(game => {
+                        const opponentTeam = allTeams.find(t => t.id === game.opponentTeamId);
+                        const userTeam = allTeams.find(t => t.id === game.userTeamId);
+                        return (
+                          <option key={game.id} value={game.id}>
+                            {game.isWin ? 'W' : 'L'} {game.userScore}-{game.opponentScore} vs {opponentTeam?.abbreviation || game.opponentTeamId} ({new Date(game.gameDate).toLocaleDateString()})
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Games you log are saved for quick recap creation. You can still edit all fields after selecting.
+                    </p>
+                  </div>
+                )}
+                
                 {/* Teams */}
                 <div className="grid grid-cols-2 gap-4">
                   <TeamSelect 

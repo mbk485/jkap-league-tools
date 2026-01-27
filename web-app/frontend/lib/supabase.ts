@@ -111,6 +111,173 @@ export function hasRecapCredits(userId: string): boolean {
 }
 
 // =============================================================================
+// RECENT GAMES STORAGE
+// Save logged games so Game Recap can auto-fill from them
+// =============================================================================
+
+const RECENT_GAMES_KEY = 'jkap_recent_games';
+const MAX_RECENT_GAMES = 20;
+
+export interface RecentGame {
+  id: string;
+  userTeamId: string;
+  opponentTeamId: string;
+  userScore: number;
+  opponentScore: number;
+  isWin: boolean;
+  gameNumber?: number;
+  gameDate: string;
+  winningPitcher?: string;
+  losingPitcher?: string;
+  savePitcher?: string;
+  homeRuns?: { player: string; count: number }[];
+  strikeouts?: number;
+  notes?: string;
+  loggedAt: string;
+}
+
+// Get recent games for a user
+export function getRecentGames(userId: string): RecentGame[] {
+  if (typeof window === 'undefined') return [];
+  
+  try {
+    const stored = localStorage.getItem(RECENT_GAMES_KEY);
+    if (stored) {
+      const allGames = JSON.parse(stored);
+      return allGames[userId] || [];
+    }
+  } catch (e) {
+    console.error('Error getting recent games:', e);
+  }
+  return [];
+}
+
+// Save a game to recent games
+export function saveRecentGame(userId: string, game: Omit<RecentGame, 'id' | 'loggedAt'>): RecentGame {
+  const newGame: RecentGame = {
+    ...game,
+    id: `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    loggedAt: new Date().toISOString(),
+  };
+  
+  if (typeof window === 'undefined') return newGame;
+  
+  try {
+    const stored = localStorage.getItem(RECENT_GAMES_KEY);
+    const allGames = stored ? JSON.parse(stored) : {};
+    
+    const userGames = allGames[userId] || [];
+    userGames.unshift(newGame); // Add to front
+    
+    // Keep only the most recent games
+    allGames[userId] = userGames.slice(0, MAX_RECENT_GAMES);
+    localStorage.setItem(RECENT_GAMES_KEY, JSON.stringify(allGames));
+    
+    console.log('Saved recent game for user:', userId, newGame.id);
+    return newGame;
+  } catch (e) {
+    console.error('Error saving recent game:', e);
+    return newGame;
+  }
+}
+
+// =============================================================================
+// PLAYER NAMES STORAGE
+// Save player names for autocomplete/dropdown suggestions
+// =============================================================================
+
+const PLAYER_NAMES_KEY = 'jkap_player_names';
+const MAX_PLAYER_NAMES = 50;
+
+export interface SavedPlayers {
+  pitchers: string[];
+  hitters: string[];
+  lastUpdated: string;
+}
+
+// Get saved player names for a user
+export function getSavedPlayers(userId: string): SavedPlayers {
+  if (typeof window === 'undefined') {
+    return { pitchers: [], hitters: [], lastUpdated: new Date().toISOString() };
+  }
+  
+  try {
+    const stored = localStorage.getItem(PLAYER_NAMES_KEY);
+    if (stored) {
+      const allPlayers = JSON.parse(stored);
+      if (allPlayers[userId]) {
+        return allPlayers[userId];
+      }
+    }
+  } catch (e) {
+    console.error('Error getting saved players:', e);
+  }
+  return { pitchers: [], hitters: [], lastUpdated: new Date().toISOString() };
+}
+
+// Add a pitcher name to saved players (if not already present)
+export function savePitcherName(userId: string, name: string): void {
+  if (!name || typeof window === 'undefined') return;
+  
+  try {
+    const stored = localStorage.getItem(PLAYER_NAMES_KEY);
+    const allPlayers = stored ? JSON.parse(stored) : {};
+    const userPlayers = allPlayers[userId] || { pitchers: [], hitters: [], lastUpdated: new Date().toISOString() };
+    
+    // Add if not already in list (case-insensitive check)
+    const normalizedName = name.trim();
+    if (!userPlayers.pitchers.some((p: string) => p.toLowerCase() === normalizedName.toLowerCase())) {
+      userPlayers.pitchers.unshift(normalizedName);
+      userPlayers.pitchers = userPlayers.pitchers.slice(0, MAX_PLAYER_NAMES);
+      userPlayers.lastUpdated = new Date().toISOString();
+      allPlayers[userId] = userPlayers;
+      localStorage.setItem(PLAYER_NAMES_KEY, JSON.stringify(allPlayers));
+    }
+  } catch (e) {
+    console.error('Error saving pitcher name:', e);
+  }
+}
+
+// Add a hitter name to saved players (if not already present)
+export function saveHitterName(userId: string, name: string): void {
+  if (!name || typeof window === 'undefined') return;
+  
+  try {
+    const stored = localStorage.getItem(PLAYER_NAMES_KEY);
+    const allPlayers = stored ? JSON.parse(stored) : {};
+    const userPlayers = allPlayers[userId] || { pitchers: [], hitters: [], lastUpdated: new Date().toISOString() };
+    
+    // Add if not already in list (case-insensitive check)
+    const normalizedName = name.trim();
+    if (!userPlayers.hitters.some((p: string) => p.toLowerCase() === normalizedName.toLowerCase())) {
+      userPlayers.hitters.unshift(normalizedName);
+      userPlayers.hitters = userPlayers.hitters.slice(0, MAX_PLAYER_NAMES);
+      userPlayers.lastUpdated = new Date().toISOString();
+      allPlayers[userId] = userPlayers;
+      localStorage.setItem(PLAYER_NAMES_KEY, JSON.stringify(allPlayers));
+    }
+  } catch (e) {
+    console.error('Error saving hitter name:', e);
+  }
+}
+
+// Save multiple player names at once (from a game log)
+export function savePlayersFromGame(userId: string, game: {
+  winningPitcher?: string;
+  losingPitcher?: string;
+  savePitcher?: string;
+  homeRuns?: { player: string; count: number }[];
+}): void {
+  if (game.winningPitcher) savePitcherName(userId, game.winningPitcher);
+  if (game.losingPitcher) savePitcherName(userId, game.losingPitcher);
+  if (game.savePitcher) savePitcherName(userId, game.savePitcher);
+  
+  if (game.homeRuns) {
+    game.homeRuns.forEach(hr => saveHitterName(userId, hr.player));
+  }
+}
+
+// =============================================================================
 
 // Types for our database
 export interface DBUser {

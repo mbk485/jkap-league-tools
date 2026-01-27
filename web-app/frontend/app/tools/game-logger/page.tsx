@@ -13,7 +13,11 @@ import {
   getUserGameStats, 
   getLeaderboards,
   DBGameLog,
-  LeaderboardEntry 
+  LeaderboardEntry,
+  saveRecentGame,
+  savePlayersFromGame,
+  getSavedPlayers,
+  SavedPlayers,
 } from '@/lib/supabase';
 import { MLB_TEAMS } from '@/types/league';
 import {
@@ -82,11 +86,18 @@ export default function GameLoggerPage() {
     saves: LeaderboardEntry[];
     gamesPlayed: LeaderboardEntry[];
   } | null>(null);
+  
+  // Saved players for autocomplete
+  const [savedPlayers, setSavedPlayers] = useState<SavedPlayers>({ pitchers: [], hitters: [], lastUpdated: '' });
+  const [showPitcherSuggestions, setShowPitcherSuggestions] = useState<'winning' | 'losing' | 'save' | null>(null);
+  const [showHitterSuggestions, setShowHitterSuggestions] = useState(false);
 
   useEffect(() => {
     setIsLoaded(true);
     if (user?.id) {
       loadData();
+      // Load saved player names
+      setSavedPlayers(getSavedPlayers(user.id));
     }
   }, [user?.id]);
 
@@ -159,6 +170,34 @@ export default function GameLoggerPage() {
       });
 
       if (result.success) {
+        // Save game to recent games for Game Recap auto-fill
+        saveRecentGame(user.id, {
+          userTeamId: user.teamId,
+          opponentTeamId: opponentTeam,
+          userScore: parseInt(userScore),
+          opponentScore: parseInt(opponentScore),
+          isWin: isWin(),
+          gameNumber: gameNumber ? parseInt(gameNumber) : undefined,
+          gameDate: new Date().toISOString().split('T')[0],
+          winningPitcher: isWin() ? winningPitcher || undefined : undefined,
+          losingPitcher: !isWin() ? losingPitcher || undefined : undefined,
+          savePitcher: savePitcher || undefined,
+          homeRuns: homeRuns.length > 0 ? homeRuns : undefined,
+          strikeouts: strikeouts ? parseInt(strikeouts) : undefined,
+          notes: notes || undefined,
+        });
+        
+        // Save player names for autocomplete
+        savePlayersFromGame(user.id, {
+          winningPitcher: isWin() ? winningPitcher : undefined,
+          losingPitcher: !isWin() ? losingPitcher : undefined,
+          savePitcher: savePitcher || undefined,
+          homeRuns: homeRuns.length > 0 ? homeRuns : undefined,
+        });
+        
+        // Refresh saved players
+        setSavedPlayers(getSavedPlayers(user.id));
+        
         setSubmitResult({
           success: true,
           message: `Game logged! ${isWin() ? '🎉 Victory!' : 'Better luck next time!'} +1 Recap Credit earned!`,
@@ -423,37 +462,94 @@ export default function GameLoggerPage() {
                   </h3>
                   <div className="grid sm:grid-cols-4 gap-4">
                     {isWin() ? (
-                      <div>
+                      <div className="relative">
                         <label className="block text-xs text-muted-foreground mb-1">Winning Pitcher</label>
                         <input
                           type="text"
                           value={winningPitcher}
                           onChange={(e) => setWinningPitcher(e.target.value)}
+                          onFocus={() => setShowPitcherSuggestions('winning')}
+                          onBlur={() => setTimeout(() => setShowPitcherSuggestions(null), 200)}
                           placeholder="Player name"
                           className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-jkap-red-500"
                         />
+                        {showPitcherSuggestions === 'winning' && savedPlayers.pitchers.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                            {savedPlayers.pitchers
+                              .filter(p => p.toLowerCase().includes(winningPitcher.toLowerCase()))
+                              .slice(0, 8)
+                              .map((player, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => { setWinningPitcher(player); setShowPitcherSuggestions(null); }}
+                                  className="w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-700 first:rounded-t-lg last:rounded-b-lg"
+                                >
+                                  {player}
+                                </button>
+                              ))}
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <div>
+                      <div className="relative">
                         <label className="block text-xs text-muted-foreground mb-1">Losing Pitcher</label>
                         <input
                           type="text"
                           value={losingPitcher}
                           onChange={(e) => setLosingPitcher(e.target.value)}
+                          onFocus={() => setShowPitcherSuggestions('losing')}
+                          onBlur={() => setTimeout(() => setShowPitcherSuggestions(null), 200)}
                           placeholder="Player name"
                           className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-jkap-red-500"
                         />
+                        {showPitcherSuggestions === 'losing' && savedPlayers.pitchers.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                            {savedPlayers.pitchers
+                              .filter(p => p.toLowerCase().includes(losingPitcher.toLowerCase()))
+                              .slice(0, 8)
+                              .map((player, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => { setLosingPitcher(player); setShowPitcherSuggestions(null); }}
+                                  className="w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-700 first:rounded-t-lg last:rounded-b-lg"
+                                >
+                                  {player}
+                                </button>
+                              ))}
+                          </div>
+                        )}
                       </div>
                     )}
-                    <div>
+                    <div className="relative">
                       <label className="block text-xs text-muted-foreground mb-1">Save</label>
                       <input
                         type="text"
                         value={savePitcher}
                         onChange={(e) => setSavePitcher(e.target.value)}
+                        onFocus={() => setShowPitcherSuggestions('save')}
+                        onBlur={() => setTimeout(() => setShowPitcherSuggestions(null), 200)}
                         placeholder="If applicable"
                         className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-jkap-red-500"
                       />
+                      {showPitcherSuggestions === 'save' && savedPlayers.pitchers.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                          {savedPlayers.pitchers
+                            .filter(p => p.toLowerCase().includes(savePitcher.toLowerCase()))
+                            .slice(0, 8)
+                            .map((player, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => { setSavePitcher(player); setShowPitcherSuggestions(null); }}
+                                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-700 first:rounded-t-lg last:rounded-b-lg"
+                              >
+                                {player}
+                              </button>
+                            ))}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs text-muted-foreground mb-1">Team Strikeouts</label>
@@ -481,15 +577,36 @@ export default function GameLoggerPage() {
                     )}
                   </h3>
                   
-                  <div className="flex gap-2 mb-3">
-                    <input
-                      type="text"
-                      value={newHRPlayer}
-                      onChange={(e) => setNewHRPlayer(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddHomeRun()}
-                      placeholder="Player who hit HR"
-                      className="flex-1 px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-jkap-red-500"
-                    />
+                  <div className="flex gap-2 mb-3 relative">
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        value={newHRPlayer}
+                        onChange={(e) => setNewHRPlayer(e.target.value)}
+                        onFocus={() => setShowHitterSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowHitterSuggestions(false), 200)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddHomeRun()}
+                        placeholder="Player who hit HR"
+                        className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-jkap-red-500"
+                      />
+                      {showHitterSuggestions && savedPlayers.hitters.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                          {savedPlayers.hitters
+                            .filter(p => p.toLowerCase().includes(newHRPlayer.toLowerCase()))
+                            .slice(0, 8)
+                            .map((player, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => { setNewHRPlayer(player); setShowHitterSuggestions(false); }}
+                                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-700 first:rounded-t-lg last:rounded-b-lg"
+                              >
+                                {player}
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
                     <Button
                       onClick={handleAddHomeRun}
                       variant="outline"
