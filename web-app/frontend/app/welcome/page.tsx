@@ -935,21 +935,26 @@ export default function WelcomePage() {
     
     if (!user?.id) {
       console.log('No user ID, navigating anyway');
-      window.location.href = '/dashboard';
+      window.location.href = '/dashboard?onboarded=1';
       return;
     }
     
     // Ensure onboarding is marked complete one more time (belt and suspenders)
     console.log('Final onboarding completion check for user:', user.id);
-    await completeOnboarding(user.id);
+    try {
+      await completeOnboarding(user.id);
+    } catch (e) {
+      console.error('Error in completeOnboarding:', e);
+    }
     
     // Small delay to ensure localStorage is fully written before navigation
     // This prevents race conditions with the dashboard's onboarding check
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(resolve => setTimeout(resolve, 200));
     
     console.log('Navigating to dashboard');
     // Use window.location for more reliable navigation on mobile
-    window.location.href = '/dashboard';
+    // Add onboarded=1 parameter as a backup signal
+    window.location.href = '/dashboard?onboarded=1';
   };
 
   // Auto-redirect fallback: if user stays on complete screen for 5 seconds, redirect automatically
@@ -993,7 +998,7 @@ export default function WelcomePage() {
           
           {/* Manual link fallback */}
           <p className="text-xs text-slate-500 mt-4">
-            Button not working? <a href="/dashboard" className="text-emerald-400 hover:underline">Click here to go to the dashboard</a>
+            Button not working? <a href="/dashboard?onboarded=1" className="text-emerald-400 hover:underline">Click here to go to the dashboard</a>
           </p>
         </CardContent>
       </Card>

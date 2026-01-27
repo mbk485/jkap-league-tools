@@ -10,8 +10,8 @@ import { Button } from '@/components/ui/Button';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
 import { getFeatureFlags, FeatureFlags } from '@/lib/feature-flags';
-import { needsOnboarding } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import { needsOnboarding, completeOnboarding } from '@/lib/supabase';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Notification,
   mockNotifications,
@@ -80,11 +80,23 @@ function DashboardContent() {
   const [rewards, setRewards] = useState<DBPlayerRewards | null>(null);
   const [wallet, setWallet] = useState<DBUserWallet | null>(null);
 
+  const searchParams = useSearchParams();
+  
   useEffect(() => {
     // Check if user needs onboarding
     const checkOnboarding = async () => {
       if (user?.id && user.userType === 'jkap_member' && !user.isAdmin) {
         console.log('Dashboard: Checking onboarding for user:', user.id, 'userType:', user.userType);
+        
+        // Check for onboarded=1 URL parameter (backup from welcome page)
+        const onboardedParam = searchParams.get('onboarded');
+        if (onboardedParam === '1') {
+          console.log('Dashboard: onboarded=1 param detected, marking complete');
+          await completeOnboarding(user.id);
+          // Clean up URL
+          window.history.replaceState({}, '', '/dashboard');
+        }
+        
         const needs = await needsOnboarding(user.id);
         console.log('Dashboard: needsOnboarding result:', needs);
         if (needs) {
@@ -112,7 +124,7 @@ function DashboardContent() {
     };
     
     checkOnboarding();
-  }, [user, router]);
+  }, [user, router, searchParams]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
