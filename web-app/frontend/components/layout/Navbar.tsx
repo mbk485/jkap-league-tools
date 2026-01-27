@@ -12,14 +12,22 @@ interface NavLink {
   label: string;
   href: string;
   adminOnly?: boolean;
+  directorOnly?: boolean; // Show only for league directors (Miguel, Roy)
   featureFlag?: keyof FeatureFlags;
+  forUserType?: 'jkap_member' | 'external_commissioner'; // Show only for specific user type
 }
 
 // Full navigation - controlled by feature flags for regular members
 const navLinks: NavLink[] = [
   { label: 'Home', href: '/' },
   { label: 'The Ballyard', href: '/dashboard', adminOnly: true, featureFlag: 'showDashboard' },
-  { label: 'League Tools', href: '/tools', featureFlag: 'showTools' },
+  { label: 'League Tools', href: '/tools', featureFlag: 'showTools', forUserType: 'jkap_member' },
+  { label: 'Leaderboard', href: '/leaderboard', forUserType: 'jkap_member', featureFlag: 'showRewards' }, // Rankings & stats
+  { label: 'Road to the Show', href: '/league-levels', forUserType: 'jkap_member', featureFlag: 'showLeagueHierarchy' }, // League hierarchy - HIDDEN until rollout
+  { label: 'My Wallet', href: '/wallet', forUserType: 'jkap_member', featureFlag: 'showTokenEconomy' }, // Token wallet - HIDDEN until rollout
+  { label: 'Rules', href: '/rules', forUserType: 'jkap_member' }, // League rulebook
+  { label: 'Director Dashboard', href: '/director', directorOnly: true }, // For Miguel (AAA), Roy (AA)
+  { label: 'Commissioner Hub', href: '/commissioner', forUserType: 'external_commissioner' },
   { label: 'Free Agents', href: '/free-agents', adminOnly: true, featureFlag: 'showFreeAgents' },
   { label: 'Documents', href: '/documents', adminOnly: true, featureFlag: 'showDocuments' },
   { label: 'Admin', href: '/admin', adminOnly: true }, // Always admin-only, no feature flag needed
@@ -63,8 +71,21 @@ export function Navbar() {
     // Admin link is only for admins
     if (link.href === '/admin') return user?.isAdmin;
     
-    // Admins see all links
-    if (user?.isAdmin) return true;
+    // Director Dashboard - only for league directors (Miguel, Roy) and admins
+    if (link.directorOnly) {
+      return user?.isLeagueDirector || user?.isAdmin;
+    }
+    
+    // Admins see all links (except user-type specific ones, they see both)
+    if (user?.isAdmin && !link.forUserType) return true;
+    
+    // Check user type if specified
+    if (link.forUserType) {
+      // Admins see both League Tools AND Commissioner Hub
+      if (user?.isAdmin) return true;
+      // Regular users only see their type's link
+      if (link.forUserType !== user?.userType) return false;
+    }
     
     // Check feature flag if one is specified
     if (link.featureFlag && featureFlags) {
@@ -92,8 +113,10 @@ export function Navbar() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="relative w-10 h-10 rounded-lg bg-gradient-to-br from-jkap-red-500 to-jkap-red-600 flex items-center justify-center shadow-glow-red transition-transform group-hover:scale-105">
-              <span className="font-display text-white text-lg">JK</span>
+            <div className="relative w-10 h-10 rounded-lg overflow-hidden transition-transform group-hover:scale-105">
+              <div className="w-full h-full rounded-lg bg-gradient-to-br from-jkap-red-500 to-jkap-red-600 flex items-center justify-center">
+                <span className="font-display text-white text-lg font-bold">JK</span>
+              </div>
             </div>
             <div className="hidden sm:block">
               <span className="font-display text-xl text-foreground tracking-wide">
@@ -213,14 +236,37 @@ export function Navbar() {
                         </div>
                       )}
                     </div>
-                    <Link
-                      href="/tools"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
-                    >
-                      <Wrench className="w-4 h-4" />
-                      League Tools
-                    </Link>
+                    {/* Show different tools link based on user type */}
+                    {user.userType === 'external_commissioner' ? (
+                      <Link
+                        href="/commissioner"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+                      >
+                        <Wrench className="w-4 h-4" />
+                        Commissioner Hub
+                      </Link>
+                    ) : (
+                      <Link
+                        href="/tools"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+                      >
+                        <Wrench className="w-4 h-4" />
+                        League Tools
+                      </Link>
+                    )}
+                    {/* Admin sees both */}
+                    {user.isAdmin && (
+                      <Link
+                        href="/commissioner"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+                      >
+                        <Globe className="w-4 h-4" />
+                        Commissioner Hub
+                      </Link>
+                    )}
                     {/* Show dashboard link for JKAP members and admins only */}
                     {(user.isAdmin || user.userType === 'jkap_member') && (
                       <Link

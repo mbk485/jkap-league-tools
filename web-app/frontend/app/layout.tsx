@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
+import LeagueAssistantWrapper from '@/components/LeagueAssistantWrapper'
 
 export const metadata: Metadata = {
   title: 'JKAP Memorial League | MLB The Show Online League',
@@ -28,6 +29,7 @@ export default function RootLayout({
       <body className="antialiased bg-background text-foreground min-h-screen">
         <AuthProvider>
           {children}
+          <LeagueAssistantWrapper />
         </AuthProvider>
       </body>
     </html>

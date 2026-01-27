@@ -66,7 +66,7 @@ export function hasApiKey(): boolean {
 }
 
 // Get API key from Supabase (centralized for whole league)
-async function getApiKeyAsync(): Promise<string | null> {
+export async function getApiKeyAsync(): Promise<string | null> {
   // Check cache first
   if (cachedApiKey && Date.now() - cacheTimestamp < CACHE_DURATION) {
     return cachedApiKey;
@@ -255,74 +255,104 @@ export async function generateRecap(
   const systemPrompt = getSystemPrompt(style);
   const userPrompt = buildUserPrompt(data, style);
 
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini', // Cost-effective and fast
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 1000,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      if (response.status === 401) {
-        throw new Error('Invalid API key. Please check your OpenAI API key.');
-      }
-      if (response.status === 429) {
-        throw new Error('Rate limit exceeded. Please try again in a moment.');
-      }
-      throw new Error(error.error?.message || 'Failed to generate recap');
-    }
-
-    const result = await response.json();
-    const content = result.choices[0]?.message?.content;
-
-    if (!content) {
-      throw new Error('No content generated');
-    }
-
-    // Parse the JSON response
+  // Retry configuration
+  const maxRetries = 3;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      // Extract JSON from the response (handle markdown code blocks)
-      let jsonStr = content;
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        jsonStr = jsonMatch[1];
+      console.log(`[OpenAI Recap] Attempt ${attempt}/${maxRetries}...`);
+      
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.7,
+          max_tokens: 800,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        const errorMessage = errorData.error?.message || '';
+        
+        if (response.status === 401) {
+          throw new Error('Invalid API key. Please check your OpenAI API key.');
+        }
+        if (response.status === 429) {
+          const waitTime = Math.pow(2, attempt) * 3000;
+          if (attempt < maxRetries) {
+            console.log(`[OpenAI Recap] Rate limit, waiting ${waitTime/1000}s...`);
+            await delay(waitTime);
+            continue;
+          }
+          if (errorMessage.includes('quota')) {
+            throw new Error('⚠️ OpenAI quota exceeded. Add credits at platform.openai.com/account/billing');
+          }
+          throw new Error('⚠️ Rate limit exceeded. Please wait a moment and try again.');
+        }
+        throw new Error(errorMessage || 'Failed to generate recap');
+      }
+
+      const result = await response.json();
+      const content = result.choices[0]?.message?.content;
+
+      if (!content) {
+        throw new Error('No content generated');
+      }
+
+      // Parse the JSON response
+      try {
+        let jsonStr = content;
+        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[1];
+        }
+        
+        const parsed = JSON.parse(jsonStr.trim());
+        
+        console.log('[OpenAI Recap] Success!');
+        return {
+          headline: parsed.headline || 'Game Recap',
+          body: parsed.body || content,
+          pullQuote: parsed.pullQuote,
+          socialPost: parsed.socialPost,
+          timestamp: new Date().toISOString(),
+        };
+      } catch {
+        return {
+          headline: 'Game Recap',
+          body: content,
+          timestamp: new Date().toISOString(),
+        };
+      }
+    } catch (error) {
+      console.error(`[OpenAI Recap] Attempt ${attempt} failed:`, error);
+      
+      if (error instanceof Error && (
+        error.message.includes('Invalid API key') ||
+        error.message.includes('quota') ||
+        error.message.includes('billing')
+      )) {
+        throw error;
       }
       
-      const parsed = JSON.parse(jsonStr.trim());
+      if (attempt === maxRetries) {
+        throw error instanceof Error ? error : new Error('Failed to generate recap');
+      }
       
-      return {
-        headline: parsed.headline || 'Game Recap',
-        body: parsed.body || content,
-        pullQuote: parsed.pullQuote,
-        socialPost: parsed.socialPost,
-        timestamp: new Date().toISOString(),
-      };
-    } catch {
-      // If JSON parsing fails, use the raw content
-      return {
-        headline: 'Game Recap',
-        body: content,
-        timestamp: new Date().toISOString(),
-      };
+      await delay(Math.pow(2, attempt) * 2000);
     }
-  } catch (error) {
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('Failed to connect to OpenAI API');
   }
+  
+  throw new Error('Failed to generate recap after multiple attempts');
 }
 
 // Generate image prompt for DALL-E (for future use)
@@ -338,38 +368,47 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Helper function to compress image if too large
-function compressImage(base64Image: string, maxSizeKB: number = 500): Promise<string> {
+// Helper function to compress image - AGGRESSIVE compression to avoid rate limits
+function compressImage(base64Image: string, maxSizeKB: number = 200): Promise<string> {
   return new Promise((resolve) => {
-    // If it's not too large, return as-is
-    const sizeInKB = (base64Image.length * 3) / 4 / 1024;
-    if (sizeInKB <= maxSizeKB) {
-      resolve(base64Image);
-      return;
-    }
-
     // Create an image element
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
-      // Calculate new dimensions (reduce to 70% if too large)
+      // Always resize to max 800px on longest side (reduces tokens significantly)
       let width = img.width;
       let height = img.height;
-      const scaleFactor = Math.sqrt(maxSizeKB / sizeInKB);
+      const maxDimension = 800;
       
-      width = Math.floor(width * scaleFactor);
-      height = Math.floor(height * scaleFactor);
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = Math.floor((height / width) * maxDimension);
+          width = maxDimension;
+        } else {
+          width = Math.floor((width / height) * maxDimension);
+          height = maxDimension;
+        }
+      }
       
       canvas.width = width;
       canvas.height = height;
-      
       ctx?.drawImage(img, 0, 0, width, height);
       
-      // Get compressed base64
-      const compressed = canvas.toDataURL('image/jpeg', 0.7);
-      resolve(compressed);
+      // Compress to JPEG with lower quality (0.6)
+      const compressed = canvas.toDataURL('image/jpeg', 0.6);
+      
+      // If still too large, compress more
+      const sizeInKB = (compressed.length * 3) / 4 / 1024;
+      if (sizeInKB > maxSizeKB) {
+        canvas.width = Math.floor(width * 0.7);
+        canvas.height = Math.floor(height * 0.7);
+        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.5));
+      } else {
+        resolve(compressed);
+      }
     };
     img.onerror = () => resolve(base64Image); // On error, return original
     img.src = base64Image;
@@ -393,10 +432,14 @@ export async function analyzeImageWithAI(images: string | string[], prompt: stri
     throw new Error('At least one image is required');
   }
 
-  // Compress images if they're too large (reduces rate limit issues)
+  console.log(`[OpenAI] Processing ${imageArray.length} image(s)...`);
+  
+  // Compress images aggressively (reduces rate limit issues significantly)
   const compressedImages = await Promise.all(
-    imageArray.map(img => compressImage(img, 400)) // 400KB max per image
+    imageArray.map(img => compressImage(img, 200)) // 200KB max per image
   );
+  
+  console.log('[OpenAI] Images compressed, preparing request...');
 
   // Build message content array with text prompt and all images
   const messageContent: Array<{ type: string; text?: string; image_url?: { url: string; detail: string } }> = [
@@ -414,17 +457,19 @@ export async function analyzeImageWithAI(images: string | string[], prompt: stri
       type: 'image_url',
       image_url: {
         url: img,
-        detail: 'low', // Use 'low' to reduce token usage and rate limit issues
+        detail: 'low', // ALWAYS use 'low' to reduce token usage
       },
     });
   });
 
-  // Retry configuration
+  // Retry configuration with longer delays
   const maxRetries = 3;
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      console.log(`[OpenAI] Attempt ${attempt}/${maxRetries}...`);
+      
       const apiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -439,43 +484,43 @@ export async function analyzeImageWithAI(images: string | string[], prompt: stri
               content: messageContent,
             },
           ],
-          max_tokens: 2000, // Reduced for better rate limit compliance
+          max_tokens: 1500, // Reduced for better rate limit compliance
         }),
       });
 
       if (!apiResponse.ok) {
         const errorData = await apiResponse.json();
+        const errorMessage = errorData.error?.message || '';
+        console.error('[OpenAI] API Error:', apiResponse.status, errorMessage);
         
         if (apiResponse.status === 401) {
-          throw new Error('Invalid API key. Please check your OpenAI API key.');
+          throw new Error('Invalid API key. Please check your OpenAI API key in the Game Recap settings.');
         }
         
         if (apiResponse.status === 429) {
-          // Rate limit - parse retry-after or use exponential backoff
-          const retryAfter = apiResponse.headers.get('retry-after');
-          const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 2000;
+          // Rate limit - use longer exponential backoff
+          const waitTime = Math.pow(2, attempt) * 5000; // 5s, 10s, 20s
           
           if (attempt < maxRetries) {
-            console.log(`Rate limit hit, retrying in ${waitTime/1000}s (attempt ${attempt}/${maxRetries})`);
+            console.log(`[OpenAI] Rate limit hit, waiting ${waitTime/1000}s before retry...`);
             await delay(waitTime);
             continue;
           }
           
-          // Check for specific rate limit type
-          const errorMessage = errorData.error?.message || '';
-          if (errorMessage.includes('quota')) {
-            throw new Error('OpenAI quota exceeded. Your API key may need more credits. Check your OpenAI billing.');
+          // Provide specific error messages based on error type
+          if (errorMessage.includes('quota') || errorMessage.includes('exceeded your current quota')) {
+            throw new Error('⚠️ OpenAI quota exceeded. Your API key needs more credits. Visit platform.openai.com/account/billing to add funds.');
           }
           if (errorMessage.includes('RPM') || errorMessage.includes('requests per minute')) {
-            throw new Error('Too many requests. Please wait 60 seconds and try again.');
+            throw new Error('⚠️ Too many requests. Please wait 60 seconds and try again.');
           }
           if (errorMessage.includes('TPM') || errorMessage.includes('tokens per minute')) {
-            throw new Error('Token limit reached. Try uploading fewer or smaller images.');
+            throw new Error('⚠️ Token limit reached. Try uploading just 1-2 smaller images.');
           }
-          throw new Error('Rate limit exceeded. Please wait a minute and try again, or try with fewer images.');
+          throw new Error('⚠️ Rate limit exceeded. Please wait a minute and try again with fewer/smaller images.');
         }
         
-        throw new Error(errorData.error?.message || 'Failed to analyze image');
+        throw new Error(errorMessage || 'Failed to analyze image');
       }
 
       const resultData = await apiResponse.json();
@@ -485,26 +530,30 @@ export async function analyzeImageWithAI(images: string | string[], prompt: stri
         throw new Error('No analysis generated');
       }
 
+      console.log('[OpenAI] Analysis complete!');
       return responseContent;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error('Failed to analyze image with AI');
+      console.error(`[OpenAI] Attempt ${attempt} failed:`, lastError.message);
       
-      // Don't retry on auth errors
+      // Don't retry on auth/billing errors
       if (lastError.message.includes('Invalid API key') || 
-          lastError.message.includes('quota exceeded') ||
-          lastError.message.includes('billing')) {
+          lastError.message.includes('quota') ||
+          lastError.message.includes('billing') ||
+          lastError.message.includes('credits')) {
         throw lastError;
       }
       
-      // If not last attempt, continue
+      // If not last attempt, wait and continue
       if (attempt < maxRetries) {
-        console.log(`Attempt ${attempt} failed, retrying...`);
-        await delay(Math.pow(2, attempt) * 1000);
+        const waitTime = Math.pow(2, attempt) * 3000;
+        console.log(`[OpenAI] Waiting ${waitTime/1000}s before retry...`);
+        await delay(waitTime);
         continue;
       }
     }
   }
 
-  throw lastError || new Error('Failed to analyze image with AI after multiple attempts');
+  throw lastError || new Error('Failed to analyze image with AI after multiple attempts. Please try again in a few minutes.');
 }
 

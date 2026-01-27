@@ -36,7 +36,7 @@ export function Footer() {
           <div className="col-span-2 md:col-span-1">
             <Link href="/" className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-jkap-red-500 to-jkap-red-600 flex items-center justify-center">
-                <span className="font-display text-white text-lg">JK</span>
+                <span className="font-display text-white text-lg font-bold">JK</span>
               </div>
               <div>
                 <span className="font-display text-lg text-foreground">

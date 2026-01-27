@@ -5,35 +5,31 @@ import Link from 'next/link';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Badge, SubscriptionBadge, NotificationBadge, StreakBadge } from '@/components/ui/Badge';
+import { Badge, NotificationBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
+import { getFeatureFlags, FeatureFlags } from '@/lib/feature-flags';
+import { needsOnboarding } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import {
-  TeamOwner,
-  Team,
   Notification,
-  mockOwner,
-  mockTeam,
   mockNotifications,
   offSeasonItems,
   leagueDocuments,
 } from '@/types/league';
 import { MEMBERS_SMS_SIGNUP_URL } from '@/config/external-urls';
 import {
+  getPlayerRewards,
+  getUserWallet,
+  DBPlayerRewards,
+  DBUserWallet,
+} from '@/lib/supabase';
+import {
   Trophy,
-  CreditCard,
-  DollarSign,
-  Inbox,
-  Settings,
-  Users,
   BarChart3,
-  ArrowLeftRight,
   ChevronRight,
-  Play,
   Calendar,
-  MapPin,
-  Zap,
   Bell,
   TrendingUp,
   Clock,
@@ -42,6 +38,15 @@ import {
   ExternalLink,
   Smartphone,
   MessageSquare,
+  ArrowLeftRight,
+  Users,
+  Zap,
+  Award,
+  Flame,
+  Coins,
+  Medal,
+  Target,
+  Star,
 } from 'lucide-react';
 
 // Format relative time
@@ -68,20 +73,46 @@ function getGreeting(): string {
 
 function DashboardContent() {
   const { user } = useAuth();
-  const [owner] = useState<TeamOwner>({ ...mockOwner, name: user?.displayName || mockOwner.name });
-  const [team] = useState<Team>(mockTeam);
+  const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlags | null>(null);
+  const [rewards, setRewards] = useState<DBPlayerRewards | null>(null);
+  const [wallet, setWallet] = useState<DBUserWallet | null>(null);
 
   useEffect(() => {
-    // Simulate data loading animation
-    setIsLoaded(true);
+    // Check if user needs onboarding
+    const checkOnboarding = async () => {
+      if (user?.id && user.userType === 'jkap_member' && !user.isAdmin) {
+        console.log('Dashboard: Checking onboarding for user:', user.id, 'userType:', user.userType);
+        const needs = await needsOnboarding(user.id);
+        console.log('Dashboard: needsOnboarding result:', needs);
+        if (needs) {
+          console.log('Dashboard: Redirecting to /welcome');
+          router.push('/welcome');
+          return;
+        }
+        console.log('Dashboard: User does not need onboarding, showing dashboard');
+      } else {
+        console.log('Dashboard: Skipping onboarding check - user:', user?.id, 'userType:', user?.userType, 'isAdmin:', user?.isAdmin);
+      }
+      // Load feature flags
+      setFeatureFlags(getFeatureFlags());
+      // Load rewards data
+      if (user?.id) {
+        const [rewardsData, walletData] = await Promise.all([
+          getPlayerRewards(user.id),
+          getUserWallet(user.id),
+        ]);
+        setRewards(rewardsData);
+        setWallet(walletData);
+      }
+      // Simulate data loading animation
+      setIsLoaded(true);
+    };
     
-    // Update time every minute
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
-  }, []);
+    checkOnboarding();
+  }, [user, router]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
@@ -91,9 +122,19 @@ function DashboardContent() {
     );
   };
 
-  // Calculate win percentage
-  const winPct = ((team.wins / (team.wins + team.losses)) * 100).toFixed(1);
-  const budgetPct = ((team.budgetRemaining / team.budgetTotal) * 100).toFixed(0);
+  // Use actual user team data, not mock data
+  const userTeamName = user?.teamName || 'Your Team';
+  const userTeamAbbr = user?.teamAbbreviation || 'TM';
+  const userName = user?.displayName || 'Manager';
+  
+  // Check if user is admin (admins see everything)
+  const isAdmin = user?.isAdmin || false;
+  
+  // Feature visibility helpers
+  const showQuickLinks = isAdmin || featureFlags?.showQuickLinks;
+  const showAnnouncements = isAdmin || featureFlags?.showAnnouncements;
+  const showComingSoon = isAdmin || featureFlags?.showComingSoon;
+  const showRewardsWidget = isAdmin || featureFlags?.showRewards;
 
   return (
     <div className="min-h-screen bg-background">
@@ -110,344 +151,368 @@ function DashboardContent() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-jkap-red-500 to-jkap-red-600 flex items-center justify-center shadow-glow-red">
-                  <span className="font-display text-white text-lg">{team.abbreviation}</span>
+                  <span className="font-display text-white text-lg">{userTeamAbbr}</span>
                 </div>
                 <div>
                   <h1 className="text-2xl sm:text-3xl font-display text-foreground tracking-wide">
-                    {getGreeting()}, {owner.name.split(' ')[0]}
+                    {getGreeting()}, {userName.split(' ')[0]}
                   </h1>
                   <p className="text-muted-foreground flex items-center gap-2">
-                    <span>{team.name}</span>
+                    <span>{userTeamName}</span>
                     <span className="text-muted-foreground/50">•</span>
-                    <span className="text-sm">{team.division}</span>
-                    <span className="text-muted-foreground/50">•</span>
-                    <span className="text-sm">#{team.divisionRank} in Division</span>
+                    <span className="text-sm">JKAP Memorial League</span>
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Manager Tools */}
+            {/* Quick Actions */}
             <div className="flex flex-wrap gap-2">
               <Button 
-                variant="secondary" 
+                as="link"
+                href="/tools"
+                variant="primary" 
                 size="sm" 
-                icon={<Users className="w-4 h-4" />}
+                icon={<Sparkles className="w-4 h-4" />}
               >
-                Roster
-              </Button>
-              <Button 
-                variant="secondary" 
-                size="sm" 
-                icon={<ArrowLeftRight className="w-4 h-4" />}
-              >
-                Trades
-              </Button>
-              <Button 
-                variant="secondary" 
-                size="sm" 
-                icon={<BarChart3 className="w-4 h-4" />}
-              >
-                Stats
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                icon={<Settings className="w-4 h-4" />}
-              >
-                Settings
+                League Tools
               </Button>
             </div>
           </div>
         </div>
 
-        {/* Metrics Grid */}
+        {/* Primary Action Cards - Game Logger & Tools */}
         <div
-          className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 transition-all duration-500 delay-100 ${
+          className={`grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 transition-all duration-500 delay-100 ${
             isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}
         >
-          {/* Record Card */}
-          <Card variant="metric" accentColor="red" className="p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  Season Record
-                </p>
-                <p className="text-3xl font-bold text-foreground tracking-tight">{team.record}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-sm text-muted-foreground">
-                    {winPct}% Win Rate
-                  </span>
-                  <StreakBadge streak={team.streak} type={team.streakType} />
+          {/* Game Logger - Log Your Games */}
+          <Link href="/tools/game-logger">
+            <Card variant="metric" accentColor="success" className="p-6 h-full cursor-pointer hover:border-emerald-500/50 transition-all bg-gradient-to-br from-card to-emerald-500/5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-2 rounded-lg bg-emerald-500/20">
+                      <BarChart3 className="w-5 h-5 text-emerald-500" />
+                    </div>
+                    <Badge variant="active" className="text-xs">Free</Badge>
+                  </div>
+                  <p className="text-xl font-bold text-foreground mb-1">Log Your Games</p>
+                  <p className="text-sm text-muted-foreground">
+                    Track your games, earn tokens, compete on leaderboards
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-emerald-500 text-white flex-shrink-0">
+                  <ChevronRight className="w-6 h-6" />
                 </div>
               </div>
-              <div className="p-3 rounded-xl bg-jkap-red-500/10 text-jkap-red-500">
-                <Trophy className="w-6 h-6" />
-              </div>
-            </div>
-          </Card>
+            </Card>
+          </Link>
 
-          {/* Subscription Card */}
-          <Card variant="metric" accentColor="success" className="p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5" />
-                  Franchise Status
-                </p>
-                <p className="text-2xl font-bold text-foreground mb-2">
-                  Season Pass
-                </p>
-                <SubscriptionBadge status={owner.subscriptionStatus} />
-              </div>
-              <div className="p-3 rounded-xl bg-green-500/10 text-green-500">
-                <CreditCard className="w-6 h-6" />
-              </div>
-            </div>
-          </Card>
-
-          {/* Budget Card */}
-          <Card variant="metric" accentColor="navy" className="p-5">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="text-sm text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5" />
-                  Payroll Budget
-                </p>
-                <p className="text-3xl font-bold text-foreground tracking-tight">{team.budget}</p>
-                <div className="mt-3">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                    <span>Used</span>
-                    <span>{budgetPct}% remaining</span>
+          {/* League Tools */}
+          <Link href="/tools">
+            <Card variant="metric" accentColor="red" className="p-6 h-full cursor-pointer hover:border-jkap-red-500/50 transition-all bg-gradient-to-br from-card to-jkap-red-500/5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-2 rounded-lg bg-jkap-red-500/20">
+                      <Sparkles className="w-5 h-5 text-jkap-red-500" />
+                    </div>
                   </div>
-                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-jkap-navy-500 to-jkap-navy-400 rounded-full transition-all duration-500"
-                      style={{
-                        width: `${(team.budgetRemaining / team.budgetTotal) * 100}%`,
-                      }}
-                    />
-                  </div>
+                  <p className="text-xl font-bold text-foreground mb-1">League Tools</p>
+                  <p className="text-sm text-muted-foreground">
+                    Game Recap Creator • IL Manager • Players Academy
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-jkap-red-500 text-white flex-shrink-0">
+                  <ChevronRight className="w-6 h-6" />
                 </div>
               </div>
-              <div className="p-3 rounded-xl bg-jkap-navy-500/10 text-jkap-navy-400 ml-4">
-                <DollarSign className="w-6 h-6" />
-              </div>
-            </div>
-          </Card>
-
-          {/* Inbox Card */}
-          <Card
-            variant="metric"
-            accentColor={unreadCount > 0 ? 'warning' : 'navy'}
-            className="p-5 cursor-pointer group"
-            onClick={() => {}}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
-                  <Bell className="w-3.5 h-3.5" />
-                  Inbox
-                </p>
-                <p className="text-3xl font-bold text-foreground tracking-tight">
-                  {unreadCount}
-                  <span className="text-lg text-muted-foreground ml-1 font-normal">
-                    unread
-                  </span>
-                </p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  {notifications.length} total messages
-                </p>
-              </div>
-              <div
-                className={`p-3 rounded-xl transition-transform group-hover:scale-105 ${
-                  unreadCount > 0
-                    ? 'bg-amber-500/10 text-amber-500'
-                    : 'bg-jkap-navy-500/10 text-jkap-navy-400'
-                }`}
-              >
-                <Inbox className="w-6 h-6" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-jkap-red-500 rounded-full animate-pulse" />
-                )}
-              </div>
-            </div>
-          </Card>
+            </Card>
+          </Link>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Inbox Widget - Takes 2 columns */}
+        {/* Rewards & Stats Widget - Only show if enabled */}
+        {showRewardsWidget && (
           <div
-            className={`lg:col-span-2 transition-all duration-500 delay-200 ${
+            className={`mb-8 transition-all duration-500 delay-150 ${
               isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
             }`}
           >
-            <Card className="h-full">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Inbox className="w-5 h-5 text-jkap-red-500" />
-                    Message Center
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Trade offers, league announcements, and more
-                  </p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Token Balance */}
+              <Card className="p-4 bg-gradient-to-br from-amber-500/10 to-yellow-600/5 border-amber-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-amber-500/20">
+                    <Coins className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-amber-500">
+                      {wallet?.token_balance?.toLocaleString() || '0'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Tokens</p>
+                  </div>
                 </div>
-                <Button variant="ghost" size="sm" icon={<ChevronRight className="w-4 h-4" />} iconPosition="right">
-                  View All
-                </Button>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y divide-border">
-                  {notifications.slice(0, 5).map((notification, index) => (
-                    <div
-                      key={notification.id}
-                      className={`inbox-item ${!notification.isRead ? 'unread' : ''}`}
-                      onClick={() => markAsRead(notification.id)}
-                      style={{ animationDelay: `${index * 50}ms` }}
-                    >
-                      {/* Unread indicator */}
-                      {!notification.isRead && (
-                        <div className="flex-shrink-0 w-2 h-2 mt-2 rounded-full bg-jkap-red-500 animate-pulse" />
-                      )}
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <NotificationBadge type={notification.type} />
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {formatRelativeTime(notification.timestamp)}
-                          </span>
-                        </div>
-                        <h4 className={`font-medium truncate ${!notification.isRead ? 'text-foreground' : 'text-muted-foreground'}`}>
-                          {notification.title}
-                        </h4>
-                        <p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">
-                          {notification.content}
-                        </p>
-                        {notification.sender && (
-                          <p className="text-xs text-muted-foreground/80 mt-1.5 flex items-center gap-1">
-                            <Users className="w-3 h-3" />
-                            From: {notification.sender}
-                          </p>
-                        )}
-                      </div>
+              </Card>
 
-                      {notification.actionUrl && (
-                        <Link
-                          href={notification.actionUrl}
-                          className="flex-shrink-0 p-2 rounded-lg text-jkap-red-500 hover:text-jkap-red-400 hover:bg-jkap-red-500/10 transition-colors"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <ChevronRight className="w-5 h-5" />
-                        </Link>
-                      )}
+              {/* Games Played */}
+              <Card className="p-4 bg-gradient-to-br from-blue-500/10 to-cyan-600/5 border-blue-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-blue-500/20">
+                    <Target className="w-5 h-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-blue-500">
+                      {rewards?.games_played || 0}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Games Played</p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Win Streak */}
+              <Card className="p-4 bg-gradient-to-br from-orange-500/10 to-red-600/5 border-orange-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-orange-500/20">
+                    <Flame className="w-5 h-5 text-orange-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-orange-500">
+                      {rewards?.current_streak || 0}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Win Streak 🔥</p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Total Points */}
+              <Card className="p-4 bg-gradient-to-br from-purple-500/10 to-pink-600/5 border-purple-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-purple-500/20">
+                    <Star className="w-5 h-5 text-purple-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-purple-500">
+                      {rewards?.total_points || 0}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Total Points</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Badges Row */}
+            {rewards?.badges && rewards.badges.length > 0 && (
+              <div className="mt-4 p-4 rounded-xl bg-muted/30 border border-border">
+                <div className="flex items-center gap-2 mb-3">
+                  <Award className="w-4 h-4 text-yellow-500" />
+                  <span className="text-sm font-medium text-foreground">Your Badges</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {rewards.badges.map((badge, index) => (
+                    <div 
+                      key={index}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-yellow-500/10 border border-yellow-500/30"
+                    >
+                      <Medal className="w-3.5 h-3.5 text-yellow-500" />
+                      <span className="text-xs font-medium text-yellow-400">{badge}</span>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            )}
 
-          {/* Next Matchup Widget */}
+            {/* Quick Stats Link */}
+            <div className="mt-4 flex justify-between items-center">
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Trophy className="w-4 h-4 text-green-500" />
+                  Best Streak: {rewards?.longest_streak || 0}
+                </span>
+                <span className="flex items-center gap-1">
+                  <TrendingUp className="w-4 h-4 text-blue-500" />
+                  Recaps: {rewards?.recaps_created || 0}
+                </span>
+              </div>
+              <Button 
+                as="link" 
+                href="/wallet" 
+                variant="ghost" 
+                size="sm"
+                icon={<ChevronRight className="w-4 h-4" />}
+                iconPosition="right"
+              >
+                View Wallet
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Links - Only show if enabled */}
+        {showQuickLinks && (
           <div
-            className={`transition-all duration-500 delay-300 ${
+            className={`grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 transition-all duration-500 delay-150 ${
               isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
             }`}
           >
-            <Card className="matchup-card relative overflow-hidden h-full">
-              <CardHeader className="border-b border-border">
-                <CardTitle className="text-center flex items-center justify-center gap-2">
-                  <Calendar className="w-5 h-5 text-jkap-red-500" />
-                  Next Matchup
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-center gap-4 sm:gap-6 mb-6">
-                  {/* Home Team */}
-                  <div className="text-center">
-                    <div className="team-logo mx-auto mb-3 shadow-lg">
-                      {team.abbreviation}
-                    </div>
-                    <p className="font-bold text-foreground text-lg">
-                      {team.abbreviation}
+            {/* Documents Card */}
+            <Link href="/documents">
+              <Card variant="metric" accentColor="navy" className="p-5 cursor-pointer hover:border-jkap-navy-500/50 transition-all">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5" />
+                      League Documents
                     </p>
-                    <p className="text-sm text-muted-foreground">{team.record}</p>
-                    <Badge variant="active" className="mt-2 text-[10px]">YOU</Badge>
+                    <p className="text-xl font-bold text-foreground">Rules & Policies</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      View official league rules
+                    </p>
                   </div>
-
-                  {/* VS Badge */}
-                  <div className="vs-badge shadow-glow-red">
-                    <span className="font-display">VS</span>
-                  </div>
-
-                  {/* Away Team */}
-                  <div className="text-center">
-                    <div className="team-logo mx-auto mb-3 bg-gradient-to-br from-jkap-navy-600 to-jkap-navy-800 shadow-lg">
-                      NYY
-                    </div>
-                    <p className="font-bold text-foreground text-lg">NYY</p>
-                    <p className="text-sm text-muted-foreground">94-68</p>
-                    <Badge variant="default" className="mt-2 text-[10px]">AWAY</Badge>
+                  <div className="p-3 rounded-xl bg-jkap-navy-500/10 text-jkap-navy-400">
+                    <ChevronRight className="w-6 h-6" />
                   </div>
                 </div>
+              </Card>
+            </Link>
 
-                {/* Game Details */}
-                <div className="space-y-3 pt-4 border-t border-border">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5" />
-                      Date & Time
-                    </span>
-                    <span className="text-foreground font-medium">
-                      {team.nextGame.time}
-                    </span>
+            {/* SMS Registration Card */}
+            <a href={MEMBERS_SMS_SIGNUP_URL} target="_blank" rel="noopener noreferrer">
+              <Card variant="metric" accentColor="success" className="p-5 cursor-pointer hover:border-green-500/50 transition-all">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
+                      <Smartphone className="w-3.5 h-3.5" />
+                      SMS Updates
+                    </p>
+                    <p className="text-xl font-bold text-foreground">Get Text Alerts</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Register for league announcements
+                    </p>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5" />
-                      Venue
-                    </span>
-                    <span className="text-foreground font-medium">
-                      {team.nextGame.venue || 'TBD'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5 text-green-500" />
-                      Your Starter
-                    </span>
-                    <span className="text-foreground font-semibold">
-                      {team.nextGame.pitcher}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5 text-jkap-red-500" />
-                      Opp. Starter
-                    </span>
-                    <span className="text-foreground font-semibold">
-                      {team.nextGame.opponentPitcher || 'TBD'}
-                    </span>
+                  <div className="p-3 rounded-xl bg-green-500/10 text-green-500">
+                    <ExternalLink className="w-6 h-6" />
                   </div>
                 </div>
-
-                {/* Action Button */}
-                <Button
-                  variant="primary"
-                  fullWidth
-                  className="mt-6"
-                  icon={<Play className="w-5 h-5" />}
-                >
-                  Set Lineup
-                </Button>
-              </CardContent>
-            </Card>
+              </Card>
+            </a>
           </div>
-        </div>
+        )}
+
+        {/* Announcements & Coming Soon - Only show if enabled */}
+        {(showAnnouncements || showComingSoon) && (
+          <div className={`grid ${showAnnouncements && showComingSoon ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-6`}>
+            {/* Announcements Widget */}
+            {showAnnouncements && (
+              <div
+                className={`transition-all duration-500 delay-200 ${
+                  isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                }`}
+              >
+                <Card className="h-full">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Bell className="w-5 h-5 text-jkap-red-500" />
+                        League Announcements
+                      </CardTitle>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Stay updated with the latest league news
+                      </p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="divide-y divide-border">
+                      {notifications.slice(0, 3).map((notification, index) => (
+                        <div
+                          key={notification.id}
+                          className={`inbox-item ${!notification.isRead ? 'unread' : ''}`}
+                          onClick={() => markAsRead(notification.id)}
+                          style={{ animationDelay: `${index * 50}ms` }}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <NotificationBadge type={notification.type} />
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {formatRelativeTime(notification.timestamp)}
+                              </span>
+                            </div>
+                            <h4 className={`font-medium truncate ${!notification.isRead ? 'text-foreground' : 'text-muted-foreground'}`}>
+                              {notification.title}
+                            </h4>
+                            <p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">
+                              {notification.content}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Coming Soon Widget */}
+            {showComingSoon && (
+              <div
+                className={`transition-all duration-500 delay-300 ${
+                  isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                }`}
+              >
+                <Card className="h-full">
+                  <CardHeader className="border-b border-border">
+                    <CardTitle className="text-center flex items-center justify-center gap-2">
+                      <Sparkles className="w-5 h-5 text-jkap-red-500" />
+                      Coming Soon
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <div className="p-2 rounded-lg bg-jkap-red-500/10 text-jkap-red-500">
+                          <Trophy className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">Season Standings</p>
+                          <p className="text-sm text-muted-foreground">Live win/loss records</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <div className="p-2 rounded-lg bg-jkap-navy-500/10 text-jkap-navy-400">
+                          <BarChart3 className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">Player Stats</p>
+                          <p className="text-sm text-muted-foreground">League-wide statistics</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <div className="p-2 rounded-lg bg-green-500/10 text-green-500">
+                          <TrendingUp className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">Rewards System</p>
+                          <p className="text-sm text-muted-foreground">Earn points and badges</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
+                          <Calendar className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">Game Schedule</p>
+                          <p className="text-sm text-muted-foreground">Upcoming matchups</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Off-Season & Resources Section */}
         <div className="grid lg:grid-cols-2 gap-6 mt-8">

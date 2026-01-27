@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
 import { getFeatureFlags, FeatureFlags } from '@/lib/feature-flags';
+import { getUserPerks, PerkId, AVAILABLE_PERKS } from '@/lib/supabase';
 import {
   Clipboard,
   Users,
@@ -22,6 +23,9 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Newspaper,
+  GraduationCap,
+  Gamepad2,
+  Coins,
 } from 'lucide-react';
 
 interface LeagueTool {
@@ -35,18 +39,31 @@ interface LeagueTool {
   isNew?: boolean;
   requiresAdmin?: boolean;
   featureFlag?: keyof FeatureFlags;
+  // Control who sees this tool based on user type
+  // 'jkap_member' = only JKAP league members
+  // 'external_commissioner' = only external commissioners
+  // undefined = everyone (based on feature flags)
+  forUserType?: 'jkap_member' | 'external_commissioner';
+  // Perk required to access this tool (from league level)
+  // If user doesn't have perk, they can purchase access with tokens
+  requiredPerk?: PerkId;
+  // If true, this tool is free for everyone (regardless of perks)
+  isFree?: boolean;
 }
 
 const leagueTools: LeagueTool[] = [
+  // ===== FREE TOOLS (Available to ALL league levels) =====
   {
-    id: 'draft-board',
-    name: 'Draft Board',
-    description: 'Run snake drafts with timer, player pool, and real-time tracking. Upload your player CSV and go.',
-    icon: <Clipboard className="w-7 h-7" />,
-    href: '/draft',
+    id: 'game-logger',
+    name: 'Game Logger',
+    description: 'Log your games, track stats, earn tokens, and compete on the leaderboards for HRs, Ks, Wins & Saves.',
+    icon: <Gamepad2 className="w-7 h-7" />,
+    href: '/tools/game-logger',
     status: 'available',
-    category: 'draft',
-    featureFlag: 'showDraftBoard',
+    category: 'management',
+    isNew: true,
+    isFree: true, // Free for everyone
+    featureFlag: 'showGameLogger',
   },
   {
     id: 'injured-list',
@@ -56,27 +73,45 @@ const leagueTools: LeagueTool[] = [
     href: '/tools/injured-list',
     status: 'available',
     category: 'management',
+    isFree: true, // Free for everyone
     featureFlag: 'showInjuredList',
   },
+  // ===== FREE TOOLS FOR ALL MEMBERS =====
   {
     id: 'game-recap',
     name: 'Game Recap Creator',
-    description: 'Generate ESPN-style game recaps and social media images. AI-powered writing with shareable graphics.',
+    description: 'Generate ESPN-style game recaps with AI. Log games to earn recap credits!',
     icon: <Newspaper className="w-7 h-7" />,
     href: '/tools/game-recap',
     status: 'available',
     category: 'analytics',
     isNew: true,
+    isFree: true, // Free for all members - uses recap credits system
     featureFlag: 'showGameRecap',
   },
+  // ===== TIERED TOOLS (Require perks or token purchase) =====
   {
-    id: 'roster-manager',
-    name: 'Roster Manager',
-    description: 'Full roster management with position tracking, player cards, and transaction history.',
+    id: 'players-academy',
+    name: 'Players Academy',
+    description: 'AI-powered scouting reports and gameplay analysis. Requires Double-A or higher, or purchase access.',
+    icon: <GraduationCap className="w-7 h-7" />,
+    href: '/tools/players-academy',
+    status: 'available',
+    category: 'analytics',
+    isNew: true,
+    requiredPerk: 'scouting_reports', // Double-A and above
+    featureFlag: 'showPlayersAcademy',
+  },
+  // ===== COMING SOON =====
+  {
+    id: 'roster-advice',
+    name: 'Roster Advice',
+    description: 'AI-powered roster recommendations and lineup optimization. Available at Triple-A and above.',
     icon: <Users className="w-7 h-7" />,
-    href: '/tools/roster',
+    href: '/tools/roster-advice',
     status: 'coming-soon',
-    category: 'management',
+    category: 'analytics',
+    requiredPerk: 'roster_advice', // Triple-A and above
   },
   {
     id: 'standings-tracker',
@@ -86,6 +121,7 @@ const leagueTools: LeagueTool[] = [
     href: '/tools/standings',
     status: 'coming-soon',
     category: 'analytics',
+    isFree: true,
   },
   {
     id: 'schedule-builder',
@@ -105,6 +141,7 @@ const leagueTools: LeagueTool[] = [
     href: '/tools/trade-analyzer',
     status: 'coming-soon',
     category: 'analytics',
+    isFree: true,
   },
   {
     id: 'league-settings',
@@ -130,11 +167,17 @@ export default function LeagueToolsPage() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [filter, setFilter] = useState<string>('all');
   const [featureFlags, setFeatureFlagsState] = useState<FeatureFlags | null>(null);
+  const [userPerks, setUserPerks] = useState<string[]>([]);
 
   useEffect(() => {
     setIsLoaded(true);
     // Load feature flags
     setFeatureFlagsState(getFeatureFlags());
+    
+    // Load user perks
+    if (user?.id) {
+      getUserPerks(user.id).then(perks => setUserPerks(perks));
+    }
     
     // Poll for changes (in case admin updates flags)
     const interval = setInterval(() => {
@@ -142,9 +185,22 @@ export default function LeagueToolsPage() {
     }, 2000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [user?.id]);
+  
+  // Check if user has access to a tool
+  const hasToolAccess = (tool: LeagueTool): boolean => {
+    // Free tools are always accessible
+    if (tool.isFree) return true;
+    // Admins have access to everything
+    if (user?.isAdmin) return true;
+    // Check if user has required perk
+    if (tool.requiredPerk) {
+      return userPerks.includes(tool.requiredPerk);
+    }
+    return true;
+  };
 
-  // Filter tools based on category, admin status, AND feature flags
+  // Filter tools based on category, admin status, user type, AND feature flags
   const filteredTools = leagueTools.filter((tool) => {
     // Category filter
     if (filter !== 'all' && tool.category !== filter) return false;
@@ -154,6 +210,12 @@ export default function LeagueToolsPage() {
     
     // Admins see everything
     if (user?.isAdmin) return true;
+    
+    // Check user type restriction
+    // If tool is for a specific user type, only show to that type
+    if (tool.forUserType) {
+      if (tool.forUserType !== user?.userType) return false;
+    }
     
     // Check feature flag if specified
     if (tool.featureFlag && featureFlags) {
@@ -272,9 +334,13 @@ export default function LeagueToolsPage() {
               }`}
             >
               {filteredTools.map((tool, index) => {
-                const isDisabled = tool.status === 'coming-soon' || 
-                  (tool.requiresAdmin && !user?.isAdmin);
+                const isComingSoon = tool.status === 'coming-soon';
+                const isAdminOnly = tool.requiresAdmin && !user?.isAdmin;
+                const hasPerkAccess = hasToolAccess(tool);
+                const isLocked = !hasPerkAccess && !isComingSoon;
+                const isDisabled = isComingSoon || isAdminOnly;
                 const categoryInfo = categoryLabels[tool.category];
+                const perkInfo = tool.requiredPerk ? AVAILABLE_PERKS[tool.requiredPerk] : null;
 
                 return (
                   <div 
@@ -283,11 +349,16 @@ export default function LeagueToolsPage() {
                   >
                   <Card
                     className={`group relative overflow-hidden transition-all duration-300 h-full ${
-                      isDisabled ? 'opacity-60' : 'hover:border-jkap-red-500/50'
-                    }`}
+                      isDisabled || isLocked ? 'opacity-75' : 'hover:border-jkap-red-500/50'
+                    } ${isLocked ? 'border-amber-500/30' : ''}`}
                   >
+                    {/* Locked overlay for perk-gated tools */}
+                    {isLocked && (
+                      <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent z-10 pointer-events-none" />
+                    )}
+                    
                     {/* Glow effect on hover */}
-                    {!isDisabled && (
+                    {!isDisabled && !isLocked && (
                       <div className="absolute inset-0 bg-gradient-to-br from-jkap-red-500/0 to-jkap-red-500/0 group-hover:from-jkap-red-500/5 group-hover:to-transparent transition-all duration-300" />
                     )}
 
@@ -297,13 +368,24 @@ export default function LeagueToolsPage() {
                         <div className={`w-14 h-14 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 ${
                           isDisabled 
                             ? 'bg-muted text-muted-foreground' 
+                            : isLocked
+                            ? 'bg-amber-500/10 text-amber-500'
                             : 'bg-jkap-red-500/10 text-jkap-red-500'
                         }`}>
-                          {tool.icon}
+                          {isLocked ? <Lock className="w-7 h-7" /> : tool.icon}
                         </div>
-                        <div className="flex items-center gap-2">
-                          {tool.isNew && (
+                        <div className="flex flex-wrap items-center gap-1.5 justify-end">
+                          {tool.isFree && (
+                            <Badge variant="active" className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Free</Badge>
+                          )}
+                          {tool.isNew && !isLocked && (
                             <Badge variant="active" className="text-xs">New</Badge>
+                          )}
+                          {isLocked && perkInfo && (
+                            <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-400">
+                              <Coins className="w-3 h-3 mr-1" />
+                              {perkInfo.tokenCost}
+                            </Badge>
                           )}
                           {tool.status === 'coming-soon' && (
                             <Badge variant="outline" className="text-xs">Coming Soon</Badge>
@@ -337,6 +419,20 @@ export default function LeagueToolsPage() {
                           {tool.requiresAdmin && !user?.isAdmin 
                             ? 'Admin Access Required' 
                             : 'In Development'}
+                        </div>
+                      ) : isLocked ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm text-amber-400">
+                            <Lock className="w-4 h-4" />
+                            Requires {perkInfo?.name || 'Higher League Level'}
+                          </div>
+                          <Link
+                            href="/league-levels"
+                            className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-amber-400 transition-colors"
+                          >
+                            View Road to the Show
+                            <ArrowRight className="w-3 h-3" />
+                          </Link>
                         </div>
                       ) : (
                         <Link

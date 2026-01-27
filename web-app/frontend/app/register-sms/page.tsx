@@ -23,9 +23,10 @@ export default function RegisterSMSPage() {
   };
 
   const handleAlreadyRegistered = () => {
-    // Mark as acknowledged and proceed to main site
+    // Mark as acknowledged and proceed to welcome/onboarding
     localStorage.setItem('sms_registration_acknowledged', 'true');
-    router.push('/tools');
+    // New JKAP members should go through onboarding walkthrough
+    router.push('/welcome');
   };
 
   if (isLoading) {

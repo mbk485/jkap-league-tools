@@ -40,7 +40,7 @@ export function ProtectedRoute({
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-jkap-red-500 to-jkap-red-600 flex items-center justify-center mx-auto mb-4 animate-pulse">
-            <span className="font-display text-white text-2xl">JK</span>
+            <span className="font-display text-white text-2xl font-bold">JK</span>
           </div>
           <div className="flex items-center justify-center gap-2 text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" />

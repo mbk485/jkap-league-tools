@@ -36,7 +36,9 @@ import {
   saveScoutingReport, 
   getScoutingReports, 
   getOpponentReports,
-  DBScoutingReport 
+  DBScoutingReport,
+  logMemberActivity,
+  awardActivity,
 } from '@/lib/supabase';
 
 // =============================================================================
@@ -232,49 +234,108 @@ function ScoutingHub({ userId, userTeamId }: { userId: string; userTeamId?: stri
     try {
       const opponentTeam = allTeams.find(t => t.id === opponentTeamId);
       const prompt = analysisType === 'hitting' 
-        ? `Analyze this MLB The Show hitting analysis screenshot. You're a supportive coach giving feedback to a player.
+        ? `You are an ELITE MLB The Show advanced scout and hitting coach. Analyze this hitting analysis screenshot like a professional baseball scout would analyze a hitter.
 
-Extract and provide:
-1. What pitch types did the player struggle against (high outs, low avg)?
-2. What pitch types did they hit well?
-3. Batting average by pitch type if visible
-4. Any tendencies you notice (early/late timing, pull heavy, etc.)
-5. 2-3 specific, actionable recommendations to improve
-6. ENCOURAGEMENT: What did they do WELL this game? Be specific and positive!
-7. IMPROVEMENT: What's ONE key thing to focus on next game? Be constructive, not discouraging.
+CONTEXT: This is from MLB The Show video game. The data shows how this player performed AGAINST their opponent's pitching.
+
+ANALYZE THE SCREENSHOT AND EXTRACT:
+1. **Batting Average by Pitch Type** - Look at the exact numbers shown for each pitch (4-Seam, Sinker, Cutter, Slider, Curveball, Changeup, etc.)
+2. **Contact Rate** - Where are they making contact vs whiffing?
+3. **Zone Coverage** - Are they covering inside, outside, up, down effectively?
+
+PROVIDE MLB THE SHOW SPECIFIC ADVICE:
+
+**PCI PLACEMENT RECOMMENDATIONS:**
+- Where should they START their PCI? (middle, up, down, inside, outside)
+- What zone should they PROTECT first?
+- Should they sit on a specific pitch type?
+
+**TIMING ANALYSIS:**
+- Are they early or late on fastballs? (low avg on 4-seam = likely late)
+- Are they getting fooled by offspeed? (low avg on changeup = early)
+
+**PITCH RECOGNITION:**
+- What pitches should they lay off? (look for low avg AND high out%)
+- What pitches should they attack? (high avg pitches)
+- At what counts should they be aggressive?
+
+**HOT/COLD ZONES:**
+- Based on results, what zones are HOT? (attack these)
+- What zones are COLD? (protect/lay off)
+
+**ACTIONABLE TIPS FOR NEXT GAME:**
+- Give 2-3 SPECIFIC MLB The Show tips like:
+  - "Sit fastball up in the zone, your PCI starting position should be belt-high"
+  - "You're getting beat inside - cheat your PCI inside against hard throwers"
+  - "Lay off sliders down and away - you're 0-for with 3 Ks on this pitch"
+  - "In 2-strike counts, expand your zone coverage down"
 
 Format your response as JSON:
 {
-  "pitchesStruggled": ["pitch1", "pitch2"],
-  "pitchesHitWell": ["pitch1", "pitch2"],
-  "battingAvgByPitch": {"Fastball": ".250", "Slider": ".150"},
-  "tendencies": ["tendency1", "tendency2"],
-  "recommendations": ["rec1", "rec2"],
-  "rawAnalysis": "Brief 1-2 sentence game summary",
-  "encouragement": "Great job on [specific positive thing]! You showed real skill when...",
-  "improvement": "For next game, focus on [one specific thing]. Try [actionable tip]."
+  "pitchesStruggled": ["pitch1 with specific context", "pitch2 with specific context"],
+  "pitchesHitWell": ["pitch1 with specific context", "pitch2 with specific context"],
+  "battingAvgByPitch": {"4-Seam": ".XXX", "Slider": ".XXX", etc},
+  "tendencies": ["specific tendency 1", "specific tendency 2"],
+  "recommendations": [
+    "PCI TIP: [specific PCI placement advice for MLB The Show]",
+    "TIMING TIP: [specific timing adjustment]",
+    "PITCH SELECTION: [what to swing at vs lay off]"
+  ],
+  "rawAnalysis": "Brief 2-3 sentence scout report summary with key batting averages mentioned",
+  "encouragement": "[Specific positive feedback on what they did well - mention actual pitches/averages]",
+  "improvement": "[ONE key focus area with specific PCI/timing/pitch selection advice for MLB The Show]"
 }`
-        : `Analyze this MLB The Show pitching analysis screenshot. You're a supportive pitching coach giving feedback.
+        : `You are an ELITE MLB The Show advanced scout and pitching coach. Analyze this pitching analysis screenshot like a professional baseball scout would break down an opponent's hitting weaknesses.
 
-Extract and provide:
-1. What pitch types were most effective (high outs, low avg against)?
-2. What pitch types got hit hard?
-3. Opponent batting average by pitch type if visible
-4. Any patterns you notice (certain counts, locations, sequences)
-5. 2-3 specific, actionable recommendations
-6. ENCOURAGEMENT: What did they do WELL this game? Be specific and positive!
-7. IMPROVEMENT: What's ONE key thing to focus on next game? Be constructive, not discouraging.
+CONTEXT: This is from MLB The Show video game. The data shows how your OPPONENT hit against your pitching. Use this to scout THEIR weaknesses.
+
+ANALYZE THE SCREENSHOT AND EXTRACT:
+1. **Opponent Batting Average by Pitch Type** - What pitches did they struggle with? (low avg = your effective pitches)
+2. **Strikeout Pitches** - What got them out? High K rate pitches are money
+3. **Pitches They Crushed** - What should you avoid? (high avg pitches)
+
+PROVIDE MLB THE SHOW SPECIFIC SCOUTING INTEL:
+
+**OPPONENT'S WEAKNESSES (EXPLOIT THESE):**
+- What pitch types gave them trouble? (low avg = they can't hit it)
+- What zones were cold for them?
+- Were they early or late on certain pitches?
+
+**OPPONENT'S STRENGTHS (AVOID THESE):**
+- What did they barrel up? (high avg pitches)
+- What zones are dangerous to throw to?
+
+**SEQUENCE RECOMMENDATIONS:**
+- What should be your "out pitch"? (best K pitch)
+- What should you throw early in counts?
+- What to throw with 2 strikes?
+
+**LOCATION STRATEGY:**
+- Where should you live with fastballs?
+- Where to bury breaking balls?
+- What quadrant of the zone to avoid?
+
+**SCOUTING REPORT FOR NEXT MATCHUP:**
+- Give 2-3 SPECIFIC game plan tips like:
+  - "Attack with sliders down and away - they're batting .091 against it"
+  - "Avoid middle-middle fastballs - they crushed 4-seams for .500 avg"
+  - "Your changeup is effective - use it as your put-away pitch"
+  - "They struggle with anything below the zone - bury your curve"
 
 Format your response as JSON:
 {
-  "pitchesStruggled": ["pitch1", "pitch2"],
-  "pitchesHitWell": ["pitch1", "pitch2"],
-  "battingAvgByPitch": {"Fastball": ".250", "Slider": ".150"},
-  "tendencies": ["tendency1", "tendency2"],
-  "recommendations": ["rec1", "rec2"],
-  "rawAnalysis": "Brief 1-2 sentence game summary",
-  "encouragement": "Excellent work with [specific positive thing]! Your [pitch/strategy] was really effective...",
-  "improvement": "Next time, try [one specific adjustment]. This will help you..."
+  "pitchesStruggled": ["Their weakness 1 with avg", "Their weakness 2 with avg"],
+  "pitchesHitWell": ["Pitch to avoid 1 with avg", "Pitch to avoid 2 with avg"],
+  "battingAvgByPitch": {"4-Seam": ".XXX", "Slider": ".XXX", etc},
+  "tendencies": ["Their tendency 1", "Their tendency 2"],
+  "recommendations": [
+    "OUT PITCH: [your best strikeout weapon against this opponent]",
+    "ATTACK ZONE: [where to pound the strike zone]",
+    "AVOID: [what pitch/location to stay away from]"
+  ],
+  "rawAnalysis": "Brief 2-3 sentence scouting report on this opponent with key weaknesses noted",
+  "encouragement": "[Specific positive feedback on what worked - mention actual pitches and opponent's low averages]",
+  "improvement": "[ONE key adjustment for next time facing this opponent - specific pitch/location strategy]"
 }`;
 
       const response = await analyzeImageWithAI(uploadedImages, prompt);
@@ -307,6 +368,21 @@ Format your response as JSON:
           // Refresh reports
           const updatedReports = await getScoutingReports(userId);
           setMyReports(updatedReports);
+          
+          // Log activity and award points for analysis upload
+          if (userId && userTeamId) {
+            logMemberActivity({
+              user_id: userId,
+              team_id: userTeamId,
+              activity_type: 'analysis_upload',
+              metadata: {
+                opponentTeamId,
+                analysisType,
+              },
+            });
+            // Award points and check for badges
+            awardActivity(userId, 'analysis_upload');
+          }
         } else {
           setSaveStatus('error');
         }

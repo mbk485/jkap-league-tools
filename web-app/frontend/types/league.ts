@@ -140,6 +140,10 @@ export interface AuthUser {
   email?: string;
   phone?: string;
   isAdmin: boolean;
+  // League Director role (Minor League Managers like Miguel/Roy)
+  isLeagueDirector?: boolean;
+  managedLeagueId?: string; // 'triple-a', 'double-a', etc.
+  directorTitle?: string; // 'Triple-A Director', 'Double-A Director'
   createdAt: string;
 }
 

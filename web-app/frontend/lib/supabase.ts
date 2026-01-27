@@ -5,6 +5,113 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOi
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// =============================================================================
+// RECAP CREDITS SYSTEM
+// Users earn recap credits by logging games, and spend them to generate recaps
+// =============================================================================
+
+const RECAP_CREDITS_KEY = 'jkap_recap_credits';
+const STARTING_RECAP_CREDITS = 0; // Users start with 0 credits, must log games to earn them
+
+export interface RecapCredits {
+  credits: number;
+  totalEarned: number;
+  totalUsed: number;
+  lastUpdated: string;
+}
+
+// Get user's recap credits from localStorage
+export function getRecapCredits(userId: string): RecapCredits {
+  if (typeof window === 'undefined') {
+    return { credits: STARTING_RECAP_CREDITS, totalEarned: 0, totalUsed: 0, lastUpdated: new Date().toISOString() };
+  }
+  
+  try {
+    const stored = localStorage.getItem(RECAP_CREDITS_KEY);
+    if (stored) {
+      const allCredits = JSON.parse(stored);
+      if (allCredits[userId]) {
+        return allCredits[userId];
+      }
+    }
+  } catch (e) {
+    console.error('Error reading recap credits:', e);
+  }
+  
+  return { credits: STARTING_RECAP_CREDITS, totalEarned: 0, totalUsed: 0, lastUpdated: new Date().toISOString() };
+}
+
+// Award recap credit (called when user logs a game)
+export function awardRecapCredit(userId: string, amount: number = 1): RecapCredits {
+  if (typeof window === 'undefined') {
+    return { credits: amount, totalEarned: amount, totalUsed: 0, lastUpdated: new Date().toISOString() };
+  }
+  
+  try {
+    const stored = localStorage.getItem(RECAP_CREDITS_KEY);
+    const allCredits = stored ? JSON.parse(stored) : {};
+    
+    const current = allCredits[userId] || { credits: STARTING_RECAP_CREDITS, totalEarned: 0, totalUsed: 0 };
+    const updated: RecapCredits = {
+      credits: current.credits + amount,
+      totalEarned: current.totalEarned + amount,
+      totalUsed: current.totalUsed,
+      lastUpdated: new Date().toISOString(),
+    };
+    
+    allCredits[userId] = updated;
+    localStorage.setItem(RECAP_CREDITS_KEY, JSON.stringify(allCredits));
+    
+    console.log(`Awarded ${amount} recap credit(s) to user ${userId}. Total: ${updated.credits}`);
+    return updated;
+  } catch (e) {
+    console.error('Error awarding recap credit:', e);
+    return { credits: amount, totalEarned: amount, totalUsed: 0, lastUpdated: new Date().toISOString() };
+  }
+}
+
+// Use a recap credit (called when user generates a recap)
+export function useRecapCredit(userId: string): { success: boolean; remaining: number; error?: string } {
+  if (typeof window === 'undefined') {
+    return { success: false, remaining: 0, error: 'Not available' };
+  }
+  
+  try {
+    const current = getRecapCredits(userId);
+    
+    if (current.credits <= 0) {
+      return { success: false, remaining: 0, error: 'No recap credits available. Log a game to earn credits!' };
+    }
+    
+    const stored = localStorage.getItem(RECAP_CREDITS_KEY);
+    const allCredits = stored ? JSON.parse(stored) : {};
+    
+    const updated: RecapCredits = {
+      credits: current.credits - 1,
+      totalEarned: current.totalEarned,
+      totalUsed: current.totalUsed + 1,
+      lastUpdated: new Date().toISOString(),
+    };
+    
+    allCredits[userId] = updated;
+    localStorage.setItem(RECAP_CREDITS_KEY, JSON.stringify(allCredits));
+    
+    console.log(`Used 1 recap credit for user ${userId}. Remaining: ${updated.credits}`);
+    return { success: true, remaining: updated.credits };
+  } catch (e) {
+    console.error('Error using recap credit:', e);
+    return { success: false, remaining: 0, error: 'Failed to use credit' };
+  }
+}
+
+// Check if user has recap credits available
+export function hasRecapCredits(userId: string): boolean {
+  const credits = getRecapCredits(userId);
+  return credits.credits > 0;
+}
+
+// =============================================================================
+
 // Types for our database
 export interface DBUser {
   id: string;
@@ -665,6 +772,8 @@ export interface DBRegistrationRequest {
   discord_username?: string;
   requested_team_id: string;
   approval_code?: string;
+  password?: string; // User's chosen password (stored temporarily until approval)
+  target_league_id?: string; // League ID if using a league-specific approval code
   status: 'pending' | 'approved' | 'rejected';
   rejection_reason?: string;
   created_at: string;
@@ -691,14 +800,45 @@ export async function getRegistrationQueue(): Promise<DBRegistrationRequest[]> {
   }
 }
 
+// League-specific approval codes
+// These can be given to directors to share with applicants for direct league placement
+export const LEAGUE_APPROVAL_CODES: Record<string, { leagueId: string; leagueName: string }> = {
+  // Commissioner codes - direct to majors
+  'MAJORS-VIP': { leagueId: 'majors', leagueName: 'Majors' },
+  'FAST-TRACK': { leagueId: 'majors', leagueName: 'Majors' },
+  // Director codes - minor leagues
+  'TRIPLE-A-2024': { leagueId: 'triple-a', leagueName: 'Triple-A' },
+  'AAA-MIGUEL': { leagueId: 'triple-a', leagueName: 'Triple-A' },
+  'DOUBLE-A-2024': { leagueId: 'double-a', leagueName: 'Double-A' },
+  'AA-ROY': { leagueId: 'double-a', leagueName: 'Double-A' },
+  'SINGLE-A-2024': { leagueId: 'single-a', leagueName: 'Single-A' },
+  'ROOKIE-START': { leagueId: 'rookie', leagueName: 'Rookie Ball' },
+  'ROOKIE-2024': { leagueId: 'rookie', leagueName: 'Rookie Ball' },
+};
+
+export function getLeagueFromApprovalCode(code: string): { leagueId: string; leagueName: string } | null {
+  const upperCode = code.toUpperCase().trim();
+  return LEAGUE_APPROVAL_CODES[upperCode] || null;
+}
+
 export async function addRegistrationRequest(
   request: Omit<DBRegistrationRequest, 'id' | 'created_at' | 'status'>
 ): Promise<{ success: boolean; request?: DBRegistrationRequest; error?: string }> {
   try {
+    // Check if approval code maps to a specific league
+    let targetLeagueId = request.target_league_id;
+    if (request.approval_code && !targetLeagueId) {
+      const leagueMapping = getLeagueFromApprovalCode(request.approval_code);
+      if (leagueMapping) {
+        targetLeagueId = leagueMapping.leagueId;
+      }
+    }
+
     const { data, error } = await supabase
       .from('registration_queue')
       .insert({
         ...request,
+        target_league_id: targetLeagueId,
         status: 'pending',
       })
       .select()
@@ -1005,38 +1145,38 @@ export async function getMemberActivity(
 export async function getActivitySummary(
   startDate: string,
   endDate: string
-): Promise<Record<string, { gamesPlayed: number; recapsCreated: number; analysisUploads: number; lastActive: string }>> {
+): Promise<Record<string, { gamesPlayed: number; recapsCreated: number; analysisUploads: number; wins: number; losses: number; lastActive: string; winRate: number }>> {
   try {
-    const { data, error } = await supabase
+    // Aggregate by user
+    const summary: Record<string, { gamesPlayed: number; recapsCreated: number; analysisUploads: number; wins: number; losses: number; lastActive: string; winRate: number }> = {};
+    
+    // First, get data from member_activity table
+    const { data: activityData, error: activityError } = await supabase
       .from('member_activity')
       .select('*')
       .gte('created_at', startDate)
       .lte('created_at', endDate);
 
-    if (error) {
-      console.error('Error fetching activity summary:', error);
-      return {};
+    if (activityError) {
+      console.error('Error fetching member_activity:', activityError);
     }
-
-    // Aggregate by user
-    const summary: Record<string, { gamesPlayed: number; recapsCreated: number; analysisUploads: number; lastActive: string }> = {};
     
-    (data || []).forEach(activity => {
+    (activityData || []).forEach(activity => {
       if (!summary[activity.user_id]) {
         summary[activity.user_id] = {
           gamesPlayed: 0,
           recapsCreated: 0,
           analysisUploads: 0,
+          wins: 0,
+          losses: 0,
           lastActive: activity.created_at,
+          winRate: 0,
         };
       }
       
       const userSummary = summary[activity.user_id];
       
       switch (activity.activity_type) {
-        case 'game_played':
-          userSummary.gamesPlayed++;
-          break;
         case 'game_recap':
           userSummary.recapsCreated++;
           break;
@@ -1048,6 +1188,52 @@ export async function getActivitySummary(
       // Track most recent activity
       if (activity.created_at > userSummary.lastActive) {
         userSummary.lastActive = activity.created_at;
+      }
+    });
+
+    // Second, get actual game data from game_logs table (more accurate)
+    const { data: gameData, error: gameError } = await supabase
+      .from('game_logs')
+      .select('user_id, is_win, created_at')
+      .gte('created_at', startDate)
+      .lte('created_at', endDate);
+
+    if (gameError) {
+      console.error('Error fetching game_logs:', gameError);
+    }
+
+    (gameData || []).forEach(game => {
+      if (!summary[game.user_id]) {
+        summary[game.user_id] = {
+          gamesPlayed: 0,
+          recapsCreated: 0,
+          analysisUploads: 0,
+          wins: 0,
+          losses: 0,
+          lastActive: game.created_at,
+          winRate: 0,
+        };
+      }
+      
+      const userSummary = summary[game.user_id];
+      userSummary.gamesPlayed++;
+      
+      if (game.is_win) {
+        userSummary.wins++;
+      } else {
+        userSummary.losses++;
+      }
+      
+      // Track most recent activity
+      if (game.created_at > userSummary.lastActive) {
+        userSummary.lastActive = game.created_at;
+      }
+    });
+
+    // Calculate win rates
+    Object.values(summary).forEach(userSummary => {
+      if (userSummary.gamesPlayed > 0) {
+        userSummary.winRate = Math.round((userSummary.wins / userSummary.gamesPlayed) * 100);
       }
     });
 
@@ -1119,5 +1305,2422 @@ export async function saveWelcomePacket(
   } catch (err: any) {
     console.error('Error saving welcome packet:', err);
     return { success: false, error: err.message || 'Failed to save welcome packet' };
+  }
+}
+
+// =============================================================================
+// REWARDS & GAMIFICATION SYSTEM
+// =============================================================================
+
+export interface DBPlayerRewards {
+  id: string;
+  user_id: string;
+  total_points: number;
+  current_streak: number;
+  longest_streak: number;
+  last_activity_date: string;
+  games_played: number;
+  recaps_created: number;
+  analyses_uploaded: number;
+  badges: string[]; // Array of badge IDs
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DBBadge {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: 'games' | 'recaps' | 'analyses' | 'streaks' | 'special';
+  requirement_value: number;
+  points_value: number;
+}
+
+// Define all available badges
+export const BADGES: DBBadge[] = [
+  // Games Played Badges
+  { id: 'first_game', name: 'First Game', description: 'Log your first game', icon: '🎮', category: 'games', requirement_value: 1, points_value: 10 },
+  { id: 'games_10', name: 'Getting Started', description: 'Play 10 games', icon: '🌟', category: 'games', requirement_value: 10, points_value: 50 },
+  { id: 'games_25', name: 'Regular', description: 'Play 25 games', icon: '⭐', category: 'games', requirement_value: 25, points_value: 100 },
+  { id: 'games_50', name: 'Veteran', description: 'Play 50 games', icon: '🏆', category: 'games', requirement_value: 50, points_value: 200 },
+  { id: 'games_100', name: 'Legend', description: 'Play 100 games', icon: '👑', category: 'games', requirement_value: 100, points_value: 500 },
+  
+  // Recaps Created Badges
+  { id: 'first_recap', name: 'Storyteller', description: 'Create your first recap', icon: '📝', category: 'recaps', requirement_value: 1, points_value: 15 },
+  { id: 'recaps_10', name: 'Reporter', description: 'Create 10 recaps', icon: '📰', category: 'recaps', requirement_value: 10, points_value: 75 },
+  { id: 'recaps_25', name: 'Journalist', description: 'Create 25 recaps', icon: '✍️', category: 'recaps', requirement_value: 25, points_value: 150 },
+  
+  // Analyses Uploaded Badges
+  { id: 'first_analysis', name: 'Student', description: 'Upload your first analysis', icon: '📊', category: 'analyses', requirement_value: 1, points_value: 20 },
+  { id: 'analyses_10', name: 'Analyst', description: 'Upload 10 analyses', icon: '🔬', category: 'analyses', requirement_value: 10, points_value: 100 },
+  { id: 'analyses_25', name: 'Scout Master', description: 'Upload 25 analyses', icon: '🎯', category: 'analyses', requirement_value: 25, points_value: 200 },
+  
+  // Streak Badges
+  { id: 'streak_3', name: 'On Fire', description: '3-day activity streak', icon: '🔥', category: 'streaks', requirement_value: 3, points_value: 25 },
+  { id: 'streak_7', name: 'Weekly Warrior', description: '7-day activity streak', icon: '💪', category: 'streaks', requirement_value: 7, points_value: 75 },
+  { id: 'streak_14', name: 'Dedicated', description: '14-day activity streak', icon: '🌊', category: 'streaks', requirement_value: 14, points_value: 150 },
+  { id: 'streak_30', name: 'Iron Will', description: '30-day activity streak', icon: '⚡', category: 'streaks', requirement_value: 30, points_value: 300 },
+];
+
+// Get player rewards
+export async function getPlayerRewards(userId: string): Promise<DBPlayerRewards | null> {
+  try {
+    const { data, error } = await supabase
+      .from('player_rewards')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      // If not found, return null (will create when needed)
+      if (error.code === 'PGRST116') return null;
+      console.error('Error fetching player rewards:', error);
+      return null;
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Error fetching player rewards:', err);
+    return null;
+  }
+}
+
+// Initialize or update player rewards
+export async function updatePlayerRewards(
+  userId: string,
+  updates: Partial<DBPlayerRewards>
+): Promise<{ success: boolean; rewards?: DBPlayerRewards; newBadges?: string[]; error?: string }> {
+  try {
+    // Get existing rewards
+    const existing = await getPlayerRewards(userId);
+    
+    if (!existing) {
+      // Create new record
+      const newRewards: Omit<DBPlayerRewards, 'id' | 'created_at' | 'updated_at'> = {
+        user_id: userId,
+        total_points: updates.total_points || 0,
+        current_streak: updates.current_streak || 0,
+        longest_streak: updates.longest_streak || 0,
+        last_activity_date: updates.last_activity_date || new Date().toISOString().split('T')[0],
+        games_played: updates.games_played || 0,
+        recaps_created: updates.recaps_created || 0,
+        analyses_uploaded: updates.analyses_uploaded || 0,
+        badges: updates.badges || [],
+      };
+
+      const { data, error } = await supabase
+        .from('player_rewards')
+        .insert(newRewards)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating player rewards:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, rewards: data, newBadges: [] };
+    }
+
+    // Update existing record
+    const { data, error } = await supabase
+      .from('player_rewards')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating player rewards:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, rewards: data, newBadges: [] };
+  } catch (err: any) {
+    console.error('Error updating player rewards:', err);
+    return { success: false, error: err.message || 'Failed to update rewards' };
+  }
+}
+
+// Award activity and check for new badges
+export async function awardActivity(
+  userId: string,
+  activityType: 'game_played' | 'game_recap' | 'analysis_upload'
+): Promise<{ success: boolean; pointsEarned: number; newBadges: DBBadge[]; error?: string }> {
+  try {
+    let existing = await getPlayerRewards(userId);
+    const today = new Date().toISOString().split('T')[0];
+    const newBadges: DBBadge[] = [];
+    let pointsEarned = 0;
+
+    // Initialize if no record exists
+    if (!existing) {
+      const init = await updatePlayerRewards(userId, {
+        total_points: 0,
+        current_streak: 0,
+        longest_streak: 0,
+        last_activity_date: today,
+        games_played: 0,
+        recaps_created: 0,
+        analyses_uploaded: 0,
+        badges: [],
+      });
+      existing = init.rewards || null;
+    }
+
+    if (!existing) {
+      return { success: false, pointsEarned: 0, newBadges: [], error: 'Failed to initialize rewards' };
+    }
+
+    // Calculate streak
+    let newStreak = existing.current_streak;
+    const lastDate = existing.last_activity_date;
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+    if (lastDate === yesterday) {
+      newStreak = existing.current_streak + 1;
+    } else if (lastDate !== today) {
+      newStreak = 1; // Reset streak
+    }
+
+    // Update counts based on activity type
+    let gamesPlayed = existing.games_played;
+    let recapsCreated = existing.recaps_created;
+    let analysesUploaded = existing.analyses_uploaded;
+
+    // Points per activity
+    const POINTS = {
+      game_played: 5,
+      game_recap: 10,
+      analysis_upload: 15,
+    };
+
+    pointsEarned = POINTS[activityType];
+
+    switch (activityType) {
+      case 'game_played':
+        gamesPlayed++;
+        break;
+      case 'game_recap':
+        recapsCreated++;
+        break;
+      case 'analysis_upload':
+        analysesUploaded++;
+        break;
+    }
+
+    // Check for new badges
+    const currentBadges = existing.badges || [];
+    
+    // Games badges
+    const gamesBadges = BADGES.filter(b => b.category === 'games' && gamesPlayed >= b.requirement_value && !currentBadges.includes(b.id));
+    // Recaps badges  
+    const recapsBadges = BADGES.filter(b => b.category === 'recaps' && recapsCreated >= b.requirement_value && !currentBadges.includes(b.id));
+    // Analyses badges
+    const analysesBadges = BADGES.filter(b => b.category === 'analyses' && analysesUploaded >= b.requirement_value && !currentBadges.includes(b.id));
+    // Streak badges
+    const streakBadges = BADGES.filter(b => b.category === 'streaks' && newStreak >= b.requirement_value && !currentBadges.includes(b.id));
+
+    const allNewBadges = [...gamesBadges, ...recapsBadges, ...analysesBadges, ...streakBadges];
+    newBadges.push(...allNewBadges);
+
+    // Add points from new badges
+    allNewBadges.forEach(badge => {
+      pointsEarned += badge.points_value;
+    });
+
+    // Update record
+    const updatedBadges = [...currentBadges, ...allNewBadges.map(b => b.id)];
+    const newLongestStreak = Math.max(existing.longest_streak, newStreak);
+
+    await updatePlayerRewards(userId, {
+      total_points: existing.total_points + pointsEarned,
+      current_streak: newStreak,
+      longest_streak: newLongestStreak,
+      last_activity_date: today,
+      games_played: gamesPlayed,
+      recaps_created: recapsCreated,
+      analyses_uploaded: analysesUploaded,
+      badges: updatedBadges,
+    });
+
+    return { success: true, pointsEarned, newBadges };
+  } catch (err: any) {
+    console.error('Error awarding activity:', err);
+    return { success: false, pointsEarned: 0, newBadges: [], error: err.message };
+  }
+}
+
+// Get leaderboard
+export async function getLeaderboard(limit: number = 10): Promise<DBPlayerRewards[]> {
+  try {
+    const { data, error } = await supabase
+      .from('player_rewards')
+      .select('*')
+      .order('total_points', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('Error fetching leaderboard:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching leaderboard:', err);
+    return [];
+  }
+}
+
+// =============================================================================
+// GAME STATS TRACKING
+// =============================================================================
+
+export interface DBGameResult {
+  id: string;
+  home_team_id: string;
+  away_team_id: string;
+  home_score: number;
+  away_score: number;
+  winner_team_id: string;
+  loser_team_id: string;
+  home_user_id?: string;
+  away_user_id?: string;
+  game_date: string;
+  season?: string;
+  notes?: string;
+  key_players?: Record<string, string>;
+  created_at: string;
+  created_by?: string;
+}
+
+export interface TeamStats {
+  teamId: string;
+  wins: number;
+  losses: number;
+  runsScored: number;
+  runsAllowed: number;
+  currentStreak: number;
+  streakType: 'W' | 'L' | 'none';
+  lastGames: Array<{ opponent: string; result: 'W' | 'L'; score: string }>;
+}
+
+// Record a game result
+export async function recordGameResult(
+  result: Omit<DBGameResult, 'id' | 'created_at' | 'winner_team_id' | 'loser_team_id'>
+): Promise<{ success: boolean; gameResult?: DBGameResult; error?: string }> {
+  try {
+    const winnerId = result.home_score > result.away_score ? result.home_team_id : result.away_team_id;
+    const loserId = result.home_score > result.away_score ? result.away_team_id : result.home_team_id;
+
+    const { data, error } = await supabase
+      .from('game_results')
+      .insert({
+        ...result,
+        winner_team_id: winnerId,
+        loser_team_id: loserId,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error recording game result:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, gameResult: data };
+  } catch (err: any) {
+    console.error('Error recording game result:', err);
+    return { success: false, error: err.message || 'Failed to record game result' };
+  }
+}
+
+// Get game results
+export async function getGameResults(
+  teamId?: string,
+  limit: number = 50
+): Promise<DBGameResult[]> {
+  try {
+    let query = supabase
+      .from('game_results')
+      .select('*')
+      .order('game_date', { ascending: false })
+      .limit(limit);
+
+    if (teamId) {
+      query = query.or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching game results:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching game results:', err);
+    return [];
+  }
+}
+
+// Calculate team standings/stats
+export async function getTeamStats(teamId: string): Promise<TeamStats> {
+  try {
+    const games = await getGameResults(teamId, 162); // Full season
+
+    const stats: TeamStats = {
+      teamId,
+      wins: 0,
+      losses: 0,
+      runsScored: 0,
+      runsAllowed: 0,
+      currentStreak: 0,
+      streakType: 'none',
+      lastGames: [],
+    };
+
+    games.forEach((game, index) => {
+      const isHome = game.home_team_id === teamId;
+      const won = game.winner_team_id === teamId;
+      const scored = isHome ? game.home_score : game.away_score;
+      const allowed = isHome ? game.away_score : game.home_score;
+      const opponent = isHome ? game.away_team_id : game.home_team_id;
+
+      if (won) stats.wins++;
+      else stats.losses++;
+
+      stats.runsScored += scored;
+      stats.runsAllowed += allowed;
+
+      // Track last 10 games
+      if (index < 10) {
+        stats.lastGames.push({
+          opponent,
+          result: won ? 'W' : 'L',
+          score: isHome ? `${game.home_score}-${game.away_score}` : `${game.away_score}-${game.home_score}`,
+        });
+      }
+    });
+
+    // Calculate current streak
+    if (stats.lastGames.length > 0) {
+      const firstResult = stats.lastGames[0].result;
+      stats.streakType = firstResult;
+      stats.currentStreak = 1;
+
+      for (let i = 1; i < stats.lastGames.length; i++) {
+        if (stats.lastGames[i].result === firstResult) {
+          stats.currentStreak++;
+        } else {
+          break;
+        }
+      }
+    }
+
+    return stats;
+  } catch (err) {
+    console.error('Error calculating team stats:', err);
+    return {
+      teamId,
+      wins: 0,
+      losses: 0,
+      runsScored: 0,
+      runsAllowed: 0,
+      currentStreak: 0,
+      streakType: 'none',
+      lastGames: [],
+    };
+  }
+}
+
+// Get league standings
+export async function getLeagueStandings(): Promise<TeamStats[]> {
+  try {
+    const { data: allGames, error } = await supabase
+      .from('game_results')
+      .select('*')
+      .order('game_date', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching standings:', error);
+      return [];
+    }
+
+    // Get unique team IDs
+    const teamIds = new Set<string>();
+    (allGames || []).forEach(game => {
+      teamIds.add(game.home_team_id);
+      teamIds.add(game.away_team_id);
+    });
+
+    // Calculate stats for each team
+    const standings: TeamStats[] = [];
+    const teamIdArray = Array.from(teamIds);
+
+    for (let i = 0; i < teamIdArray.length; i++) {
+      const stats = await getTeamStats(teamIdArray[i]);
+      standings.push(stats);
+    }
+
+    // Sort by wins, then by run differential
+    standings.sort((a, b) => {
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      const aRunDiff = a.runsScored - a.runsAllowed;
+      const bRunDiff = b.runsScored - b.runsAllowed;
+      return bRunDiff - aRunDiff;
+    });
+
+    return standings;
+  } catch (err) {
+    console.error('Error fetching standings:', err);
+    return [];
+  }
+}
+
+// =============================================================================
+// USER ONBOARDING
+// =============================================================================
+
+export interface DBUserOnboarding {
+  id: string;
+  user_id: string;
+  rules_acknowledged: boolean;
+  rules_acknowledged_at: string | null;
+  welcome_viewed: boolean;
+  welcome_viewed_at: string | null;
+  discord_joined: boolean;
+  facebook_joined: boolean;
+  psn_friends_added: boolean;
+  onboarding_completed: boolean;
+  onboarding_completed_at: string | null;
+  created_at: string;
+}
+
+// Get user's onboarding status
+export async function getUserOnboarding(userId: string): Promise<DBUserOnboarding | null> {
+  try {
+    const { data, error } = await supabase
+      .from('user_onboarding')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      // If no record exists, that's okay
+      if (error.code === 'PGRST116') return null;
+      console.error('Error fetching user onboarding:', error);
+      return null;
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Error fetching user onboarding:', err);
+    return null;
+  }
+}
+
+// Initialize user onboarding record
+export async function initUserOnboarding(userId: string): Promise<DBUserOnboarding | null> {
+  try {
+    const { data, error } = await supabase
+      .from('user_onboarding')
+      .insert({
+        user_id: userId,
+        rules_acknowledged: false,
+        welcome_viewed: false,
+        discord_joined: false,
+        facebook_joined: false,
+        psn_friends_added: false,
+        onboarding_completed: false,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error initializing user onboarding:', error);
+      return null;
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Error initializing user onboarding:', err);
+    return null;
+  }
+}
+
+// Update user onboarding status
+export async function updateUserOnboarding(
+  userId: string,
+  updates: Partial<DBUserOnboarding>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Check if record exists
+    const existing = await getUserOnboarding(userId);
+    
+    if (!existing) {
+      // Create initial record with the updates included
+      const initialData = {
+        user_id: userId,
+        rules_acknowledged: false,
+        welcome_viewed: false,
+        discord_joined: false,
+        facebook_joined: false,
+        psn_friends_added: false,
+        onboarding_completed: false,
+        ...updates, // Apply the updates to the initial record
+      };
+      
+      const { error: insertError } = await supabase
+        .from('user_onboarding')
+        .insert(initialData);
+
+      if (insertError) {
+        console.error('Error creating user onboarding record:', insertError);
+        return { success: false, error: insertError.message };
+      }
+      
+      return { success: true };
+    }
+
+    // Record exists, update it
+    const { error } = await supabase
+      .from('user_onboarding')
+      .update(updates)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error updating user onboarding:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating user onboarding:', err);
+    return { success: false, error: err.message || 'Failed to update onboarding' };
+  }
+}
+
+// Mark rules as acknowledged
+export async function acknowledgeRules(userId: string): Promise<{ success: boolean; error?: string }> {
+  return updateUserOnboarding(userId, {
+    rules_acknowledged: true,
+    rules_acknowledged_at: new Date().toISOString(),
+  });
+}
+
+// LocalStorage key for onboarding backup
+const ONBOARDING_COMPLETE_KEY = 'jkap_onboarding_complete';
+
+// Check localStorage for onboarding completion (fallback)
+function isOnboardingCompleteLocally(userId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const stored = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
+    if (stored) {
+      const data = JSON.parse(stored);
+      return data[userId] === true;
+    }
+  } catch (e) {
+    console.error('Error reading onboarding localStorage:', e);
+  }
+  return false;
+}
+
+// Save onboarding completion to localStorage (fallback)
+function setOnboardingCompleteLocally(userId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const stored = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
+    const data = stored ? JSON.parse(stored) : {};
+    data[userId] = true;
+    localStorage.setItem(ONBOARDING_COMPLETE_KEY, JSON.stringify(data));
+    console.log('Onboarding saved to localStorage for user:', userId);
+  } catch (e) {
+    console.error('Error saving onboarding to localStorage:', e);
+  }
+}
+
+// Check if user needs to complete onboarding
+// NOTE: Only users created AFTER the onboarding system was added need to complete it
+// Existing users are "grandfathered in" and don't need onboarding
+export async function needsOnboarding(userId: string): Promise<boolean> {
+  try {
+    // FIRST: Check localStorage fallback (most reliable)
+    if (isOnboardingCompleteLocally(userId)) {
+      console.log('Onboarding complete (localStorage) for user:', userId);
+      return false;
+    }
+    
+    // Second: Check database record
+    const onboarding = await getUserOnboarding(userId);
+    
+    // If they have a record and completed it, they're done
+    if (onboarding?.onboarding_completed) {
+      // Also save to localStorage for redundancy
+      setOnboardingCompleteLocally(userId);
+      return false;
+    }
+    
+    // Check when the user was created
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('created_at')
+      .eq('id', userId)
+      .single();
+    
+    if (error || !user) {
+      // Can't verify user, skip onboarding to avoid loops
+      console.log('Cannot verify user, skipping onboarding check');
+      return false;
+    }
+    
+    // Onboarding system was added on 2026-01-13
+    // Users created before this date are grandfathered in
+    const onboardingLaunchDate = new Date('2026-01-14T00:00:00Z');
+    const userCreatedAt = new Date(user.created_at);
+    
+    // If user was created before onboarding system, they don't need it
+    if (userCreatedAt < onboardingLaunchDate) {
+      // Auto-complete their onboarding so they're marked as done
+      await completeOnboarding(userId);
+      return false;
+    }
+    
+    // New user needs onboarding
+    return !onboarding?.onboarding_completed;
+  } catch (err) {
+    console.error('Error checking onboarding status:', err);
+    // On error, don't block - skip onboarding
+    return false;
+  }
+}
+
+// Mark onboarding as complete
+export async function completeOnboarding(userId: string): Promise<{ success: boolean; error?: string }> {
+  // ALWAYS save to localStorage first (guaranteed to work)
+  setOnboardingCompleteLocally(userId);
+  
+  // Then try to save to database
+  const result = await updateUserOnboarding(userId, {
+    onboarding_completed: true,
+    onboarding_completed_at: new Date().toISOString(),
+  });
+  
+  if (!result.success) {
+    console.warn('Database save failed, but localStorage backup succeeded');
+  }
+  
+  // Return success since localStorage worked even if DB failed
+  return { success: true };
+}
+
+// Get all users' onboarding status (for admin)
+export async function getAllOnboardingStatuses(): Promise<(DBUserOnboarding & { username?: string })[]> {
+  try {
+    const { data, error } = await supabase
+      .from('user_onboarding')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching all onboarding statuses:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching all onboarding statuses:', err);
+    return [];
+  }
+}
+
+// =============================================================================
+// GAME LOGGING & LEADERBOARDS
+// =============================================================================
+
+export interface DBGameLog {
+  id: string;
+  user_id: string;
+  user_team_id: string;
+  opponent_team_id: string;
+  user_score: number;
+  opponent_score: number;
+  is_win: boolean;
+  game_number?: number;
+  game_date: string;
+  winning_pitcher?: string;
+  losing_pitcher?: string;
+  save_pitcher?: string;
+  user_strikeouts?: number;
+  home_runs_hit?: { player: string; count: number }[];
+  total_home_runs: number;
+  total_hits?: number;
+  total_rbis?: number;
+  notes?: string;
+  recap_generated?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DBPlayerStats {
+  id: string;
+  player_name: string;
+  team_id: string;
+  user_id: string;
+  home_runs: number;
+  strikeouts_pitched: number;
+  pitching_wins: number;
+  pitching_losses: number;
+  saves: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  player_name?: string;
+  team_id: string;
+  user_id: string;
+  value: number;
+  display_name?: string;
+}
+
+// Token rewards for game logging
+const TOKEN_REWARDS = {
+  GAME_LOGGED: 5,
+  WIN_BONUS: 10,
+  HOME_RUN: 2,
+  WIN_STREAK_BONUS: 15, // 3+ win streak
+  FIRST_GAME_OF_DAY: 5,
+};
+
+// Log a game and award tokens
+export async function logGame(
+  gameData: Omit<DBGameLog, 'id' | 'created_at' | 'updated_at'>
+): Promise<{ success: boolean; gameLog?: DBGameLog; tokensEarned?: number; recapCreditsEarned?: number; error?: string }> {
+  try {
+    // Insert the game log
+    const { data, error } = await supabase
+      .from('game_logs')
+      .insert({
+        ...gameData,
+        home_runs_hit: JSON.stringify(gameData.home_runs_hit || []),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error logging game:', error);
+      return { success: false, error: error.message };
+    }
+
+    // Calculate tokens earned
+    let tokensEarned = TOKEN_REWARDS.GAME_LOGGED;
+    
+    if (gameData.is_win) {
+      tokensEarned += TOKEN_REWARDS.WIN_BONUS;
+    }
+    
+    tokensEarned += (gameData.total_home_runs || 0) * TOKEN_REWARDS.HOME_RUN;
+
+    // Check if first game of the day
+    const today = new Date().toISOString().split('T')[0];
+    const { data: todayGames } = await supabase
+      .from('game_logs')
+      .select('id')
+      .eq('user_id', gameData.user_id)
+      .gte('created_at', today + 'T00:00:00')
+      .lt('created_at', today + 'T23:59:59');
+
+    if (!todayGames || todayGames.length <= 1) {
+      tokensEarned += TOKEN_REWARDS.FIRST_GAME_OF_DAY;
+    }
+
+    // Update player rewards
+    await updatePlayerRewardsFromGame(gameData.user_id, gameData, tokensEarned);
+
+    // Update player stats if we have pitching info
+    if (gameData.winning_pitcher && gameData.is_win) {
+      await updatePlayerStat(gameData.user_id, gameData.user_team_id, gameData.winning_pitcher, 'pitching_wins', 1);
+    }
+    if (gameData.losing_pitcher && !gameData.is_win) {
+      await updatePlayerStat(gameData.user_id, gameData.user_team_id, gameData.losing_pitcher, 'pitching_losses', 1);
+    }
+    if (gameData.save_pitcher) {
+      await updatePlayerStat(gameData.user_id, gameData.user_team_id, gameData.save_pitcher, 'saves', 1);
+    }
+
+    // Update home run stats for each player
+    if (gameData.home_runs_hit) {
+      for (const hr of gameData.home_runs_hit) {
+        await updatePlayerStat(gameData.user_id, gameData.user_team_id, hr.player, 'home_runs', hr.count);
+      }
+    }
+
+    // Update user level stats for Road to the Show
+    await updateUserLevelFromGame(gameData.user_id, gameData.is_win);
+
+    // Award 1 recap credit for logging the game
+    awardRecapCredit(gameData.user_id, 1);
+
+    return { success: true, gameLog: data, tokensEarned, recapCreditsEarned: 1 };
+  } catch (err: any) {
+    console.error('Error logging game:', err);
+    return { success: false, error: err.message || 'Failed to log game' };
+  }
+}
+
+// Update player rewards from a logged game
+async function updatePlayerRewardsFromGame(
+  userId: string,
+  gameData: Omit<DBGameLog, 'id' | 'created_at' | 'updated_at'>,
+  tokensEarned: number
+): Promise<number> {
+  try {
+    // Get current rewards
+    const { data: current } = await supabase
+      .from('player_rewards')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    let totalTokens = tokensEarned;
+
+    if (current) {
+      // Update existing record
+      const newWinStreak = gameData.is_win ? (current.win_streak || 0) + 1 : 0;
+      
+      // Bonus for 3+ win streak
+      if (newWinStreak >= 3 && gameData.is_win) {
+        totalTokens += TOKEN_REWARDS.WIN_STREAK_BONUS;
+      }
+
+      await supabase
+        .from('player_rewards')
+        .update({
+          tokens: (current.tokens || 0) + totalTokens,
+          total_points: (current.total_points || 0) + totalTokens,
+          games_played: (current.games_played || 0) + 1,
+          win_streak: newWinStreak,
+          longest_streak: Math.max(current.longest_streak || 0, newWinStreak),
+          home_runs_logged: (current.home_runs_logged || 0) + (gameData.total_home_runs || 0),
+          wins_logged: (current.wins_logged || 0) + (gameData.is_win ? 1 : 0),
+          saves_logged: (current.saves_logged || 0) + (gameData.save_pitcher ? 1 : 0),
+          last_activity_date: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
+    } else {
+      // Create new record
+      await supabase
+        .from('player_rewards')
+        .insert({
+          user_id: userId,
+          tokens: totalTokens,
+          total_points: totalTokens,
+          games_played: 1,
+          win_streak: gameData.is_win ? 1 : 0,
+          longest_streak: gameData.is_win ? 1 : 0,
+          home_runs_logged: gameData.total_home_runs || 0,
+          wins_logged: gameData.is_win ? 1 : 0,
+          saves_logged: gameData.save_pitcher ? 1 : 0,
+          last_activity_date: new Date().toISOString(),
+        });
+    }
+
+    // Also add tokens to user_wallets for the wallet UI
+    await addTokensInternal(userId, totalTokens, 'game_played', 
+      `Game logged: ${gameData.is_win ? 'Win' : 'Loss'} vs ${gameData.opponent_team_id}`);
+
+    return totalTokens;
+  } catch (err) {
+    console.error('Error updating player rewards:', err);
+    return tokensEarned;
+  }
+}
+
+// Internal function to add tokens to wallet (used by game logging)
+async function addTokensInternal(
+  userId: string,
+  amount: number,
+  transactionType: string,
+  description?: string
+): Promise<void> {
+  try {
+    // Get or create wallet
+    let { data: wallet } = await supabase
+      .from('user_wallets')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (!wallet) {
+      // Create wallet
+      const { data: newWallet } = await supabase
+        .from('user_wallets')
+        .insert({
+          user_id: userId,
+          token_balance: 0,
+          lifetime_tokens_earned: 0,
+          lifetime_tokens_spent: 0,
+        })
+        .select()
+        .single();
+      wallet = newWallet;
+    }
+
+    if (!wallet) return;
+
+    const newBalance = (wallet.token_balance || 0) + amount;
+
+    // Update wallet
+    await supabase
+      .from('user_wallets')
+      .update({
+        token_balance: newBalance,
+        lifetime_tokens_earned: (wallet.lifetime_tokens_earned || 0) + (amount > 0 ? amount : 0),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+
+    // Record transaction
+    await supabase
+      .from('token_transactions')
+      .insert({
+        user_id: userId,
+        amount,
+        balance_after: newBalance,
+        transaction_type: transactionType,
+        description,
+      });
+  } catch (err) {
+    console.error('Error adding tokens to wallet:', err);
+  }
+}
+
+// Update a specific player stat
+async function updatePlayerStat(
+  userId: string,
+  teamId: string,
+  playerName: string,
+  stat: 'home_runs' | 'strikeouts_pitched' | 'pitching_wins' | 'pitching_losses' | 'saves',
+  increment: number
+): Promise<void> {
+  try {
+    // Check if player exists
+    const { data: existing } = await supabase
+      .from('player_stats')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('team_id', teamId)
+      .eq('player_name', playerName)
+      .single();
+
+    if (existing) {
+      await supabase
+        .from('player_stats')
+        .update({
+          [stat]: (existing[stat] || 0) + increment,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+    } else {
+      await supabase
+        .from('player_stats')
+        .insert({
+          user_id: userId,
+          team_id: teamId,
+          player_name: playerName,
+          [stat]: increment,
+        });
+    }
+  } catch (err) {
+    console.error('Error updating player stat:', err);
+  }
+}
+
+// Get game logs for a user or all users
+export async function getGameLogs(
+  userId?: string,
+  limit: number = 50
+): Promise<DBGameLog[]> {
+  try {
+    let query = supabase
+      .from('game_logs')
+      .select('*')
+      .order('game_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching game logs:', error);
+      return [];
+    }
+
+    // Parse home_runs_hit JSON
+    return (data || []).map(log => ({
+      ...log,
+      home_runs_hit: typeof log.home_runs_hit === 'string' 
+        ? JSON.parse(log.home_runs_hit) 
+        : log.home_runs_hit || [],
+    }));
+  } catch (err) {
+    console.error('Error fetching game logs:', err);
+    return [];
+  }
+}
+
+// Get user's game stats summary
+export async function getUserGameStats(userId: string): Promise<{
+  gamesPlayed: number;
+  wins: number;
+  losses: number;
+  winPct: string;
+  totalHomeRuns: number;
+  totalStrikeouts: number;
+  currentWinStreak: number;
+  tokens: number;
+}> {
+  try {
+    const { data: logs } = await supabase
+      .from('game_logs')
+      .select('is_win, total_home_runs, user_strikeouts')
+      .eq('user_id', userId);
+
+    const { data: rewards } = await supabase
+      .from('player_rewards')
+      .select('tokens, win_streak')
+      .eq('user_id', userId)
+      .single();
+
+    const games = logs || [];
+    const wins = games.filter(g => g.is_win).length;
+    const losses = games.length - wins;
+    const totalHRs = games.reduce((sum, g) => sum + (g.total_home_runs || 0), 0);
+    const totalKs = games.reduce((sum, g) => sum + (g.user_strikeouts || 0), 0);
+
+    return {
+      gamesPlayed: games.length,
+      wins,
+      losses,
+      winPct: games.length > 0 ? (wins / games.length * 100).toFixed(1) : '0.0',
+      totalHomeRuns: totalHRs,
+      totalStrikeouts: totalKs,
+      currentWinStreak: rewards?.win_streak || 0,
+      tokens: rewards?.tokens || 0,
+    };
+  } catch (err) {
+    console.error('Error fetching user game stats:', err);
+    return {
+      gamesPlayed: 0,
+      wins: 0,
+      losses: 0,
+      winPct: '0.0',
+      totalHomeRuns: 0,
+      totalStrikeouts: 0,
+      currentWinStreak: 0,
+      tokens: 0,
+    };
+  }
+}
+
+// Get leaderboards
+export async function getLeaderboards(): Promise<{
+  homeRuns: LeaderboardEntry[];
+  strikeouts: LeaderboardEntry[];
+  wins: LeaderboardEntry[];
+  saves: LeaderboardEntry[];
+  gamesPlayed: LeaderboardEntry[];
+}> {
+  try {
+    // Get all game logs aggregated by user
+    const { data: logs } = await supabase
+      .from('game_logs')
+      .select('user_id, user_team_id, is_win, total_home_runs, user_strikeouts, save_pitcher');
+
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, display_name, team_id');
+
+    const userMap = new Map((users || []).map(u => [u.id, u]));
+
+    // Aggregate stats by user
+    const userStats = new Map<string, {
+      userId: string;
+      teamId: string;
+      displayName: string;
+      homeRuns: number;
+      strikeouts: number;
+      wins: number;
+      saves: number;
+      gamesPlayed: number;
+    }>();
+
+    (logs || []).forEach(log => {
+      const existing = userStats.get(log.user_id) || {
+        userId: log.user_id,
+        teamId: log.user_team_id,
+        displayName: userMap.get(log.user_id)?.display_name || 'Unknown',
+        homeRuns: 0,
+        strikeouts: 0,
+        wins: 0,
+        saves: 0,
+        gamesPlayed: 0,
+      };
+
+      existing.homeRuns += log.total_home_runs || 0;
+      existing.strikeouts += log.user_strikeouts || 0;
+      existing.wins += log.is_win ? 1 : 0;
+      existing.saves += log.save_pitcher ? 1 : 0;
+      existing.gamesPlayed += 1;
+
+      userStats.set(log.user_id, existing);
+    });
+
+    const statsArray = Array.from(userStats.values());
+
+    // Create leaderboards
+    const createLeaderboard = (
+      sortKey: keyof typeof statsArray[0],
+      limit: number = 10
+    ): LeaderboardEntry[] => {
+      return statsArray
+        .sort((a, b) => (b[sortKey] as number) - (a[sortKey] as number))
+        .slice(0, limit)
+        .map((stat, index) => ({
+          rank: index + 1,
+          team_id: stat.teamId,
+          user_id: stat.userId,
+          value: stat[sortKey] as number,
+          display_name: stat.displayName,
+        }));
+    };
+
+    return {
+      homeRuns: createLeaderboard('homeRuns'),
+      strikeouts: createLeaderboard('strikeouts'),
+      wins: createLeaderboard('wins'),
+      saves: createLeaderboard('saves'),
+      gamesPlayed: createLeaderboard('gamesPlayed'),
+    };
+  } catch (err) {
+    console.error('Error fetching leaderboards:', err);
+    return {
+      homeRuns: [],
+      strikeouts: [],
+      wins: [],
+      saves: [],
+      gamesPlayed: [],
+    };
+  }
+}
+
+// Get player stats leaderboards (individual players)
+export async function getPlayerLeaderboards(): Promise<{
+  homeRuns: (DBPlayerStats & { display_name?: string })[];
+  pitchingWins: (DBPlayerStats & { display_name?: string })[];
+  saves: (DBPlayerStats & { display_name?: string })[];
+}> {
+  try {
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, display_name');
+
+    const userMap = new Map((users || []).map(u => [u.id, u.display_name]));
+
+    // Home run leaders
+    const { data: hrLeaders } = await supabase
+      .from('player_stats')
+      .select('*')
+      .gt('home_runs', 0)
+      .order('home_runs', { ascending: false })
+      .limit(10);
+
+    // Pitching win leaders
+    const { data: winLeaders } = await supabase
+      .from('player_stats')
+      .select('*')
+      .gt('pitching_wins', 0)
+      .order('pitching_wins', { ascending: false })
+      .limit(10);
+
+    // Save leaders
+    const { data: saveLeaders } = await supabase
+      .from('player_stats')
+      .select('*')
+      .gt('saves', 0)
+      .order('saves', { ascending: false })
+      .limit(10);
+
+    const addDisplayName = (stats: DBPlayerStats[] | null) =>
+      (stats || []).map(s => ({
+        ...s,
+        display_name: userMap.get(s.user_id) || 'Unknown',
+      }));
+
+    return {
+      homeRuns: addDisplayName(hrLeaders),
+      pitchingWins: addDisplayName(winLeaders),
+      saves: addDisplayName(saveLeaders),
+    };
+  } catch (err) {
+    console.error('Error fetching player leaderboards:', err);
+    return {
+      homeRuns: [],
+      pitchingWins: [],
+      saves: [],
+    };
+  }
+}
+
+// =============================================================================
+// LEAGUE HIERARCHY SYSTEM ("Road to the Show")
+// =============================================================================
+
+export interface DBLeague {
+  id: string;
+  name: string;
+  level: number;
+  description: string;
+  manager_name: string | null;
+  monthly_salary: number;
+  perks: string[];
+  color: string;
+  icon: string;
+  min_games_to_qualify: number;
+  min_win_rate: number;
+  min_time_in_league_days: number;
+  created_at: string;
+}
+
+export interface DBUserLevel {
+  id: string;
+  user_id: string;
+  current_league_id: string;
+  games_at_current_level: number;
+  wins_at_current_level: number;
+  days_in_league: number;
+  joined_league_at: string;
+  last_promotion_at: string | null;
+  last_demotion_at: string | null;
+  qualification_percent: number;
+  is_qualified_for_promotion: boolean;
+  promotion_history: { from: string; to: string; date: string }[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DBUserWallet {
+  id: string;
+  user_id: string;
+  token_balance: number;
+  lifetime_tokens_earned: number;
+  lifetime_tokens_spent: number;
+  last_salary_paid_at: string | null;
+  next_salary_due_at: string | null;
+  subscription_status: 'free' | 'active' | 'cancelled' | 'past_due';
+  subscription_started_at: string | null;
+  subscription_ends_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DBTokenTransaction {
+  id: string;
+  user_id: string;
+  amount: number;
+  balance_after: number;
+  transaction_type: string;
+  description: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+// Get all leagues
+export async function getLeagues(): Promise<DBLeague[]> {
+  try {
+    const { data, error } = await supabase
+      .from('leagues')
+      .select('*')
+      .order('level', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching leagues:', error);
+      return [];
+    }
+
+    return (data || []).map(league => ({
+      ...league,
+      perks: typeof league.perks === 'string' ? JSON.parse(league.perks) : league.perks || [],
+    }));
+  } catch (err) {
+    console.error('Error fetching leagues:', err);
+    return [];
+  }
+}
+
+// Initialize a new member at Rookie Ball level (for admin approval flow)
+export async function initializeNewMember(
+  userId: string,
+  startingLeagueId?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Get the Rookie Ball league (highest level number = lowest rank)
+    const leagues = await getLeagues();
+    const rookieLeague = startingLeagueId 
+      ? leagues.find(l => l.id === startingLeagueId)
+      : leagues.reduce((max, l) => l.level > max.level ? l : max, leagues[0]);
+    
+    if (!rookieLeague) {
+      return { success: false, error: 'No starting league found' };
+    }
+
+    // Check if user already has a level record
+    const { data: existing } = await supabase
+      .from('user_levels')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+
+    if (existing) {
+      return { success: true }; // Already initialized
+    }
+
+    // Create user_levels record
+    const { error: levelError } = await supabase
+      .from('user_levels')
+      .insert({
+        user_id: userId,
+        current_league_id: rookieLeague.id,
+        games_at_current_level: 0,
+        wins_at_current_level: 0,
+        days_in_league: 0,
+        joined_league_at: new Date().toISOString(),
+        qualification_percent: 0,
+        is_qualified_for_promotion: false,
+        promotion_history: [],
+      });
+
+    if (levelError) {
+      console.error('Error creating user level:', levelError);
+      return { success: false, error: levelError.message };
+    }
+
+    // Initialize user wallet with starting bonus
+    const { error: walletError } = await supabase
+      .from('user_wallets')
+      .insert({
+        user_id: userId,
+        token_balance: 50, // Welcome bonus
+        lifetime_tokens_earned: 50,
+        lifetime_tokens_spent: 0,
+        subscription_status: 'free',
+      });
+
+    if (walletError) {
+      console.error('Error creating user wallet:', walletError);
+      // Don't fail the whole operation for wallet error
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Error initializing new member:', err);
+    return { success: false, error: 'Failed to initialize new member' };
+  }
+}
+
+// Get a specific league
+export async function getLeague(leagueId: string): Promise<DBLeague | null> {
+  try {
+    const { data, error } = await supabase
+      .from('leagues')
+      .select('*')
+      .eq('id', leagueId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching league:', error);
+      return null;
+    }
+
+    return {
+      ...data,
+      perks: typeof data.perks === 'string' ? JSON.parse(data.perks) : data.perks || [],
+    };
+  } catch (err) {
+    console.error('Error fetching league:', err);
+    return null;
+  }
+}
+
+// Get user's current level
+export async function getUserLevel(userId: string): Promise<DBUserLevel | null> {
+  try {
+    const { data, error } = await supabase
+      .from('user_levels')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No record exists - create one at Rookie level
+        return await initializeUserLevel(userId);
+      }
+      console.error('Error fetching user level:', error);
+      return null;
+    }
+
+    return {
+      ...data,
+      promotion_history: typeof data.promotion_history === 'string' 
+        ? JSON.parse(data.promotion_history) 
+        : data.promotion_history || [],
+    };
+  } catch (err) {
+    console.error('Error fetching user level:', err);
+    return null;
+  }
+}
+
+// Initialize a new user at Rookie level
+export async function initializeUserLevel(userId: string): Promise<DBUserLevel | null> {
+  try {
+    const { data, error } = await supabase
+      .from('user_levels')
+      .insert({
+        user_id: userId,
+        current_league_id: 'rookie',
+        games_at_current_level: 0,
+        wins_at_current_level: 0,
+        days_in_league: 0,
+        qualification_percent: 0,
+        is_qualified_for_promotion: false,
+        promotion_history: [],
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error initializing user level:', error);
+      return null;
+    }
+
+    // Also initialize wallet
+    await initializeUserWallet(userId);
+
+    return data;
+  } catch (err) {
+    console.error('Error initializing user level:', err);
+    return null;
+  }
+}
+
+// Get user's wallet
+export async function getUserWallet(userId: string): Promise<DBUserWallet | null> {
+  try {
+    const { data, error } = await supabase
+      .from('user_wallets')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No record exists - create one
+        return await initializeUserWallet(userId);
+      }
+      console.error('Error fetching user wallet:', error);
+      return null;
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Error fetching user wallet:', err);
+    return null;
+  }
+}
+
+// Initialize user wallet
+export async function initializeUserWallet(userId: string): Promise<DBUserWallet | null> {
+  try {
+    const { data, error } = await supabase
+      .from('user_wallets')
+      .insert({
+        user_id: userId,
+        token_balance: 0,
+        lifetime_tokens_earned: 0,
+        lifetime_tokens_spent: 0,
+        subscription_status: 'free',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      // Might already exist
+      if (error.code === '23505') {
+        return await getUserWallet(userId);
+      }
+      console.error('Error initializing user wallet:', error);
+      return null;
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Error initializing user wallet:', err);
+    return null;
+  }
+}
+
+// Add tokens to user's wallet
+export async function addTokens(
+  userId: string,
+  amount: number,
+  transactionType: string,
+  description?: string,
+  metadata?: Record<string, unknown>
+): Promise<{ success: boolean; newBalance?: number; error?: string }> {
+  try {
+    // Get current wallet
+    let wallet = await getUserWallet(userId);
+    if (!wallet) {
+      wallet = await initializeUserWallet(userId);
+    }
+    if (!wallet) {
+      return { success: false, error: 'Could not get or create wallet' };
+    }
+
+    const newBalance = wallet.token_balance + amount;
+
+    // Update wallet
+    const { error: walletError } = await supabase
+      .from('user_wallets')
+      .update({
+        token_balance: newBalance,
+        lifetime_tokens_earned: wallet.lifetime_tokens_earned + (amount > 0 ? amount : 0),
+        lifetime_tokens_spent: wallet.lifetime_tokens_spent + (amount < 0 ? Math.abs(amount) : 0),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+
+    if (walletError) {
+      console.error('Error updating wallet:', walletError);
+      return { success: false, error: walletError.message };
+    }
+
+    // Record transaction
+    await supabase
+      .from('token_transactions')
+      .insert({
+        user_id: userId,
+        amount,
+        balance_after: newBalance,
+        transaction_type: transactionType,
+        description,
+        metadata,
+      });
+
+    return { success: true, newBalance };
+  } catch (err: any) {
+    console.error('Error adding tokens:', err);
+    return { success: false, error: err.message || 'Failed to add tokens' };
+  }
+}
+
+// Spend tokens (with validation)
+export async function spendTokens(
+  userId: string,
+  amount: number,
+  transactionType: string,
+  description?: string,
+  metadata?: Record<string, unknown>
+): Promise<{ success: boolean; newBalance?: number; error?: string }> {
+  const wallet = await getUserWallet(userId);
+  if (!wallet) {
+    return { success: false, error: 'Wallet not found' };
+  }
+
+  if (wallet.token_balance < amount) {
+    return { success: false, error: 'Insufficient tokens' };
+  }
+
+  return addTokens(userId, -amount, transactionType, description, metadata);
+}
+
+// Get token transaction history
+export async function getTokenTransactions(
+  userId: string,
+  limit: number = 20
+): Promise<DBTokenTransaction[]> {
+  try {
+    const { data, error } = await supabase
+      .from('token_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('Error fetching token transactions:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching token transactions:', err);
+    return [];
+  }
+}
+
+// Pay monthly salary to a user based on their league tier
+export async function payMonthlySalary(
+  userId: string
+): Promise<{ success: boolean; amount?: number; error?: string }> {
+  try {
+    // Get user's level and league
+    const userLevel = await getUserLevel(userId);
+    if (!userLevel) {
+      return { success: false, error: 'User level not found' };
+    }
+
+    const league = await getLeague(userLevel.current_league_id);
+    if (!league) {
+      return { success: false, error: 'League not found' };
+    }
+
+    const salary = league.monthly_salary || 0;
+    if (salary === 0) {
+      return { success: true, amount: 0 }; // No salary for this tier
+    }
+
+    // Add salary tokens
+    const result = await addTokens(
+      userId,
+      salary,
+      'salary',
+      `Monthly salary for ${league.name}`,
+      { league_id: league.id, league_level: league.level }
+    );
+
+    if (result.success) {
+      // Update wallet with next salary due date (30 days from now)
+      const nextDue = new Date();
+      nextDue.setDate(nextDue.getDate() + 30);
+      
+      await supabase
+        .from('user_wallets')
+        .update({
+          last_salary_paid_at: new Date().toISOString(),
+          next_salary_due_at: nextDue.toISOString(),
+        })
+        .eq('user_id', userId);
+    }
+
+    return { success: result.success, amount: salary, error: result.error };
+  } catch (err: any) {
+    console.error('Error paying salary:', err);
+    return { success: false, error: err.message || 'Failed to pay salary' };
+  }
+}
+
+// Pay salaries to all active users (admin function)
+export async function payAllSalaries(): Promise<{
+  success: boolean;
+  paid: number;
+  failed: number;
+  total: number;
+}> {
+  try {
+    // Get all users with wallets
+    const { data: wallets } = await supabase
+      .from('user_wallets')
+      .select('user_id, next_salary_due_at');
+
+    if (!wallets) {
+      return { success: false, paid: 0, failed: 0, total: 0 };
+    }
+
+    const now = new Date();
+    let paid = 0;
+    let failed = 0;
+
+    for (const wallet of wallets) {
+      // Check if salary is due
+      const isDue = !wallet.next_salary_due_at || new Date(wallet.next_salary_due_at) <= now;
+      
+      if (isDue) {
+        const result = await payMonthlySalary(wallet.user_id);
+        if (result.success) {
+          paid++;
+        } else {
+          failed++;
+        }
+      }
+    }
+
+    return { success: true, paid, failed, total: wallets.length };
+  } catch (err) {
+    console.error('Error paying all salaries:', err);
+    return { success: false, paid: 0, failed: 0, total: 0 };
+  }
+}
+
+// "Quit Job" - Cancel subscription, forfeit tokens, release team
+export async function quitJob(
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Get wallet
+    const wallet = await getUserWallet(userId);
+    if (!wallet) {
+      return { success: false, error: 'Wallet not found' };
+    }
+
+    // Record the forfeiture
+    if (wallet.token_balance > 0) {
+      await addTokens(
+        userId,
+        -wallet.token_balance,
+        'forfeit',
+        'Forfeited tokens upon leaving league',
+        { final_balance: wallet.token_balance }
+      );
+    }
+
+    // Reset wallet
+    await supabase
+      .from('user_wallets')
+      .update({
+        token_balance: 0,
+        subscription_status: 'cancelled',
+        subscription_ends_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+
+    // Reset user level to rookie
+    await supabase
+      .from('user_levels')
+      .update({
+        current_league_id: 'rookie',
+        games_at_current_level: 0,
+        wins_at_current_level: 0,
+        qualification_percent: 0,
+        is_qualified_for_promotion: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error quitting job:', err);
+    return { success: false, error: err.message || 'Failed to quit' };
+  }
+}
+
+// Calculate promotion qualification percentage
+export async function calculateQualification(userId: string): Promise<{
+  percent: number;
+  isQualified: boolean;
+  requirements: {
+    games: { current: number; required: number; met: boolean };
+    winRate: { current: number; required: number; met: boolean };
+    days: { current: number; required: number; met: boolean };
+  };
+  nextLeague: DBLeague | null;
+}> {
+  try {
+    const userLevel = await getUserLevel(userId);
+    if (!userLevel) {
+      return {
+        percent: 0,
+        isQualified: false,
+        requirements: {
+          games: { current: 0, required: 0, met: false },
+          winRate: { current: 0, required: 0, met: false },
+          days: { current: 0, required: 0, met: false },
+        },
+        nextLeague: null,
+      };
+    }
+
+    const currentLeague = await getLeague(userLevel.current_league_id);
+    if (!currentLeague || currentLeague.level === 1) {
+      // Already at Majors - no promotion available
+      return {
+        percent: 100,
+        isQualified: false,
+        requirements: {
+          games: { current: userLevel.games_at_current_level, required: 0, met: true },
+          winRate: { current: 0, required: 0, met: true },
+          days: { current: userLevel.days_in_league, required: 0, met: true },
+        },
+        nextLeague: null,
+      };
+    }
+
+    // Get next league level
+    const leagues = await getLeagues();
+    const nextLeague = leagues.find(l => l.level === currentLeague.level - 1);
+    if (!nextLeague) {
+      return {
+        percent: 100,
+        isQualified: false,
+        requirements: {
+          games: { current: userLevel.games_at_current_level, required: 0, met: true },
+          winRate: { current: 0, required: 0, met: true },
+          days: { current: userLevel.days_in_league, required: 0, met: true },
+        },
+        nextLeague: null,
+      };
+    }
+
+    // Calculate days in league
+    const joinedAt = new Date(userLevel.joined_league_at);
+    const now = new Date();
+    const daysInLeague = Math.floor((now.getTime() - joinedAt.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Calculate win rate
+    const winRate = userLevel.games_at_current_level > 0
+      ? userLevel.wins_at_current_level / userLevel.games_at_current_level
+      : 0;
+
+    // Check each requirement
+    const gamesMet = userLevel.games_at_current_level >= nextLeague.min_games_to_qualify;
+    const winRateMet = winRate >= nextLeague.min_win_rate;
+    const daysMet = daysInLeague >= nextLeague.min_time_in_league_days;
+
+    // Calculate percentage (weighted average)
+    const gamesPercent = Math.min(100, (userLevel.games_at_current_level / nextLeague.min_games_to_qualify) * 100);
+    const winRatePercent = nextLeague.min_win_rate > 0 
+      ? Math.min(100, (winRate / nextLeague.min_win_rate) * 100)
+      : 100;
+    const daysPercent = nextLeague.min_time_in_league_days > 0
+      ? Math.min(100, (daysInLeague / nextLeague.min_time_in_league_days) * 100)
+      : 100;
+
+    const overallPercent = Math.round((gamesPercent + winRatePercent + daysPercent) / 3);
+    const isQualified = gamesMet && winRateMet && daysMet;
+
+    // Update user's qualification status
+    await supabase
+      .from('user_levels')
+      .update({
+        qualification_percent: overallPercent,
+        is_qualified_for_promotion: isQualified,
+        days_in_league: daysInLeague,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+
+    return {
+      percent: overallPercent,
+      isQualified,
+      requirements: {
+        games: { 
+          current: userLevel.games_at_current_level, 
+          required: nextLeague.min_games_to_qualify, 
+          met: gamesMet 
+        },
+        winRate: { 
+          current: Math.round(winRate * 100), 
+          required: Math.round(nextLeague.min_win_rate * 100), 
+          met: winRateMet 
+        },
+        days: { 
+          current: daysInLeague, 
+          required: nextLeague.min_time_in_league_days, 
+          met: daysMet 
+        },
+      },
+      nextLeague,
+    };
+  } catch (err) {
+    console.error('Error calculating qualification:', err);
+    return {
+      percent: 0,
+      isQualified: false,
+      requirements: {
+        games: { current: 0, required: 0, met: false },
+        winRate: { current: 0, required: 0, met: false },
+        days: { current: 0, required: 0, met: false },
+      },
+      nextLeague: null,
+    };
+  }
+}
+
+// Promote user to next league (commissioner action)
+export async function promoteUser(
+  userId: string,
+  toLeagueId: string,
+  skipRequirements: boolean = false
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const userLevel = await getUserLevel(userId);
+    if (!userLevel) {
+      return { success: false, error: 'User level not found' };
+    }
+
+    if (!skipRequirements) {
+      const qualification = await calculateQualification(userId);
+      if (!qualification.isQualified) {
+        return { success: false, error: 'User is not qualified for promotion' };
+      }
+    }
+
+    const newLeague = await getLeague(toLeagueId);
+    if (!newLeague) {
+      return { success: false, error: 'Target league not found' };
+    }
+
+    // Update user level
+    const promotionEntry = {
+      from: userLevel.current_league_id,
+      to: toLeagueId,
+      date: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('user_levels')
+      .update({
+        current_league_id: toLeagueId,
+        games_at_current_level: 0,
+        wins_at_current_level: 0,
+        qualification_percent: 0,
+        is_qualified_for_promotion: false,
+        last_promotion_at: new Date().toISOString(),
+        promotion_history: [...userLevel.promotion_history, promotionEntry],
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error promoting user:', error);
+      return { success: false, error: error.message };
+    }
+
+    // Award promotion bonus tokens
+    await addTokens(
+      userId,
+      100,
+      'promotion_bonus',
+      `Promoted to ${newLeague.name}!`
+    );
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error promoting user:', err);
+    return { success: false, error: err.message || 'Failed to promote user' };
+  }
+}
+
+// Get user's full league profile
+export async function getUserLeagueProfile(userId: string): Promise<{
+  level: DBUserLevel | null;
+  league: DBLeague | null;
+  wallet: DBUserWallet | null;
+  qualification: Awaited<ReturnType<typeof calculateQualification>>;
+}> {
+  const level = await getUserLevel(userId);
+  const league = level ? await getLeague(level.current_league_id) : null;
+  const wallet = await getUserWallet(userId);
+  const qualification = await calculateQualification(userId);
+
+  return { level, league, wallet, qualification };
+}
+
+// Update user stats when a game is logged (integrates with game logger)
+export async function updateUserLevelFromGame(
+  userId: string,
+  isWin: boolean
+): Promise<void> {
+  try {
+    const userLevel = await getUserLevel(userId);
+    if (!userLevel) {
+      await initializeUserLevel(userId);
+      return;
+    }
+
+    await supabase
+      .from('user_levels')
+      .update({
+        games_at_current_level: userLevel.games_at_current_level + 1,
+        wins_at_current_level: userLevel.wins_at_current_level + (isWin ? 1 : 0),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+
+    // Recalculate qualification
+    await calculateQualification(userId);
+  } catch (err) {
+    console.error('Error updating user level from game:', err);
+  }
+}
+
+// Get all users at a specific league level (for admin)
+export async function getUsersAtLeague(leagueId: string): Promise<(DBUserLevel & { display_name?: string; team_id?: string })[]> {
+  try {
+    const { data, error } = await supabase
+      .from('user_levels')
+      .select('*')
+      .eq('current_league_id', leagueId);
+
+    if (error) {
+      console.error('Error fetching users at league:', error);
+      return [];
+    }
+
+    // Get display names and team info
+    const userIds = (data || []).map(u => u.user_id);
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, display_name, team_id')
+      .in('id', userIds);
+
+    const userMap = new Map((users || []).map(u => [u.id, { display_name: u.display_name, team_id: u.team_id }]));
+
+    return (data || []).map(level => ({
+      ...level,
+      display_name: userMap.get(level.user_id)?.display_name || 'Unknown',
+      team_id: userMap.get(level.user_id)?.team_id,
+    }));
+  } catch (err) {
+    console.error('Error fetching users at league:', err);
+    return [];
+  }
+}
+
+// ============================================================================
+// PERK & TOOL ACCESS FUNCTIONS
+// ============================================================================
+
+// Available perks that can be granted at different league levels
+export const AVAILABLE_PERKS = {
+  smart_recap: { name: 'Smart Recap', description: 'AI-powered game recap generation', tokenCost: 25 },
+  scouting_reports: { name: 'Scouting Reports', description: 'AI analysis of hitting/pitching', tokenCost: 50 },
+  roster_advice: { name: 'Roster Advice', description: 'AI-powered roster recommendations', tokenCost: 75 },
+  priority_support: { name: 'Priority Support', description: 'Fast response from commissioners', tokenCost: 100 },
+  custom_graphics: { name: 'Custom Graphics', description: 'Custom team graphics and banners', tokenCost: 150 },
+  league_intel: { name: 'League Intel', description: 'Access to league-wide analytics', tokenCost: 200 },
+} as const;
+
+export type PerkId = keyof typeof AVAILABLE_PERKS;
+
+// Check if a user has access to a specific perk based on their league level
+export async function userHasPerk(userId: string, perkId: PerkId): Promise<boolean> {
+  try {
+    const profile = await getUserLeagueProfile(userId);
+    if (!profile.league) return false;
+    
+    return profile.league.perks.includes(perkId);
+  } catch (err) {
+    console.error('Error checking user perk:', err);
+    return false;
+  }
+}
+
+// Get all perks a user has access to
+export async function getUserPerks(userId: string): Promise<string[]> {
+  try {
+    const profile = await getUserLeagueProfile(userId);
+    return profile.league?.perks || [];
+  } catch (err) {
+    console.error('Error getting user perks:', err);
+    return [];
+  }
+}
+
+// Check if user can purchase a perk with tokens (for users without the perk in their tier)
+export async function canPurchasePerk(userId: string, perkId: PerkId): Promise<{ canPurchase: boolean; reason?: string }> {
+  try {
+    // First check if they already have it from their tier
+    const hasPerk = await userHasPerk(userId, perkId);
+    if (hasPerk) {
+      return { canPurchase: false, reason: 'You already have this perk from your league level' };
+    }
+
+    // Check token balance
+    const wallet = await getUserWallet(userId);
+    const cost = AVAILABLE_PERKS[perkId]?.tokenCost || 0;
+    
+    if (!wallet || wallet.token_balance < cost) {
+      return { canPurchase: false, reason: `Need ${cost} tokens (you have ${wallet?.token_balance || 0})` };
+    }
+
+    return { canPurchase: true };
+  } catch (err) {
+    console.error('Error checking perk purchase:', err);
+    return { canPurchase: false, reason: 'Error checking eligibility' };
+  }
+}
+
+// ============================================================================
+// DEMOTION FUNCTION (Admin)
+// ============================================================================
+
+// Demote a user to a lower league level
+export async function demoteUser(
+  userId: string, 
+  targetLeagueId: string,
+  demotedBy: string,
+  reason?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const currentLevel = await getUserLevel(userId);
+    const targetLeague = await getLeague(targetLeagueId);
+    
+    if (!currentLevel || !targetLeague) {
+      return { success: false, error: 'User or target league not found' };
+    }
+
+    const currentLeague = await getLeague(currentLevel.current_league_id);
+    if (!currentLeague) {
+      return { success: false, error: 'Current league not found' };
+    }
+
+    // Ensure demotion is to a lower level (higher number = lower tier)
+    if (targetLeague.level <= currentLeague.level) {
+      return { success: false, error: 'Target league must be a lower level' };
+    }
+
+    // Update user level
+    const { error } = await supabase
+      .from('user_levels')
+      .update({
+        current_league_id: targetLeagueId,
+        games_at_current_level: 0,
+        wins_at_current_level: 0,
+        days_in_league: 0,
+        joined_league_at: new Date().toISOString(),
+        last_demotion_at: new Date().toISOString(),
+        qualification_percent: 0,
+        is_qualified_for_promotion: false,
+        promotion_history: [
+          ...currentLevel.promotion_history,
+          { 
+            from: currentLevel.current_league_id, 
+            to: targetLeagueId, 
+            date: new Date().toISOString(),
+            demoted_by: demotedBy,
+            reason: reason || 'Demotion',
+            type: 'demotion',
+          }
+        ],
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error demoting user:', err);
+    return { success: false, error: err.message || 'Failed to demote user' };
+  }
+}
+
+// Get all users qualified for promotion
+export async function getQualifiedForPromotion(): Promise<(DBUserLevel & { display_name?: string; team_id?: string; current_league_name?: string })[]> {
+  try {
+    const { data, error } = await supabase
+      .from('user_levels')
+      .select('*')
+      .eq('is_qualified_for_promotion', true);
+
+    if (error) {
+      console.error('Error fetching qualified users:', error);
+      return [];
+    }
+
+    // Get display names and team info
+    const userIds = (data || []).map(u => u.user_id);
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, display_name, team_id')
+      .in('id', userIds);
+
+    // Get league names
+    const leagueIds = Array.from(new Set((data || []).map(u => u.current_league_id)));
+    const leagues = await Promise.all(leagueIds.map(id => getLeague(id)));
+    const leagueMap = new Map(leagues.filter(l => l).map(l => [l!.id, l!.name]));
+
+    const userMap = new Map((users || []).map(u => [u.id, { display_name: u.display_name, team_id: u.team_id }]));
+
+    return (data || []).map(level => ({
+      ...level,
+      display_name: userMap.get(level.user_id)?.display_name || 'Unknown',
+      team_id: userMap.get(level.user_id)?.team_id,
+      current_league_name: leagueMap.get(level.current_league_id) || level.current_league_id,
+    }));
+  } catch (err) {
+    console.error('Error fetching qualified users:', err);
+    return [];
+  }
+}
+
+// Get league summary stats for admin dashboard
+export async function getLeagueSummary(): Promise<{ leagueId: string; name: string; level: number; playerCount: number; color: string }[]> {
+  try {
+    const leagues = await getLeagues();
+    
+    const summary = await Promise.all(
+      leagues.map(async (league) => {
+        const { count } = await supabase
+          .from('user_levels')
+          .select('*', { count: 'exact', head: true })
+          .eq('current_league_id', league.id);
+
+        return {
+          leagueId: league.id,
+          name: league.name,
+          level: league.level,
+          playerCount: count || 0,
+          color: league.color,
+        };
+      })
+    );
+
+    return summary.sort((a, b) => a.level - b.level);
+  } catch (err) {
+    console.error('Error getting league summary:', err);
+    return [];
+  }
+}
+
+// ============================================================================
+// LEAGUE DIRECTOR MANAGEMENT
+// ============================================================================
+
+// Director titles based on league
+const DIRECTOR_TITLES: Record<string, string> = {
+  'triple-a': 'Triple-A Director',
+  'double-a': 'Double-A Director',
+  'single-a': 'Single-A Director',
+  'rookie': 'Rookie Ball Director',
+};
+
+// Set a user as a league director
+export async function setLeagueDirector(
+  userId: string,
+  leagueId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const title = DIRECTOR_TITLES[leagueId] || `${leagueId} Director`;
+
+    // Update the user
+    const { error: userError } = await supabase
+      .from('users')
+      .update({
+        is_league_director: true,
+        managed_league_id: leagueId,
+        director_title: title,
+      })
+      .eq('id', userId);
+
+    if (userError) throw userError;
+
+    // Update the league to reference this director
+    const { error: leagueError } = await supabase
+      .from('leagues')
+      .update({
+        director_user_id: userId,
+        manager_name: title.replace(' Director', ''), // e.g. "Triple-A"
+      })
+      .eq('id', leagueId);
+
+    if (leagueError) throw leagueError;
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error setting league director:', err);
+    return { success: false, error: err.message || 'Failed to set league director' };
+  }
+}
+
+// Remove a user as league director
+export async function removeLeagueDirector(
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Get current managed league
+    const { data: user } = await supabase
+      .from('users')
+      .select('managed_league_id')
+      .eq('id', userId)
+      .single();
+
+    // Remove director from league
+    if (user?.managed_league_id) {
+      await supabase
+        .from('leagues')
+        .update({
+          director_user_id: null,
+          manager_name: null,
+        })
+        .eq('id', user.managed_league_id);
+    }
+
+    // Remove director role from user
+    const { error } = await supabase
+      .from('users')
+      .update({
+        is_league_director: false,
+        managed_league_id: null,
+        director_title: null,
+      })
+      .eq('id', userId);
+
+    if (error) throw error;
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error removing league director:', err);
+    return { success: false, error: err.message || 'Failed to remove league director' };
+  }
+}
+
+// Get all league directors
+export async function getLeagueDirectors(): Promise<{
+  userId: string;
+  displayName: string;
+  leagueId: string;
+  leagueName: string;
+  directorTitle: string;
+}[]> {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, display_name, managed_league_id, director_title')
+      .eq('is_league_director', true);
+
+    if (error) throw error;
+
+    // Get league names
+    const leagues = await getLeagues();
+    const leagueMap = new Map(leagues.map(l => [l.id, l.name]));
+
+    return (data || []).map(u => ({
+      userId: u.id,
+      displayName: u.display_name,
+      leagueId: u.managed_league_id,
+      leagueName: leagueMap.get(u.managed_league_id) || u.managed_league_id,
+      directorTitle: u.director_title || 'Director',
+    }));
+  } catch (err) {
+    console.error('Error getting league directors:', err);
+    return [];
   }
 }

@@ -15,6 +15,7 @@ import {
   removeApiKey,
   initializeApiKey 
 } from '@/lib/openai';
+import { logMemberActivity, awardActivity, recordGameResult, getRecapCredits, useRecapCredit, RecapCredits } from '@/lib/supabase';
 import {
   ArrowLeft,
   Newspaper,
@@ -470,10 +471,22 @@ export default function GameRecapPage() {
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
   
+  // Recap Credits State
+  const [recapCredits, setRecapCredits] = useState<RecapCredits | null>(null);
+  
   const isAdmin = user?.isAdmin ?? false;
   
-  // For now, only admins have "PRO" access (will be replaced with payment system)
-  const isPremiumUser = isAdmin;
+  // All registered JKAP members with a team get full access to Game Recap
+  const isJkapMemberWithTeam = user?.userType === 'jkap_member' && user?.teamId;
+  const isPremiumUser = isAdmin || isJkapMemberWithTeam;
+  
+  // Load recap credits
+  const loadRecapCredits = () => {
+    if (user?.id) {
+      const credits = getRecapCredits(user.id);
+      setRecapCredits(credits);
+    }
+  };
   
   useEffect(() => {
     setIsLoaded(true);
@@ -484,7 +497,10 @@ export default function GameRecapPage() {
       setHasApiKey(configured);
     };
     checkApiKey();
-  }, []);
+    
+    // Load recap credits
+    loadRecapCredits();
+  }, [user?.id]);
   
   const handleAddPlayer = () => {
     setGameData(prev => ({
@@ -969,6 +985,25 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
   };
   
   const handleGenerate = async () => {
+    // Check for recap credits (admins are exempt)
+    if (!isAdmin && user?.id) {
+      const credits = getRecapCredits(user.id);
+      if (credits.credits <= 0) {
+        setGenerationError('No recap credits available! Log a game in the Game Logger to earn credits.');
+        return;
+      }
+      
+      // Use a recap credit
+      const result = useRecapCredit(user.id);
+      if (!result.success) {
+        setGenerationError(result.error || 'Failed to use recap credit');
+        return;
+      }
+      
+      // Refresh credits display
+      loadRecapCredits();
+    }
+    
     setIsGenerating(true);
     setGenerationError(null);
     
@@ -988,6 +1023,33 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
         setGeneratedRecap(recap);
         setShowImagePreview(true);
         setIsGenerating(false);
+        
+        // Log activity and award points for game recap creation
+        if (user?.id && user?.teamId) {
+          logMemberActivity({
+            user_id: user.id,
+            team_id: user.teamId,
+            activity_type: 'game_recap',
+            metadata: {
+              homeTeam: gameData.homeTeam,
+              awayTeam: gameData.awayTeam,
+              homeScore: gameData.homeScore,
+              awayScore: gameData.awayScore,
+            },
+          });
+          // Award points and check for badges
+          awardActivity(user.id, 'game_recap');
+          
+          // Record game result for standings
+          recordGameResult({
+            home_team_id: gameData.homeTeam,
+            away_team_id: gameData.awayTeam,
+            home_score: gameData.homeScore,
+            away_score: gameData.awayScore,
+            game_date: new Date().toISOString().split('T')[0],
+            created_by: user.id,
+          });
+        }
         return;
       } catch (error) {
         console.error('OpenAI generation failed:', error);
@@ -1001,6 +1063,33 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
     setGeneratedRecap(recap);
     setShowImagePreview(true);
     setIsGenerating(false);
+    
+    // Also log activity for mock generation (still counts as a recap)
+    if (user?.id && user?.teamId) {
+      logMemberActivity({
+        user_id: user.id,
+        team_id: user.teamId,
+        activity_type: 'game_recap',
+        metadata: {
+          homeTeam: gameData.homeTeam,
+          awayTeam: gameData.awayTeam,
+          homeScore: gameData.homeScore,
+          awayScore: gameData.awayScore,
+        },
+      });
+      // Award points and check for badges
+      awardActivity(user.id, 'game_recap');
+      
+      // Record game result for standings
+      recordGameResult({
+        home_team_id: gameData.homeTeam,
+        away_team_id: gameData.awayTeam,
+        home_score: gameData.homeScore,
+        away_score: gameData.awayScore,
+        game_date: new Date().toISOString().split('T')[0],
+        created_by: user.id,
+      });
+    }
   };
   
   const canGenerate = gameData.homeTeam && gameData.awayTeam && 
@@ -1056,6 +1145,25 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* Recap Credits Display */}
+              {!isAdmin && recapCredits !== null && (
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
+                  recapCredits.credits > 0 
+                    ? 'bg-purple-500/10 border-purple-500/30 text-purple-400' 
+                    : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                }`}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span className="text-sm font-medium">{recapCredits.credits}</span>
+                  <span className="text-xs hidden sm:inline">
+                    {recapCredits.credits === 1 ? 'Credit' : 'Credits'}
+                  </span>
+                </div>
+              )}
+              {isAdmin && (
+                <Badge variant="delinquent" className="hidden sm:flex text-xs">
+                  Admin - Unlimited
+                </Badge>
+              )}
               {hasApiKey ? (
                 <Badge variant="active" className="hidden sm:flex">
                   <Sparkles className="w-3 h-3 mr-1" />
@@ -1321,7 +1429,7 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
                     {isPremiumUser && (
                       <Badge variant="active" className="text-[10px] px-1.5 py-0.5">
                         <Sparkles className="w-3 h-3 mr-0.5" />
-                        PRO
+                        AI
                       </Badge>
                     )}
                   </CardTitle>
@@ -1473,15 +1581,12 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
                           <Lock className="w-4 h-4" />
                           <span className="text-sm font-medium">Smart Analyze</span>
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-amber-500/50 text-amber-500">
-                            PRO
+                            MEMBERS
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Upgrade to PRO to let AI read your screenshot and auto-fill game details
+                          This feature is available for registered JKAP league members with a team
                         </p>
-                        <button className="text-xs text-amber-500 hover:text-amber-400 font-medium transition-colors">
-                          Upgrade for $5/month →
-                        </button>
                       </div>
                     )}
                   </div>
@@ -1677,6 +1782,29 @@ Look for team names, final score, player stats, batting averages, home runs, RBI
                   <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
                     <AlertCircle className="w-3 h-3" />
                     Select both teams and enter a score to generate
+                  </p>
+                )}
+                
+                {/* No credits warning */}
+                {!isAdmin && recapCredits !== null && recapCredits.credits <= 0 && canGenerate && (
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-center space-y-2">
+                    <p className="text-sm text-amber-400 font-medium flex items-center justify-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      No Recap Credits Available
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Log a game in the <Link href="/tools/game-logger" className="text-purple-400 hover:underline font-medium">Game Logger</Link> to earn recap credits!
+                    </p>
+                    <p className="text-xs text-muted-foreground/70">
+                      Every game you log = 1 recap credit earned
+                    </p>
+                  </div>
+                )}
+                
+                {/* Credit cost info */}
+                {!isAdmin && recapCredits !== null && recapCredits.credits > 0 && canGenerate && (
+                  <p className="text-xs text-purple-400/70 text-center">
+                    This will use 1 of your {recapCredits.credits} recap credit{recapCredits.credits !== 1 ? 's' : ''}
                   </p>
                 )}
                 

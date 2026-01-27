@@ -48,6 +48,10 @@ import {
   MessageSquare,
   FileText,
   Send,
+  Trophy,
+  Star,
+  Flame,
+  Award,
 } from 'lucide-react';
 import { setZapierWebhookUrl, getZapierWebhookUrl } from '@/contexts/AuthContext';
 import { 
@@ -83,6 +87,27 @@ import {
   saveWelcomePacket,
   DBWelcomePacket,
   createUser,
+  // Activity Tracking
+  getActivitySummary,
+  getMemberActivity,
+  DBMemberActivity,
+  // Rewards & Gamification
+  getLeaderboard,
+  DBPlayerRewards,
+  BADGES,
+  // Game Stats
+  getLeagueStandings,
+  TeamStats,
+  // League Hierarchy & Promotions
+  getLeagues,
+  getQualifiedForPromotion,
+  getLeagueSummary,
+  promoteUser,
+  demoteUser,
+  initializeNewMember,
+  getLeagueFromApprovalCode,
+  DBLeague,
+  DBUserLevel,
 } from '@/lib/supabase';
 
 export default function AdminPage() {
@@ -122,6 +147,15 @@ export default function AdminPage() {
     reason: string;
   } | null>(null);
   const [approveModal, setApproveModal] = useState<DBRegistrationRequest | null>(null);
+  const [selectedStartingLeague, setSelectedStartingLeague] = useState<string>('majors'); // Default to Majors for commissioner
+  const [approvalSuccess, setApprovalSuccess] = useState<{
+    username: string;
+    password: string;
+    email: string;
+    teamName: string;
+    leagueName?: string;
+    usedOwnPassword?: boolean;
+  } | null>(null);
   const [rejectModal, setRejectModal] = useState<{
     request: DBRegistrationRequest;
     reason: string;
@@ -137,7 +171,28 @@ export default function AdminPage() {
   });
   
   // Active admin tab
-  const [adminTab, setAdminTab] = useState<'members' | 'queue' | 'teams' | 'banlist' | 'welcome' | 'intel' | 'settings'>('members');
+  const [adminTab, setAdminTab] = useState<'members' | 'queue' | 'teams' | 'banlist' | 'welcome' | 'activity' | 'rewards' | 'standings' | 'intel' | 'promotions' | 'settings'>('members');
+  
+  // Activity monitoring state
+  const [activitySummary, setActivitySummary] = useState<Record<string, { gamesPlayed: number; recapsCreated: number; analysisUploads: number; wins: number; losses: number; lastActive: string; winRate: number }>>({});
+  const [activityPeriod, setActivityPeriod] = useState<'week' | 'month' | 'all'>('week');
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false);
+  const [minGamesRequired] = useState(3); // Minimum games per week
+  
+  // Leaderboard state
+  const [leaderboard, setLeaderboard] = useState<DBPlayerRewards[]>([]);
+  const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
+  
+  // Standings state
+  const [standings, setStandings] = useState<TeamStats[]>([]);
+  const [isLoadingStandings, setIsLoadingStandings] = useState(false);
+  
+  // Promotions state
+  const [leagues, setLeagues] = useState<DBLeague[]>([]);
+  const [qualifiedUsers, setQualifiedUsers] = useState<Array<DBUserLevel & { user?: DBUser; display_name?: string; team_id?: string; current_league_name?: string }>>([]);
+  const [leagueSummary, setLeagueSummary] = useState<{ leagueId: string; name: string; level: number; playerCount: number; color: string }[]>([]);
+  const [isLoadingPromotions, setIsLoadingPromotions] = useState(false);
+  const [promotionFilter, setPromotionFilter] = useState<string>('all');
   
   // Scouting data (harvested from user uploads)
   interface ScoutingIntel {
@@ -193,6 +248,27 @@ export default function AdminPage() {
   useEffect(() => {
     loadUsers();
   }, []);
+
+  // Auto-select league when approve modal opens with approval code
+  useEffect(() => {
+    if (approveModal) {
+      // Check if approval code maps to a specific league
+      if (approveModal.approval_code) {
+        const mapping = getLeagueFromApprovalCode(approveModal.approval_code);
+        if (mapping) {
+          setSelectedStartingLeague(mapping.leagueId);
+          return;
+        }
+      }
+      // Check if target_league_id is already set
+      if (approveModal.target_league_id) {
+        setSelectedStartingLeague(approveModal.target_league_id);
+        return;
+      }
+      // Default to majors
+      setSelectedStartingLeague('majors');
+    }
+  }, [approveModal]);
 
   // Load Zapier webhook URL
   useEffect(() => {
@@ -259,6 +335,112 @@ export default function AdminPage() {
     };
     loadSupabaseReports();
   }, []);
+  
+  // Load activity data when period changes
+  useEffect(() => {
+    const loadActivityData = async () => {
+      setIsLoadingActivity(true);
+      try {
+        const now = new Date();
+        let startDate: string;
+        
+        if (activityPeriod === 'week') {
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          startDate = weekAgo.toISOString();
+        } else if (activityPeriod === 'month') {
+          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          startDate = monthAgo.toISOString();
+        } else {
+          // All time - start from year ago
+          const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+          startDate = yearAgo.toISOString();
+        }
+        
+        const summary = await getActivitySummary(startDate, now.toISOString());
+        setActivitySummary(summary);
+      } catch (err) {
+        console.error('Error loading activity data:', err);
+      }
+      setIsLoadingActivity(false);
+    };
+    
+    if (adminTab === 'activity') {
+      loadActivityData();
+    }
+  }, [adminTab, activityPeriod]);
+  
+  // Load leaderboard data
+  useEffect(() => {
+    const loadLeaderboardData = async () => {
+      setIsLoadingLeaderboard(true);
+      try {
+        const data = await getLeaderboard(30); // Top 30
+        setLeaderboard(data);
+      } catch (err) {
+        console.error('Error loading leaderboard:', err);
+      }
+      setIsLoadingLeaderboard(false);
+    };
+    
+    if (adminTab === 'rewards') {
+      loadLeaderboardData();
+    }
+  }, [adminTab]);
+  
+  // Load standings data
+  useEffect(() => {
+    const loadStandingsData = async () => {
+      setIsLoadingStandings(true);
+      try {
+        const data = await getLeagueStandings();
+        setStandings(data);
+      } catch (err) {
+        console.error('Error loading standings:', err);
+      }
+      setIsLoadingStandings(false);
+    };
+    
+    if (adminTab === 'standings') {
+      loadStandingsData();
+    }
+  }, [adminTab]);
+  
+  // Load promotions data when tab is selected
+  useEffect(() => {
+    const loadPromotionsData = async () => {
+      setIsLoadingPromotions(true);
+      try {
+        const [leaguesData, qualifiedData, summaryData] = await Promise.all([
+          getLeagues(),
+          getQualifiedForPromotion(),
+          getLeagueSummary(),
+        ]);
+        
+        // Enrich qualified users with user data
+        const enrichedQualified = qualifiedData.map(ul => ({
+          ...ul,
+          user: users.find(u => u.id === ul.user_id)
+        }));
+        
+        setLeagues(leaguesData);
+        setQualifiedUsers(enrichedQualified);
+        setLeagueSummary(summaryData);
+      } catch (err) {
+        console.error('Failed to load promotions data:', err);
+      } finally {
+        setIsLoadingPromotions(false);
+      }
+    };
+    
+    if (adminTab === 'promotions') {
+      loadPromotionsData();
+    }
+  }, [adminTab, users]);
+  
+  // Helper to get league summary data by ID
+  const getLeagueSummaryById = (leagueId: string) => {
+    return leagueSummary.find(s => s.leagueId === leagueId);
+  };
   
   const getScoutingTeamName = (teamId: string) => {
     const team = MLB_TEAMS.find(t => t.id === teamId);
@@ -532,10 +714,13 @@ export default function AdminPage() {
     if (!approveModal) return;
     setActionLoading(true);
     
+    // Use the password they set during registration, or generate one if missing
+    const userPassword = approveModal.password || Math.random().toString(36).slice(-8);
+    
     // Create the user
     const createResult = await createUser({
       username: approveModal.username,
-      password: Math.random().toString(36).slice(-8), // Generate random password
+      password: userPassword,
       displayName: approveModal.display_name,
       teamId: approveModal.requested_team_id,
       isAdmin: false,
@@ -550,6 +735,11 @@ export default function AdminPage() {
       return;
     }
     
+    // Initialize user at selected league level with wallet
+    if (createResult.user?.id) {
+      await initializeNewMember(createResult.user.id, selectedStartingLeague);
+    }
+    
     // Update registration status
     await updateRegistrationRequest(approveModal.id, {
       status: 'approved',
@@ -557,9 +747,32 @@ export default function AdminPage() {
       reviewed_by: user?.id,
     });
     
+    // Update team status to occupied
+    await updateTeamStatus(approveModal.requested_team_id, {
+      status: 'occupied' as TeamStatus,
+      occupied_by: createResult.user?.id,
+      notes: `Assigned to ${approveModal.display_name} on ${new Date().toLocaleDateString()}`,
+    });
+    
+    // Get team and league names for success message
+    const teamName = MLB_TEAMS.find(t => t.id === approveModal.requested_team_id)?.name || approveModal.requested_team_id;
+    const selectedLeague = leagues.find(l => l.id === selectedStartingLeague);
+    const usedOwnPassword = !!approveModal.password;
+    
+    // Show success modal with credentials
+    setApprovalSuccess({
+      username: approveModal.username,
+      password: usedOwnPassword ? '(User set their own password)' : userPassword,
+      email: approveModal.email,
+      teamName,
+      leagueName: selectedLeague?.name || 'Majors',
+      usedOwnPassword,
+    });
+    
     // Refresh data
     setRegistrationQueue(await getRegistrationQueue());
     setUsers(await getAllUsers());
+    setTeamStatuses(await getTeamStatuses());
     setApproveModal(null);
     setActionLoading(false);
   };
@@ -634,6 +847,66 @@ export default function AdminPage() {
     setShowPasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
+  // Handle user promotion
+  const handlePromoteUser = async (userId: string, currentLeagueId: string) => {
+    setActionLoading(true);
+    try {
+      // Find the next league up (lower level number = higher rank)
+      const currentLeague = leagues.find(l => l.id === currentLeagueId);
+      if (!currentLeague) throw new Error('Current league not found');
+      
+      const nextLeague = leagues.find(l => l.level === currentLeague.level - 1);
+      if (!nextLeague) throw new Error('No higher league available');
+      
+      const result = await promoteUser(userId, nextLeague.id);
+      if (result.success) {
+        // Reload promotions data
+        const [qualifiedData, summaryData] = await Promise.all([
+          getQualifiedForPromotion(),
+          getLeagueSummary(),
+        ]);
+        const enrichedQualified = qualifiedData.map(ul => ({
+          ...ul,
+          user: users.find(u => u.id === ul.user_id)
+        }));
+        setQualifiedUsers(enrichedQualified);
+        setLeagueSummary(summaryData);
+      } else {
+        setError(result.error || 'Failed to promote user');
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to promote user');
+    }
+    setActionLoading(false);
+  };
+  
+  // Handle user demotion
+  const handleDemoteUser = async (userId: string, currentLeagueId: string) => {
+    const reason = prompt('Enter reason for demotion (optional):') || undefined;
+    if (!confirm('Are you sure you want to demote this player? This will also deduct tokens.')) return;
+    
+    setActionLoading(true);
+    try {
+      // Find the next league down (higher level number = lower rank)
+      const currentLeague = leagues.find(l => l.id === currentLeagueId);
+      if (!currentLeague) throw new Error('Current league not found');
+      
+      const nextLeague = leagues.find(l => l.level === currentLeague.level + 1);
+      if (!nextLeague) throw new Error('No lower league available');
+      
+      const result = await demoteUser(userId, nextLeague.id, user?.id || 'admin', reason);
+      if (result.success) {
+        // Reload users list
+        loadUsers();
+      } else {
+        setError(result.error || 'Failed to demote user');
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to demote user');
+    }
+    setActionLoading(false);
+  };
+
   const copyToClipboard = (text: string, userId: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(userId);
@@ -661,10 +934,18 @@ export default function AdminPage() {
       showDocuments: true,
       showFreeAgents: true,
       showStandings: true,
+      showAnnouncements: true,
+      showComingSoon: true,
+      showQuickLinks: true,
       showInjuredList: true,
       showGameRecap: true,
       showDraftBoard: true,
       showPlayersAcademy: true,
+      // Token Economy - enable all
+      showTokenEconomy: true,
+      showLeagueHierarchy: true,
+      showRewards: true,
+      showGameLogger: true,
     };
     setFeatureFlagsState(allEnabled);
     setFeatureFlags(allEnabled);
@@ -679,10 +960,18 @@ export default function AdminPage() {
       showDocuments: false,
       showFreeAgents: false,
       showStandings: false,
+      showAnnouncements: false,
+      showComingSoon: false,
+      showQuickLinks: false,
       showInjuredList: true,
       showGameRecap: true,
-      showDraftBoard: false,
+      showDraftBoard: true,
       showPlayersAcademy: true,
+      // Token Economy - keep hidden in "tools only" mode
+      showTokenEconomy: false,
+      showLeagueHierarchy: false,
+      showRewards: false,
+      showGameLogger: false,
     };
     setFeatureFlagsState(toolsOnly);
     setFeatureFlags(toolsOnly);
@@ -850,6 +1139,33 @@ export default function AdminPage() {
             Welcome
           </button>
           <button
+            onClick={() => setAdminTab('activity')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'activity' ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            Activity
+          </button>
+          <button
+            onClick={() => setAdminTab('rewards')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'rewards' ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <Trophy className="w-4 h-4" />
+            Rewards
+          </button>
+          <button
+            onClick={() => setAdminTab('standings')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'standings' ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            Standings
+          </button>
+          <button
             onClick={() => setAdminTab('intel')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               adminTab === 'intel' ? 'bg-amber-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
@@ -857,6 +1173,20 @@ export default function AdminPage() {
           >
             <Target className="w-4 h-4" />
             Intel
+          </button>
+          <button
+            onClick={() => setAdminTab('promotions')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'promotions' ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            Promotions
+            {qualifiedUsers.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-emerald-600 rounded-full">
+                {qualifiedUsers.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setAdminTab('settings')}
@@ -1352,6 +1682,14 @@ export default function AdminPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Info banner */}
+              <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <p className="text-sm text-blue-400">
+                  <strong>💡 About the Welcome Packet:</strong> This template is shown to new members during onboarding. 
+                  The "Copy Welcome Message" button in the approval modal generates a personalized message with login credentials.
+                </p>
+              </div>
+
               {editWelcomePacket ? (
                 <div className="space-y-4">
                   <div>
@@ -1365,15 +1703,35 @@ export default function AdminPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-slate-400 mb-1">Welcome Message</label>
+                    <label className="block text-sm text-slate-400 mb-1">Welcome Message (shown in onboarding)</label>
                     <textarea
                       value={welcomePacketForm.welcome_message}
                       onChange={(e) => setWelcomePacketForm(prev => ({ ...prev, welcome_message: e.target.value }))}
-                      className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white h-48"
+                      className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white h-64 font-mono text-sm"
                       placeholder="Use {{name}} and {{team}} as placeholders..."
                     />
-                    <p className="text-xs text-slate-500 mt-1">Use {'{{name}}'} and {'{{team}}'} as placeholders</p>
+                    <div className="flex items-center gap-4 mt-2">
+                      <p className="text-xs text-slate-500">
+                        <strong>Variables:</strong> {'{{name}}'} = Player name, {'{{team}}'} = Team name
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        <strong>Tip:</strong> Use emojis and line breaks for better readability
+                      </p>
+                    </div>
                   </div>
+                  
+                  {/* Preview Section */}
+                  <div className="p-4 bg-slate-900/50 border border-slate-600 rounded-lg">
+                    <p className="text-xs text-slate-400 mb-2 font-medium">📋 PREVIEW (Sample Data)</p>
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg max-h-48 overflow-y-auto">
+                      <pre className="text-sm text-slate-300 whitespace-pre-wrap font-sans">
+                        {welcomePacketForm.welcome_message
+                          .replace(/\{\{name\}\}/g, 'John Doe')
+                          .replace(/\{\{team\}\}/g, 'New York Yankees')}
+                      </pre>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm text-slate-400 mb-1">Discord Link</label>
@@ -1429,7 +1787,7 @@ export default function AdminPage() {
                 <div className="space-y-4">
                   <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
                     <h3 className="font-bold text-emerald-400 mb-2">{welcomePacket.title}</h3>
-                    <pre className="text-sm text-slate-300 whitespace-pre-wrap font-sans">
+                    <pre className="text-sm text-slate-300 whitespace-pre-wrap font-sans max-h-64 overflow-y-auto">
                       {welcomePacket.welcome_message}
                     </pre>
                   </div>
@@ -1463,6 +1821,9 @@ export default function AdminPage() {
                       </a>
                     )}
                   </div>
+                  <p className="text-xs text-slate-500 text-center">
+                    Links above will be included in the welcome message sent to new members
+                  </p>
                 </div>
               ) : (
                 <div className="text-center py-12 text-slate-400">
@@ -1473,6 +1834,224 @@ export default function AdminPage() {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {/* ======================= PROMOTIONS TAB ======================= */}
+        {adminTab === 'promotions' && (
+          <>
+            {/* League Overview Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+              {leagues.sort((a, b) => a.level - b.level).map(league => {
+                const summary = getLeagueSummaryById(league.id);
+                const qualifiedInLeague = qualifiedUsers.filter(u => u.current_league_id === league.id).length;
+                return (
+                  <Card key={league.id} className="bg-slate-800/50 border-slate-700">
+                    <CardContent className="p-4 text-center">
+                      <div 
+                        className="w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center"
+                        style={{ backgroundColor: league.color + '20' }}
+                      >
+                        <Trophy className="w-5 h-5" style={{ color: league.color }} />
+                      </div>
+                      <h3 className="font-semibold text-white">{league.name}</h3>
+                      <p className="text-xs text-slate-400">Level {league.level}</p>
+                      <div className="mt-2 text-sm">
+                        <span className="text-slate-300">
+                          {summary?.playerCount || 0} players
+                        </span>
+                        {qualifiedInLeague > 0 && (
+                          <Badge variant="default" className="ml-2 bg-emerald-600 text-xs">
+                            {qualifiedInLeague} ready
+                          </Badge>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {/* Qualified for Promotion */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-emerald-400" />
+                    Qualified for Promotion
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={promotionFilter}
+                      onChange={(e) => setPromotionFilter(e.target.value)}
+                      className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white"
+                    >
+                      <option value="all">All Leagues</option>
+                      {leagues.sort((a, b) => a.level - b.level).map(league => (
+                        <option key={league.id} value={league.id}>{league.name}</option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        setIsLoadingPromotions(true);
+                        const [qualifiedData, summaryData] = await Promise.all([
+                          getQualifiedForPromotion(),
+                          getLeagueSummary(),
+                        ]);
+                        const enrichedQualified = qualifiedData.map(ul => ({
+                          ...ul,
+                          user: users.find(u => u.id === ul.user_id)
+                        }));
+                        setQualifiedUsers(enrichedQualified);
+                        setLeagueSummary(summaryData);
+                        setIsLoadingPromotions(false);
+                      }}
+                      className="border-slate-600"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isLoadingPromotions ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {isLoadingPromotions ? (
+                  <div className="text-center py-8">
+                    <RefreshCw className="w-8 h-8 animate-spin mx-auto text-emerald-400 mb-2" />
+                    <p className="text-slate-400">Loading promotion data...</p>
+                  </div>
+                ) : qualifiedUsers.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500">
+                    <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                    <p>No players currently qualified for promotion</p>
+                    <p className="text-sm mt-1">Players must meet all qualification metrics to appear here</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {qualifiedUsers
+                      .filter(ul => promotionFilter === 'all' || ul.current_league_id === promotionFilter)
+                      .map(userLevel => {
+                        const currentLeague = leagues.find(l => l.id === userLevel.current_league_id);
+                        const nextLeague = leagues.find(l => l.level === (currentLeague?.level || 5) - 1);
+                        const user = userLevel.user;
+                        const teamId = userLevel.team_id || user?.team_id;
+                        const team = teamId ? MLB_TEAMS.find(t => t.id === teamId) : null;
+                        
+                        return (
+                          <div 
+                            key={userLevel.id} 
+                            className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg border border-slate-600"
+                          >
+                            <div className="flex items-center gap-4">
+                              <div 
+                                className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold"
+                                style={{ 
+                                  backgroundColor: currentLeague?.color + '20',
+                                  color: currentLeague?.color 
+                                }}
+                              >
+                                {currentLeague?.level || '?'}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-white">
+                                    {userLevel.display_name || user?.username || 'Unknown User'}
+                                  </span>
+                                  {team && (
+                                    <Badge variant="outline" className="text-xs border-slate-500 text-slate-300">
+                                      {team.name}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-slate-400">
+                                  <span style={{ color: currentLeague?.color }}>
+                                    {userLevel.current_league_name || currentLeague?.name}
+                                  </span>
+                                  <span>→</span>
+                                  <span className="text-emerald-400 font-medium">
+                                    {nextLeague?.name || 'Majors'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                                  <span>{userLevel.games_at_current_level} games</span>
+                                  <span>{Math.round((userLevel.wins_at_current_level / Math.max(userLevel.games_at_current_level, 1)) * 100)}% win rate</span>
+                                  <span>{Math.round(userLevel.qualification_percent)}% qualified</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="default" className="bg-emerald-600">
+                                {Math.round(userLevel.qualification_percent)}% Qualified
+                              </Badge>
+                              {nextLeague && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handlePromoteUser(userLevel.user_id, userLevel.current_league_id)}
+                                  disabled={actionLoading}
+                                  className="bg-emerald-600 hover:bg-emerald-700"
+                                >
+                                  <TrendingUp className="w-4 h-4 mr-1" />
+                                  Promote
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* All Players by League */}
+            <Card className="bg-slate-800/50 border-slate-700 mt-6">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-blue-400" />
+                  All Players by League Level
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {leagues.sort((a, b) => a.level - b.level).map(league => {
+                    const summary = getLeagueSummaryById(league.id);
+                    
+                    return (
+                      <div key={league.id}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div 
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: league.color }}
+                          />
+                          <h4 className="font-semibold text-white">{league.name}</h4>
+                          <span className="text-sm text-slate-400">
+                            ({summary?.playerCount || 0} players)
+                          </span>
+                          {league.manager_name && (
+                            <Badge variant="outline" className="text-xs border-slate-500 text-slate-300">
+                              Director: {league.manager_name}
+                            </Badge>
+                          )}
+                        </div>
+                        {(summary?.playerCount || 0) === 0 ? (
+                          <p className="text-sm text-slate-500 ml-5">No players in this league yet</p>
+                        ) : (
+                          <div className="ml-5">
+                            <p className="text-sm text-slate-400">
+                              {summary?.playerCount} active players • Monthly salary: {league.monthly_salary} tokens
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Perks: {league.perks?.join(', ') || 'None'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </>
         )}
 
         {/* ======================= SETTINGS TAB ======================= */}
@@ -1659,6 +2238,47 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* Token Economy Features - HIDDEN UNTIL ROLLOUT */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                🪙 Token Economy (Coming Soon)
+              </h3>
+              <p className="text-xs text-slate-400 mb-3">
+                These features are being built in the background. Toggle them ON when you're ready to reveal them to the league.
+              </p>
+              <div className="grid gap-3">
+                {(Object.keys(FEATURE_LABELS) as Array<keyof FeatureFlags>)
+                  .filter(key => FEATURE_LABELS[key].category === 'Token Economy')
+                  .map(key => (
+                    <button
+                      key={key}
+                      onClick={() => handleToggleFeature(key)}
+                      className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                        featureFlags[key]
+                          ? 'bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20'
+                          : 'bg-slate-700/30 border-slate-600 hover:bg-slate-700/50'
+                      }`}
+                    >
+                      <div className="flex-1 text-left">
+                        <p className={`font-medium ${featureFlags[key] ? 'text-amber-400' : 'text-slate-300'}`}>
+                          {FEATURE_LABELS[key].name}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {FEATURE_LABELS[key].description}
+                        </p>
+                      </div>
+                      <div className="ml-4">
+                        {featureFlags[key] ? (
+                          <ToggleRight className="w-8 h-8 text-amber-400" />
+                        ) : (
+                          <ToggleLeft className="w-8 h-8 text-slate-500" />
+                        )}
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            </div>
+
             <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
               <p className="text-sm text-amber-400">
                 <strong>Note:</strong> As the commissioner, you'll always see all features regardless of these settings.
@@ -1668,6 +2288,614 @@ export default function AdminPage() {
           </CardContent>
         </Card>
           </>
+        )}
+
+        {/* ======================= ACTIVITY TAB ======================= */}
+        {adminTab === 'activity' && (
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-cyan-400" />
+                  Activity Monitor
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={activityPeriod}
+                    onChange={(e) => setActivityPeriod(e.target.value as 'week' | 'month' | 'all')}
+                    className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="all">All Time</option>
+                  </select>
+                </div>
+              </div>
+              <p className="text-slate-400 text-sm mt-1">
+                Track player activity and identify inactive members. Minimum: {minGamesRequired} games per week.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {isLoadingActivity ? (
+                <div className="text-center py-8 text-slate-400">Loading activity data...</div>
+              ) : Object.keys(activitySummary).length === 0 ? (
+                <div className="text-center py-12">
+                  <BarChart3 className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                  <p className="text-slate-400">No activity data yet</p>
+                  <p className="text-slate-500 text-sm mt-2">
+                    Activity will be tracked when members create game recaps or upload analyses.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Activity Summary Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+                    <div className="bg-slate-700/50 rounded-lg p-4">
+                      <p className="text-2xl font-bold text-green-400">
+                        {users.filter(u => {
+                          const summary = activitySummary[u.id];
+                          return summary && summary.gamesPlayed >= minGamesRequired;
+                        }).length}
+                      </p>
+                      <p className="text-xs text-slate-400">Active Players</p>
+                    </div>
+                    <div className="bg-slate-700/50 rounded-lg p-4">
+                      <p className="text-2xl font-bold text-red-400">
+                        {users.filter(u => {
+                          const summary = activitySummary[u.id];
+                          return !summary || summary.gamesPlayed < minGamesRequired;
+                        }).length}
+                      </p>
+                      <p className="text-xs text-slate-400">Inactive Players</p>
+                    </div>
+                    <div className="bg-slate-700/50 rounded-lg p-4">
+                      <p className="text-2xl font-bold text-blue-400">
+                        {Object.values(activitySummary).reduce((sum, s) => sum + s.gamesPlayed, 0)}
+                      </p>
+                      <p className="text-xs text-slate-400">Total Games</p>
+                    </div>
+                    <div className="bg-slate-700/50 rounded-lg p-4">
+                      <p className="text-2xl font-bold text-emerald-400">
+                        {Object.values(activitySummary).reduce((sum, s) => sum + (s.wins || 0), 0)}
+                      </p>
+                      <p className="text-xs text-slate-400">Total Wins</p>
+                    </div>
+                    <div className="bg-slate-700/50 rounded-lg p-4">
+                      <p className="text-2xl font-bold text-amber-400">
+                        {(() => {
+                          const totalGames = Object.values(activitySummary).reduce((sum, s) => sum + s.gamesPlayed, 0);
+                          const totalWins = Object.values(activitySummary).reduce((sum, s) => sum + (s.wins || 0), 0);
+                          return totalGames > 0 ? Math.round((totalWins / totalGames) * 100) + '%' : '0%';
+                        })()}
+                      </p>
+                      <p className="text-xs text-slate-400">Avg Win Rate</p>
+                    </div>
+                    <div className="bg-slate-700/50 rounded-lg p-4">
+                      <p className="text-2xl font-bold text-purple-400">
+                        {Object.values(activitySummary).reduce((sum, s) => sum + s.recapsCreated, 0)}
+                      </p>
+                      <p className="text-xs text-slate-400">Recaps Created</p>
+                    </div>
+                  </div>
+
+                  {/* Player of the Week & Hot/Cold Section */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    {/* Player of the Week */}
+                    {(() => {
+                      const sortedByActivity = Object.entries(activitySummary)
+                        .map(([userId, summary]) => ({
+                          userId,
+                          totalActivity: summary.gamesPlayed + summary.recapsCreated + summary.analysisUploads,
+                          ...summary,
+                        }))
+                        .sort((a, b) => b.totalActivity - a.totalActivity);
+                      
+                      const topPlayer = sortedByActivity[0];
+                      const topUser = topPlayer ? users.find(u => u.id === topPlayer.userId) : null;
+                      const topTeam = topUser ? MLB_TEAMS.find(t => t.id === topUser.team_id) : null;
+                      
+                      return (
+                        <div className="p-4 bg-gradient-to-br from-yellow-500/20 to-amber-500/10 border border-yellow-500/30 rounded-xl">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Trophy className="w-5 h-5 text-yellow-400" />
+                            <span className="font-medium text-yellow-400">Player of the Week</span>
+                          </div>
+                          {topUser ? (
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-xl bg-yellow-500/20 flex items-center justify-center">
+                                <span className="text-2xl">👑</span>
+                              </div>
+                              <div>
+                                <p className="font-bold text-white text-lg">{topUser.display_name}</p>
+                                <p className="text-sm text-yellow-400/80">{topTeam?.name || 'Unknown Team'}</p>
+                                <p className="text-xs text-slate-400">
+                                  {topPlayer.gamesPlayed} games • {topPlayer.wins || 0}-{topPlayer.losses || 0} ({topPlayer.winRate || 0}%)
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-slate-400 text-sm">No activity yet</p>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Hot Players */}
+                    {(() => {
+                      const hotPlayers = Object.entries(activitySummary)
+                        .filter(([, summary]) => summary.gamesPlayed >= minGamesRequired)
+                        .map(([userId, summary]) => ({
+                          userId,
+                          user: users.find(u => u.id === userId),
+                          totalActivity: summary.gamesPlayed + summary.recapsCreated,
+                        }))
+                        .sort((a, b) => b.totalActivity - a.totalActivity)
+                        .slice(0, 3);
+                      
+                      return (
+                        <div className="p-4 bg-gradient-to-br from-orange-500/20 to-red-500/10 border border-orange-500/30 rounded-xl">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Flame className="w-5 h-5 text-orange-400" />
+                            <span className="font-medium text-orange-400">Hot Streak 🔥</span>
+                          </div>
+                          {hotPlayers.length > 0 ? (
+                            <div className="space-y-2">
+                              {hotPlayers.map((player, i) => {
+                                const team = MLB_TEAMS.find(t => t.id === player.user?.team_id);
+                                return (
+                                  <div key={player.userId} className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
+                                      <span className="text-xs font-mono text-amber-400">{team?.abbreviation || '???'}</span>
+                                      <span className="text-sm text-white">{player.user?.display_name || 'Unknown'}</span>
+                                    </div>
+                                    <Badge variant="outline" className="text-xs border-orange-500/50 text-orange-400">
+                                      {player.totalActivity} pts
+                                    </Badge>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-slate-400 text-sm">No hot players yet</p>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Cold Players */}
+                    {(() => {
+                      const coldPlayers = users
+                        .filter(u => !u.is_admin)
+                        .map(u => ({
+                          user: u,
+                          summary: activitySummary[u.id],
+                          gamesPlayed: activitySummary[u.id]?.gamesPlayed || 0,
+                        }))
+                        .filter(p => p.gamesPlayed < minGamesRequired)
+                        .sort((a, b) => a.gamesPlayed - b.gamesPlayed)
+                        .slice(0, 3);
+                      
+                      return (
+                        <div className="p-4 bg-gradient-to-br from-blue-500/20 to-cyan-500/10 border border-blue-500/30 rounded-xl">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Star className="w-5 h-5 text-blue-400" />
+                            <span className="font-medium text-blue-400">Needs Attention ❄️</span>
+                          </div>
+                          {coldPlayers.length > 0 ? (
+                            <div className="space-y-2">
+                              {coldPlayers.map(player => {
+                                const team = MLB_TEAMS.find(t => t.id === player.user.team_id);
+                                return (
+                                  <div key={player.user.id} className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-mono text-amber-400">{team?.abbreviation || '???'}</span>
+                                      <span className="text-sm text-white">{player.user.display_name}</span>
+                                    </div>
+                                    <Badge variant="outline" className="text-xs border-blue-500/50 text-blue-400">
+                                      {player.gamesPlayed} games
+                                    </Badge>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-slate-400 text-sm">Everyone is active! 🎉</p>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Inactive Players Alert */}
+                  {(() => {
+                    const inactivePlayers = users.filter(u => {
+                      const summary = activitySummary[u.id];
+                      return !summary || summary.gamesPlayed < minGamesRequired;
+                    });
+                    
+                    if (inactivePlayers.length > 0) {
+                      return (
+                        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+                          <div className="flex items-center gap-2 mb-3">
+                            <AlertTriangle className="w-5 h-5 text-red-400" />
+                            <span className="font-medium text-red-400">
+                              {inactivePlayers.length} Inactive Player{inactivePlayers.length > 1 ? 's' : ''} Detected
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                            {inactivePlayers.map(player => {
+                              const team = MLB_TEAMS.find(t => t.id === player.team_id);
+                              const summary = activitySummary[player.id];
+                              return (
+                                <div
+                                  key={player.id}
+                                  className="flex items-center justify-between px-3 py-2 bg-slate-800 rounded-lg"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-mono text-amber-400">
+                                      {team?.abbreviation || '???'}
+                                    </span>
+                                    <span className="text-sm text-white truncate max-w-[100px]">
+                                      {player.display_name}
+                                    </span>
+                                  </div>
+                                  <Badge variant="outline" className="text-xs border-red-500/50 text-red-400">
+                                    {summary?.gamesPlayed || 0} games
+                                  </Badge>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {/* Full Activity Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-600">
+                          <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Player</th>
+                          <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Team</th>
+                          <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">Games</th>
+                          <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">Record</th>
+                          <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">Win %</th>
+                          <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">Recaps</th>
+                          <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Last Active</th>
+                          <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users
+                          .filter(u => !u.is_admin)
+                          .sort((a, b) => {
+                            const aSummary = activitySummary[a.id];
+                            const bSummary = activitySummary[b.id];
+                            const aGames = aSummary?.gamesPlayed || 0;
+                            const bGames = bSummary?.gamesPlayed || 0;
+                            return bGames - aGames; // Sort by most active first
+                          })
+                          .map(player => {
+                            const team = MLB_TEAMS.find(t => t.id === player.team_id);
+                            const summary = activitySummary[player.id];
+                            const isActive = summary && summary.gamesPlayed >= minGamesRequired;
+                            
+                            return (
+                              <tr key={player.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-white font-medium">{player.display_name}</span>
+                                    <span className="text-xs text-slate-500">@{player.username}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className="text-sm text-slate-300">{team?.name || 'Unknown'}</span>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <span className={`font-medium ${isActive ? 'text-green-400' : 'text-red-400'}`}>
+                                    {summary?.gamesPlayed || 0}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <span className="text-emerald-400">{summary?.wins || 0}</span>
+                                  <span className="text-slate-500">-</span>
+                                  <span className="text-red-400">{summary?.losses || 0}</span>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <span className={`font-medium ${(summary?.winRate || 0) >= 50 ? 'text-green-400' : 'text-amber-400'}`}>
+                                    {summary?.winRate || 0}%
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <span className="text-blue-400">{summary?.recapsCreated || 0}</span>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className="text-sm text-slate-400">
+                                    {summary?.lastActive 
+                                      ? new Date(summary.lastActive).toLocaleDateString()
+                                      : 'Never'
+                                    }
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  {isActive ? (
+                                    <Badge variant="default" className="bg-green-500/20 text-green-400 border-green-500/30">
+                                      Active
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="border-red-500/50 text-red-400">
+                                      Inactive
+                                    </Badge>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ======================= REWARDS TAB ======================= */}
+        {adminTab === 'rewards' && (
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-yellow-400" />
+                Rewards & Leaderboard
+              </CardTitle>
+              <p className="text-slate-400 text-sm mt-1">
+                Track player achievements, badges, and rankings.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {isLoadingLeaderboard ? (
+                <div className="text-center py-8 text-slate-400">Loading leaderboard...</div>
+              ) : leaderboard.length === 0 ? (
+                <div className="text-center py-12">
+                  <Trophy className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                  <p className="text-slate-400">No rewards data yet</p>
+                  <p className="text-slate-500 text-sm mt-2">
+                    Players earn points by creating recaps and uploading analyses.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Badge Legend */}
+                  <div className="mb-6 p-4 bg-slate-700/30 rounded-xl">
+                    <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+                      <Award className="w-4 h-4 text-purple-400" />
+                      Available Badges
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                      {BADGES.map(badge => (
+                        <div
+                          key={badge.id}
+                          className="flex items-center gap-2 p-2 bg-slate-800 rounded-lg"
+                          title={badge.description}
+                        >
+                          <span className="text-lg">{badge.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-white truncate">{badge.name}</p>
+                            <p className="text-[10px] text-slate-500">+{badge.points_value} pts</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Leaderboard */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-600">
+                          <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase w-12">#</th>
+                          <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Player</th>
+                          <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">Points</th>
+                          <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">Streak</th>
+                          <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">Games</th>
+                          <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">Recaps</th>
+                          <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Badges</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaderboard.map((player, index) => {
+                          const playerUser = users.find(u => u.id === player.user_id);
+                          const team = MLB_TEAMS.find(t => t.id === playerUser?.team_id);
+                          const playerBadges = BADGES.filter(b => player.badges?.includes(b.id));
+                          
+                          return (
+                            <tr key={player.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                              <td className="py-3 px-4 text-center">
+                                {index === 0 ? (
+                                  <span className="text-2xl">🥇</span>
+                                ) : index === 1 ? (
+                                  <span className="text-2xl">🥈</span>
+                                ) : index === 2 ? (
+                                  <span className="text-2xl">🥉</span>
+                                ) : (
+                                  <span className="text-slate-400 font-medium">{index + 1}</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono text-amber-400">
+                                    {team?.abbreviation || '???'}
+                                  </span>
+                                  <span className="text-white font-medium">
+                                    {playerUser?.display_name || 'Unknown'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className="font-bold text-yellow-400">{player.total_points}</span>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Flame className="w-3 h-3 text-orange-400" />
+                                  <span className="text-orange-400">{player.current_streak}</span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className="text-blue-400">{player.games_played}</span>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className="text-purple-400">{player.recaps_created}</span>
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {playerBadges.slice(0, 5).map(badge => (
+                                    <span
+                                      key={badge.id}
+                                      title={`${badge.name}: ${badge.description}`}
+                                      className="text-sm cursor-help"
+                                    >
+                                      {badge.icon}
+                                    </span>
+                                  ))}
+                                  {playerBadges.length > 5 && (
+                                    <span className="text-xs text-slate-400">+{playerBadges.length - 5}</span>
+                                  )}
+                                  {playerBadges.length === 0 && (
+                                    <span className="text-xs text-slate-500">No badges yet</span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ======================= STANDINGS TAB ======================= */}
+        {adminTab === 'standings' && (
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-emerald-400" />
+                League Standings
+              </CardTitle>
+              <p className="text-slate-400 text-sm mt-1">
+                Win/loss records from game recaps. Stats update automatically when recaps are created.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {isLoadingStandings ? (
+                <div className="text-center py-8 text-slate-400">Loading standings...</div>
+              ) : standings.length === 0 ? (
+                <div className="text-center py-12">
+                  <TrendingUp className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                  <p className="text-slate-400">No game data yet</p>
+                  <p className="text-slate-500 text-sm mt-2">
+                    Standings will populate as members create game recaps.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-600">
+                        <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase w-12">#</th>
+                        <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">Team</th>
+                        <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">W</th>
+                        <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">L</th>
+                        <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">PCT</th>
+                        <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">RS</th>
+                        <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">RA</th>
+                        <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">DIFF</th>
+                        <th className="text-center py-3 px-4 text-xs font-medium text-slate-400 uppercase">STRK</th>
+                        <th className="text-left py-3 px-4 text-xs font-medium text-slate-400 uppercase">L10</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {standings.map((team, index) => {
+                        const teamInfo = MLB_TEAMS.find(t => t.id === team.teamId);
+                        const pct = team.wins + team.losses > 0 
+                          ? (team.wins / (team.wins + team.losses)).toFixed(3).replace('0.', '.')
+                          : '.000';
+                        const diff = team.runsScored - team.runsAllowed;
+                        const l10 = team.lastGames.slice(0, 10);
+                        const l10Wins = l10.filter(g => g.result === 'W').length;
+                        const l10Losses = l10.filter(g => g.result === 'L').length;
+                        
+                        return (
+                          <tr key={team.teamId} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                            <td className="py-3 px-4 text-center">
+                              <span className="text-slate-400 font-medium">{index + 1}</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono text-amber-400">
+                                  {teamInfo?.abbreviation || team.teamId.toUpperCase()}
+                                </span>
+                                <span className="text-white font-medium">
+                                  {teamInfo?.name || team.teamId}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="font-medium text-green-400">{team.wins}</span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="font-medium text-red-400">{team.losses}</span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="font-mono text-white">{pct}</span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="text-blue-400">{team.runsScored}</span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="text-orange-400">{team.runsAllowed}</span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-slate-400'}>
+                                {diff > 0 ? '+' : ''}{diff}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              {team.currentStreak > 0 ? (
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${
+                                    team.streakType === 'W' 
+                                      ? 'border-green-500/50 text-green-400' 
+                                      : 'border-red-500/50 text-red-400'
+                                  }`}
+                                >
+                                  {team.streakType}{team.currentStreak}
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-500">-</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="text-sm text-slate-300">
+                                {l10.length > 0 ? `${l10Wins}-${l10Losses}` : '-'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {/* ======================= INTEL TAB ======================= */}
@@ -2192,16 +3420,65 @@ export default function AdminPage() {
                 <p className="text-sm text-slate-400 mt-2">
                   Will be assigned: <span className="text-blue-400">{getTeamName(approveModal.requested_team_id)}</span>
                 </p>
+                {approveModal.approval_code && (
+                  <p className="text-xs text-purple-400 mt-1">
+                    Approval code: <code className="bg-slate-700 px-1 rounded">{approveModal.approval_code}</code>
+                    {(() => {
+                      const mapping = getLeagueFromApprovalCode(approveModal.approval_code);
+                      return mapping ? ` → ${mapping.leagueName}` : '';
+                    })()}
+                  </p>
+                )}
               </div>
+
+              {/* Password Status */}
+              {approveModal.password ? (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                  <p className="text-sm text-emerald-400">
+                    ✓ Player set their own password during registration
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <p className="text-sm text-amber-400">
+                    ⚠ No password set - a random one will be generated for you to send
+                  </p>
+                </div>
+              )}
               
-              <p className="text-sm text-slate-400">
-                A random password will be generated. The welcome packet will be sent to their email.
-              </p>
+              {/* League Level Selection */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <Trophy className="w-4 h-4 inline mr-1" />
+                  Starting League Level
+                </label>
+                <select
+                  value={selectedStartingLeague}
+                  onChange={(e) => setSelectedStartingLeague(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white focus:outline-none focus:border-green-500"
+                >
+                  {leagues.sort((a, b) => a.level - b.level).map(league => (
+                    <option key={league.id} value={league.id}>
+                      {league.name} {league.level === 1 ? '⭐ (Main League)' : `(Level ${league.level})`}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-400 mt-2">
+                  {selectedStartingLeague === 'majors' ? (
+                    <span className="text-amber-400">⭐ Fast-track: Player joins the main Majors league immediately</span>
+                  ) : (
+                    <span className="text-blue-400">📈 Minor League: Player starts here and can earn promotions</span>
+                  )}
+                </p>
+              </div>
               
               <div className="flex gap-3">
                 <Button
                   variant="secondary"
-                  onClick={() => setApproveModal(null)}
+                  onClick={() => {
+                    setApproveModal(null);
+                    setSelectedStartingLeague('majors'); // Reset to default
+                  }}
                   className="flex-1"
                 >
                   Cancel
@@ -2213,6 +3490,176 @@ export default function AdminPage() {
                   className="flex-1 bg-green-600 hover:bg-green-500"
                 >
                   {actionLoading ? 'Approving...' : 'Approve & Create Account'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Approval Success Modal - Shows credentials to copy */}
+      {approvalSuccess && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <Card className="bg-slate-800 border-slate-700 border-emerald-500/50 w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-emerald-400" />
+                Member Created Successfully!
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-center">
+                <p className="text-emerald-400 font-medium mb-1">🎉 Welcome to the league!</p>
+                <p className="text-white font-bold text-lg">{approvalSuccess.teamName}</p>
+                {approvalSuccess.leagueName && (
+                  <p className="text-sm text-amber-400 mt-1">
+                    Starting in: {approvalSuccess.leagueName}
+                  </p>
+                )}
+              </div>
+              
+              {approvalSuccess.usedOwnPassword ? (
+                <>
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                    <p className="text-sm text-emerald-400">
+                      ✓ <strong>Player set their own password</strong> - no need to send credentials!
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      They can log in right now at jkapmemorialleague.com/login
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Username</label>
+                    <p className="text-white font-mono">{approvalSuccess.username}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Email</label>
+                    <p className="text-slate-300 text-sm">{approvalSuccess.email}</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Username</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={approvalSuccess.username}
+                          className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white font-mono"
+                        />
+                        <button
+                          className="p-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-300 hover:bg-slate-600"
+                          onClick={() => {
+                            navigator.clipboard.writeText(approvalSuccess.username);
+                            setCopiedId('username');
+                            setTimeout(() => setCopiedId(null), 2000);
+                          }}
+                        >
+                          {copiedId === 'username' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Password</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={approvalSuccess.password}
+                          className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white font-mono"
+                        />
+                        <button
+                          className="p-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-300 hover:bg-slate-600"
+                          onClick={() => {
+                            navigator.clipboard.writeText(approvalSuccess.password);
+                            setCopiedId('password');
+                            setTimeout(() => setCopiedId(null), 2000);
+                          }}
+                        >
+                          {copiedId === 'password' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Email</label>
+                      <p className="text-slate-300 text-sm">{approvalSuccess.email}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <p className="text-xs text-amber-400">
+                      <strong>📋 Copy & send these credentials</strong> to the new member. They'll complete onboarding on their first login.
+                    </p>
+                  </div>
+                </>
+              )}
+              
+              <div className="flex gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  icon={copiedId === 'all' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  onClick={() => {
+                    // Generate comprehensive welcome message using packet data
+                    let message = `🏆 Welcome to JKAP Memorial League! 🏆
+
+Congratulations! You've been approved to join our league.
+
+📋 YOUR ACCOUNT DETAILS
+━━━━━━━━━━━━━━━━━━━━━
+Team: ${approvalSuccess.teamName}
+Username: ${approvalSuccess.username}
+Password: ${approvalSuccess.password}
+
+🔐 LOGIN HERE
+━━━━━━━━━━━━━━━━━━━━━
+https://jkapmemorial.com/login
+
+📱 IMPORTANT FIRST STEPS
+━━━━━━━━━━━━━━━━━━━━━
+1. Log in and complete the onboarding walkthrough
+2. Join the in-game league "Jkapmemorial" in MLB The Show`;
+
+                    // Add Discord link if available
+                    if (welcomePacket?.discord_link) {
+                      message += `\n3. Join our Discord: ${welcomePacket.discord_link}`;
+                    }
+                    
+                    // Add Facebook link if available
+                    if (welcomePacket?.facebook_link) {
+                      message += `\n4. Join our Facebook Group: ${welcomePacket.facebook_link}`;
+                    }
+
+                    message += `
+
+📖 QUICK REMINDERS
+━━━━━━━━━━━━━━━━━━━━━
+• Minimum 3 games per week required
+• Log your games after each one
+• Check Discord for matchups & announcements
+• IL placements require 5-game minimum
+
+Questions? DM the commissioner!
+
+Let's play ball! ⚾`;
+
+                    navigator.clipboard.writeText(message);
+                    setCopiedId('all');
+                    setTimeout(() => setCopiedId(null), 2000);
+                  }}
+                >
+                  {copiedId === 'all' ? 'Copied!' : 'Copy Welcome Message'}
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => setApprovalSuccess(null)}
+                  className="flex-1"
+                >
+                  Done
                 </Button>
               </div>
             </CardContent>

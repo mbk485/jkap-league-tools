@@ -13,26 +13,45 @@ export interface FeatureFlags {
   showFreeAgents: boolean;     // Free Agents page
   showStandings: boolean;      // Standings page
   
+  // Dashboard widgets (only show if showDashboard is true)
+  showAnnouncements: boolean;  // League Announcements widget
+  showComingSoon: boolean;     // Coming Soon preview widget
+  showQuickLinks: boolean;     // Documents/SMS quick links
+  
   // Individual tools
   showInjuredList: boolean;    // IL Manager tool
   showGameRecap: boolean;      // Game Recap Creator
   showDraftBoard: boolean;     // Draft Board tool
   showPlayersAcademy: boolean; // Players Academy tool
+  
+  // Token Economy & Salary System (hidden until rollout)
+  showTokenEconomy: boolean;   // Token/wallet system in nav & dashboard
+  showLeagueHierarchy: boolean; // Road to the Show progression
+  showRewards: boolean;        // Badges, streaks, leaderboards
+  showGameLogger: boolean;     // Manual game logging tool
 }
 
 const FEATURE_FLAGS_KEY = 'jkap_feature_flags';
 
 // Default flags - what members see by default
 const DEFAULT_FLAGS: FeatureFlags = {
-  showDashboard: false,        // Hide for now
+  showDashboard: false,        // Hide for now - full franchise dashboard
   showTools: true,             // Show - main feature
   showDocuments: false,        // Hide for now
   showFreeAgents: false,       // Hide for now
   showStandings: false,        // Hide for now
+  showAnnouncements: false,    // Hide for now - not ready
+  showComingSoon: false,       // Hide for now - not ready
+  showQuickLinks: false,       // Hide for now - just show tools
   showInjuredList: true,       // Show - ready to use
   showGameRecap: true,         // Show - ready to use
-  showDraftBoard: false,       // Hide for now
+  showDraftBoard: true,        // Show - for commissioners
   showPlayersAcademy: true,    // Show - Players Academy
+  // Token Economy - Enabled for game logging
+  showTokenEconomy: false,     // Hide - token/wallet system (not ready)
+  showLeagueHierarchy: false,  // Hide - Road to the Show
+  showRewards: true,           // Show - badges/streaks/leaderboards for game logging
+  showGameLogger: true,        // Show - game logging for all members
 };
 
 /**
@@ -92,8 +111,8 @@ export function isFeatureEnabled(
 // Feature display names for the admin UI
 export const FEATURE_LABELS: Record<keyof FeatureFlags, { name: string; description: string; category: string }> = {
   showDashboard: {
-    name: 'The Ballyard',
-    description: 'Owner Dashboard with team stats, inbox, and matchups',
+    name: 'Full Dashboard',
+    description: 'Complete franchise dashboard with stats, budget, matchups',
     category: 'Main Sections',
   },
   showTools: {
@@ -116,6 +135,21 @@ export const FEATURE_LABELS: Record<keyof FeatureFlags, { name: string; descript
     description: 'League standings and rankings',
     category: 'Main Sections',
   },
+  showAnnouncements: {
+    name: 'Announcements Widget',
+    description: 'League announcements on dashboard',
+    category: 'Dashboard Widgets',
+  },
+  showComingSoon: {
+    name: 'Coming Soon Widget',
+    description: 'Preview of upcoming features',
+    category: 'Dashboard Widgets',
+  },
+  showQuickLinks: {
+    name: 'Quick Links',
+    description: 'Documents and SMS signup cards',
+    category: 'Dashboard Widgets',
+  },
   showInjuredList: {
     name: 'IL Manager',
     description: 'Injured List tracking tool',
@@ -135,6 +169,27 @@ export const FEATURE_LABELS: Record<keyof FeatureFlags, { name: string; descript
     name: 'Players Academy',
     description: 'Scouting hub, tutorials, and game analysis',
     category: 'Tools',
+  },
+  // Token Economy Features
+  showTokenEconomy: {
+    name: 'Token Economy',
+    description: 'Wallet, salary payments, and token spending system',
+    category: 'Token Economy',
+  },
+  showLeagueHierarchy: {
+    name: 'Road to the Show',
+    description: 'League tier progression system (Rookie → Majors)',
+    category: 'Token Economy',
+  },
+  showRewards: {
+    name: 'Rewards System',
+    description: 'Badges, streaks, and leaderboards',
+    category: 'Token Economy',
+  },
+  showGameLogger: {
+    name: 'Game Logger',
+    description: 'Manual game logging for stats and tokens',
+    category: 'Token Economy',
   },
 };
 

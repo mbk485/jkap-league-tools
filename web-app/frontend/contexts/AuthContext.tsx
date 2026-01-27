@@ -110,6 +110,13 @@ function dbUserToAuthUser(dbUser: DBUser): AuthUser {
   // Determine user type based on whether they have a team or league name
   const isJkapMember = !!dbUser.team_id || dbUser.is_admin;
   
+  // Type assertion for league director fields
+  const extendedUser = dbUser as DBUser & { 
+    is_league_director?: boolean; 
+    managed_league_id?: string;
+    director_title?: string;
+  };
+  
   return {
     id: dbUser.id,
     username: dbUser.username,
@@ -120,6 +127,10 @@ function dbUserToAuthUser(dbUser: DBUser): AuthUser {
     teamAbbreviation: team?.abbreviation || (dbUser.is_admin ? 'LO' : undefined),
     leagueName: (dbUser as any).league_name, // Will be undefined if not set
     isAdmin: dbUser.is_admin,
+    // League Director fields (for Miguel, Roy, etc.)
+    isLeagueDirector: extendedUser.is_league_director || false,
+    managedLeagueId: extendedUser.managed_league_id,
+    directorTitle: extendedUser.director_title,
     createdAt: dbUser.created_at.split('T')[0],
   };
 }

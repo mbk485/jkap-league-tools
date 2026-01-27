@@ -25,6 +25,7 @@ import {
   Mail,
   Phone,
 } from 'lucide-react';
+import { needsOnboarding } from '@/lib/supabase';
 
 type AuthMode = 'login' | 'register';
 type RegistrationType = 'jkap_member' | 'external_commissioner' | null;
@@ -67,16 +68,35 @@ function LoginForm() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated && !isLoading && user) {
-      // New JKAP member registrations go to SMS signup page first
-      if (isNewRegistration && user.userType === 'jkap_member' && !user.isAdmin) {
-        router.push('/register-sms');
-      } else if (user.isAdmin) {
-        router.push(redirectUrl);
-      } else {
+    const checkOnboardingAndRedirect = async () => {
+      if (isAuthenticated && !isLoading && user) {
+        // New JKAP member registrations go to SMS signup page first
+        if (isNewRegistration && user.userType === 'jkap_member' && !user.isAdmin) {
+          router.push('/register-sms');
+          return;
+        }
+        
+        // Admin goes to redirect URL
+        if (user.isAdmin) {
+      router.push(redirectUrl);
+          return;
+        }
+        
+        // Check if JKAP member needs onboarding
+        if (user.userType === 'jkap_member' && user.id) {
+          const needsWelcome = await needsOnboarding(user.id);
+          if (needsWelcome) {
+            router.push('/welcome');
+            return;
+          }
+        }
+        
+        // Default: go to tools
         router.push('/tools');
       }
-    }
+    };
+    
+    checkOnboardingAndRedirect();
   }, [isAuthenticated, isLoading, router, redirectUrl, user, isNewRegistration]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -187,17 +207,17 @@ function LoginForm() {
       <div className="absolute inset-0 bg-gradient-to-br from-jkap-navy-900/50 via-background to-jkap-red-900/20" />
 
       <div className="relative flex-1 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
+        <div className="w-full max-w-md">
           {/* Logo */}
           <div className="text-center mb-8">
             <Link href="/" className="inline-block">
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-jkap-red-500 to-jkap-red-600 flex items-center justify-center mx-auto mb-4 shadow-glow-red">
-                <span className="font-display text-white text-2xl">JK</span>
+                <span className="font-display text-white text-2xl font-bold">JK</span>
               </div>
-        </Link>
+            </Link>
             <h1 className="font-display text-3xl text-foreground">
               JKAP MEMORIAL LEAGUE
-          </h1>
+            </h1>
             <p className="text-muted-foreground mt-2">
               {mode === 'login' ? 'Sign in to access league tools' : 'Create your account'}
             </p>
@@ -242,70 +262,70 @@ function LoginForm() {
               {mode === 'login' ? (
                 // LOGIN FORM
                 <form onSubmit={handleLogin} className="space-y-4">
-                  {error && (
-                    <div className="p-3 rounded-lg bg-jkap-red-500/10 border border-jkap-red-500/30 flex items-start gap-2">
-                      <AlertCircle className="w-5 h-5 text-jkap-red-500 flex-shrink-0 mt-0.5" />
-                      <p className="text-sm text-jkap-red-400">{error}</p>
-                    </div>
-                  )}
+                {error && (
+                  <div className="p-3 rounded-lg bg-jkap-red-500/10 border border-jkap-red-500/30 flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-jkap-red-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-jkap-red-400">{error}</p>
+                  </div>
+                )}
 
                   {/* Username Field */}
-                  <div>
+                <div>
                     <label htmlFor="username" className="block text-sm font-medium text-foreground mb-2">
                       Username
-                    </label>
-                    <div className="relative">
+                  </label>
+                  <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <input
+                    <input
                         type="text"
                         id="username"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-jkap-red-500 focus:border-transparent transition-all"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-jkap-red-500 focus:border-transparent transition-all"
                         placeholder="Enter your username"
-                        required
+                      required
                         autoComplete="username"
-                      />
-                    </div>
+                    />
                   </div>
+                </div>
 
-                  {/* Password Field */}
-                  <div>
-                    <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        id="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full pl-10 pr-12 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-jkap-red-500 focus:border-transparent transition-all"
-                        placeholder="••••••••"
-                        required
+                {/* Password Field */}
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      id="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-10 pr-12 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-jkap-red-500 focus:border-transparent transition-all"
+                      placeholder="••••••••"
+                      required
                         autoComplete="current-password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
-                    </div>
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
                   </div>
+                </div>
 
-                  {/* Submit Button */}
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    fullWidth
-                    loading={isSubmitting}
-                    icon={<LogIn className="w-5 h-5" />}
-                  >
+                {/* Submit Button */}
+                <Button
+                  type="submit"
+                  variant="primary"
+                  fullWidth
+                  loading={isSubmitting}
+                  icon={<LogIn className="w-5 h-5" />}
+                >
                     Sign In
-                  </Button>
+                </Button>
 
                 </form>
               ) : registrationType === null ? (
@@ -335,8 +355,8 @@ function LoginForm() {
                           <KeyRound className="w-3 h-3" />
                           <span>Requires approval code</span>
                         </div>
-                      </div>
-                    </div>
+                  </div>
+                </div>
                   </button>
 
                   {/* External Commissioner Option */}
@@ -525,8 +545,8 @@ function LoginForm() {
                         placeholder="John Smith"
                         required
                       />
-                    </div>
-                  </div>
+                </div>
+              </div>
 
                   {/* Username */}
             <div>
@@ -578,8 +598,8 @@ function LoginForm() {
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         {30 - claimedTeams.length} teams available • {claimedTeams.length} claimed
-                      </p>
-                    </div>
+                </p>
+              </div>
                   )}
 
                   {/* Password */}
