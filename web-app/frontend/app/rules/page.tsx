@@ -187,6 +187,31 @@ export default function RulesPage() {
           </div>
         </div>
 
+        {/* Official Rules Link */}
+        <div className="mb-8">
+          <a
+            href="https://docs.google.com/document/d/15RBBVmytH1vKihitcrzv9Ymtu9IAPN-b_92Ewxtg-WA/edit"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block p-4 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/50 rounded-xl hover:border-amber-500 transition-all group"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <BookOpen className="w-6 h-6 text-amber-400" />
+                <div>
+                  <p className="font-bold text-white group-hover:text-amber-400 transition-colors">
+                    Official League Rules Document
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    View the complete official rulebook on Google Docs
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-amber-400" />
+            </div>
+          </a>
+        </div>
+
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl text-center">
@@ -198,7 +223,7 @@ export default function RulesPage() {
             <p className="text-sm text-slate-400">Categories</p>
           </div>
           <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl text-center">
-            <p className="text-3xl font-bold text-green-400">3</p>
+            <p className="text-3xl font-bold text-green-400">5</p>
             <p className="text-sm text-slate-400">Games/Week Min</p>
           </div>
           <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl text-center">

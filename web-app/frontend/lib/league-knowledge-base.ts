@@ -65,7 +65,7 @@ For urgent matters, Discord is the fastest way to get a response.`,
   {
     category: "Activity",
     title: "Minimum Games Per Week",
-    content: `You must play a MINIMUM of 3 games per week to remain active in the league. 
+    content: `You must play a MINIMUM of 5 games per week to remain active in the league. 
 This is tracked by the activity monitor. If you're going to be away (vacation, work, etc.), 
 let the commissioner know in advance so you don't get flagged for inactivity.
 
@@ -73,12 +73,12 @@ Failure to meet the minimum games requirement may result in:
 - First offense: Warning
 - Second offense: Final warning  
 - Third offense: Removal from the league`,
-    keywords: ["games", "week", "minimum", "activity", "requirement", "play", "how many", "inactive", "inactivity"],
+    keywords: ["games", "week", "minimum", "activity", "requirement", "play", "how many", "inactive", "inactivity", "5 games"],
   },
   {
     category: "Activity",
     title: "What Happens If I'm Inactive",
-    content: `If you become inactive (not playing the minimum 3 games per week):
+    content: `If you become inactive (not playing the minimum 5 games per week):
 1. You'll receive a warning from the commissioner
 2. Continued inactivity leads to a final warning
 3. If activity doesn't improve, you may be removed from the league
@@ -168,6 +168,14 @@ The exact date is announced in Discord each season. Plan your trades accordingly
   // =============================================================================
   {
     category: "Injured List",
+    title: "IL Usage Limit",
+    content: `You must use your IL 3 SEPARATE TIMES per season. This ensures teams are actively managing their rosters and not just avoiding the IL system entirely.
+
+The IL is designed to help you manage injuries and roster flexibility throughout the season.`,
+    keywords: ["il", "injured", "list", "usage", "times", "season", "limit", "3 times", "separate"],
+  },
+  {
+    category: "Injured List",
     title: "Minimum IL Stint",
     content: `When you place a player on the Injured List (IL), they must stay for a MINIMUM of 5 GAMES.
 This prevents abuse of the IL for roster manipulation. Only place players on IL if they're actually hurt 
@@ -181,6 +189,7 @@ or you need long-term roster flexibility.`,
 This prevents players from cycling in and out of the IL repeatedly.
 
 Summary:
+- IL Usage: Must use 3 separate times per season
 - On IL: Minimum 5 games
 - After activation: Must stay on active roster for 5 games`,
     keywords: ["activate", "activated", "return", "returning", "back", "active roster", "after il"],
@@ -206,8 +215,24 @@ To activate a player:
   // =============================================================================
   {
     category: "Gameplay",
-    title: "Sportsmanship Rules",
-    content: `We expect good sportsmanship from all members:
+    title: "Game Reporting",
+    content: `📝 Report all game scores using the Game Recap tool. This helps track standings and stats.
+
+How to report:
+1. Go to League Tools → Game Recap Creator
+2. Enter game details (scores, key players, etc.)
+3. Generate your recap
+4. Share to Discord if desired
+
+Reporting your games is required to ensure accurate standings and stat tracking.`,
+    keywords: ["report", "score", "result", "game recap", "submit", "enter", "record", "standings", "stats"],
+  },
+  {
+    category: "Gameplay",
+    title: "Sportsmanship",
+    content: `🤝 Respect your opponents. No cheesing, excessive bunting, or unsportsmanlike conduct.
+
+We expect good sportsmanship from all members:
 - No cheesing (exploiting game mechanics)
 - No excessive bunting
 - No intentional walks to avoid a matchup (unless strategic)
@@ -215,7 +240,7 @@ To activate a player:
 - Be respectful to opponents in messages
 
 Violations result in warnings and potential removal for repeat offenders.`,
-    keywords: ["cheese", "cheesing", "bunt", "bunting", "sportsmanship", "fair play", "exploit", "abuse"],
+    keywords: ["cheese", "cheesing", "bunt", "bunting", "sportsmanship", "fair play", "exploit", "abuse", "respect"],
   },
   {
     category: "Gameplay",
@@ -229,18 +254,6 @@ Violations result in warnings and potential removal for repeat offenders.`,
 
 Do not change settings mid-game. If there's a settings issue, pause and contact your opponent.`,
     keywords: ["settings", "difficulty", "innings", "options", "configuration", "legend"],
-  },
-  {
-    category: "Gameplay",
-    title: "Reporting Game Results",
-    content: `After each game, report your results using the Game Recap Creator:
-1. Go to League Tools → Game Recap Creator
-2. Enter game details (scores, key players, etc.)
-3. Generate your recap
-4. Share to Discord if desired
-
-This helps track standings, stats, and league activity.`,
-    keywords: ["report", "score", "result", "game recap", "submit", "enter", "record"],
   },
   {
     category: "Gameplay",
@@ -317,8 +330,10 @@ The commissioner can see all teams' IL moves for monitoring.`,
   // =============================================================================
   {
     category: "Community",
-    title: "Discord Server",
-    content: `Our Discord server is the main hub for communication:
+    title: "Discord Required",
+    content: `💬 Join our Discord server for matchup coordination, announcements, and community chat.
+
+Discord is REQUIRED for all league members. It's our main hub for:
 - #general - Chat with league members
 - #matchups - Schedule and coordinate games
 - #trades - Propose and discuss trades
@@ -326,19 +341,35 @@ The commissioner can see all teams' IL moves for monitoring.`,
 - #game-recaps - Share your game recaps
 
 Check Discord daily for updates and matchup requests!`,
-    keywords: ["discord", "server", "chat", "channel", "communicate", "talk"],
+    keywords: ["discord", "server", "chat", "channel", "communicate", "talk", "required", "join"],
   },
   {
     category: "Community",
     title: "Facebook Group",
-    content: `We also have a Facebook group for league updates:
+    content: `📱 Join our Facebook group for league updates and announcements.
+
+Our Facebook group provides:
 - Announcements and news
 - Highlights and recaps
 - Community discussion
 - Event notifications
 
 Join the group to stay connected with the league community.`,
-    keywords: ["facebook", "group", "social", "page"],
+    keywords: ["facebook", "group", "social", "page", "updates", "announcements"],
+  },
+  {
+    category: "Community",
+    title: "Response Time",
+    content: `⏳ Respond to matchup requests within 1 hour. Ghosting opponents may result in removal.
+
+Communication is key to keeping the league running smoothly:
+- Check Discord regularly for matchup requests
+- Respond within 1 hour when possible
+- If you can't play, let your opponent know ASAP
+- Ghosting (not responding) repeatedly will result in warnings
+
+We understand everyone has different schedules - just communicate!`,
+    keywords: ["response", "time", "respond", "hour", "ghosting", "ghost", "reply", "matchup", "request"],
   },
 
   // =============================================================================
