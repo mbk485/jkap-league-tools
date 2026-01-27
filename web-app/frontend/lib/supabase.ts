@@ -2020,6 +2020,43 @@ export async function completeOnboarding(userId: string): Promise<{ success: boo
   return { success: true };
 }
 
+// Reset onboarding for a user (admin function)
+export async function resetOnboarding(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Clear localStorage if we're in the browser
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
+        if (stored) {
+          const data = JSON.parse(stored);
+          delete data[userId];
+          localStorage.setItem(ONBOARDING_COMPLETE_KEY, JSON.stringify(data));
+          console.log('Cleared onboarding localStorage for user:', userId);
+        }
+      } catch (e) {
+        console.error('Error clearing onboarding localStorage:', e);
+      }
+    }
+    
+    // Delete the database record so they start fresh
+    const { error } = await supabase
+      .from('user_onboarding')
+      .delete()
+      .eq('user_id', userId);
+    
+    if (error) {
+      console.error('Error resetting onboarding in database:', error);
+      return { success: false, error: error.message };
+    }
+    
+    console.log('Onboarding reset for user:', userId);
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error resetting onboarding:', err);
+    return { success: false, error: err.message || 'Failed to reset onboarding' };
+  }
+}
+
 // Get all users' onboarding status (for admin)
 export async function getAllOnboardingStatuses(): Promise<(DBUserOnboarding & { username?: string })[]> {
   try {

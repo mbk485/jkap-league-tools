@@ -66,6 +66,7 @@ import {
   getAllUsers,
   deleteUser,
   updateUserPassword,
+  resetOnboarding,
   DBUser,
   getAllScoutingReports,
   getTeamIntel,
@@ -1388,6 +1389,22 @@ export default function AdminPage() {
                               title="Reset password"
                             >
                               <Key className="w-4 h-4 text-amber-400" />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Reset onboarding for @${member.username}? They will see the welcome flow again.`)) {
+                                  const result = await resetOnboarding(member.id);
+                                  if (result.success) {
+                                    alert(`Onboarding reset for @${member.username}. They will see the welcome flow on next login.`);
+                                  } else {
+                                    alert(`Failed to reset onboarding: ${result.error}`);
+                                  }
+                                }
+                              }}
+                              className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors"
+                              title="Reset onboarding"
+                            >
+                              <RefreshCw className="w-4 h-4 text-blue-400" />
                             </button>
                             {!member.is_admin && (
                               <button
