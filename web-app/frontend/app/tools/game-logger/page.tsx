@@ -19,6 +19,7 @@ import {
   getSavedPlayers,
   SavedPlayers,
 } from '@/lib/supabase';
+import { analyzeImageWithAI, isOpenAIConfiguredAsync, initializeApiKey } from '@/lib/openai';
 import { MLB_TEAMS } from '@/types/league';
 import {
   Gamepad2,
@@ -26,6 +27,7 @@ import {
   Target,
   Flame,
   Plus,
+  Minus,
   X,
   Check,
   Medal,
@@ -38,6 +40,10 @@ import {
   History,
   Award,
   Sparkles,
+  Upload,
+  Camera,
+  Loader2,
+  Scan,
 } from 'lucide-react';
 
 interface HomeRunEntry {
@@ -91,6 +97,13 @@ export default function GameLoggerPage() {
   const [savedPlayers, setSavedPlayers] = useState<SavedPlayers>({ pitchers: [], hitters: [], lastUpdated: '' });
   const [showPitcherSuggestions, setShowPitcherSuggestions] = useState<'winning' | 'losing' | 'save' | null>(null);
   const [showHitterSuggestions, setShowHitterSuggestions] = useState(false);
+  
+  // Box score image upload state
+  const [boxScoreImage, setBoxScoreImage] = useState<string | null>(null);
+  const [boxScoreFileName, setBoxScoreFileName] = useState('');
+  const [isAnalyzingBoxScore, setIsAnalyzingBoxScore] = useState(false);
+  const [boxScoreError, setBoxScoreError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     setIsLoaded(true);
@@ -133,6 +146,142 @@ export default function GameLoggerPage() {
 
   const handleRemoveHomeRun = (player: string) => {
     setHomeRuns(homeRuns.filter(hr => hr.player !== player));
+  };
+  
+  const handleIncrementHR = (player: string) => {
+    setHomeRuns(homeRuns.map(hr => 
+      hr.player === player ? { ...hr, count: hr.count + 1 } : hr
+    ));
+  };
+  
+  const handleDecrementHR = (player: string) => {
+    setHomeRuns(homeRuns.map(hr => {
+      if (hr.player === player) {
+        if (hr.count <= 1) return hr; // Don't go below 1, use X to remove
+        return { ...hr, count: hr.count - 1 };
+      }
+      return hr;
+    }));
+  };
+  
+  // Box score image handlers
+  const handleBoxScoreUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setBoxScoreError('Please upload an image file');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target?.result as string;
+      setBoxScoreImage(base64);
+      setBoxScoreFileName(file.name);
+      setBoxScoreError(null);
+    };
+    reader.readAsDataURL(file);
+  };
+  
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleBoxScoreUpload(file);
+  };
+  
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+  
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+  
+  const analyzeBoxScore = async () => {
+    if (!boxScoreImage) return;
+    
+    setIsAnalyzingBoxScore(true);
+    setBoxScoreError(null);
+    
+    try {
+      await initializeApiKey();
+      const isConfigured = await isOpenAIConfiguredAsync();
+      
+      if (!isConfigured) {
+        setBoxScoreError('AI not configured. Ask your commissioner to set up the API key.');
+        return;
+      }
+      
+      const userTeamName = user?.teamId ? MLB_TEAMS.find(t => t.id === user.teamId)?.name || 'your team' : 'your team';
+      
+      const prompt = `You are analyzing a box score screenshot from MLB The Show. Extract the game statistics and return a JSON object.
+
+The user's team is: ${userTeamName}
+
+From the box score, extract:
+1. Final score for both teams
+2. Which team won
+3. Winning pitcher name
+4. Losing pitcher name  
+5. Save pitcher (if any)
+6. Total strikeouts by ${userTeamName}'s pitching
+7. Home runs hit by ${userTeamName} players (player names and how many HRs each)
+
+Return ONLY a valid JSON object in this exact format:
+{
+  "userScore": <number>,
+  "opponentScore": <number>,
+  "opponentTeamId": "<3-letter MLB team abbreviation like NYY, BOS, LAD, etc>",
+  "winningPitcher": "<name or null>",
+  "losingPitcher": "<name or null>",
+  "savePitcher": "<name or null>",
+  "strikeouts": <number or 0>,
+  "homeRuns": [{"player": "<name>", "count": <number>}]
+}
+
+If you cannot read certain fields, use null or 0. Make your best effort to read the box score.`;
+
+      const response = await analyzeImageWithAI(boxScoreImage, prompt);
+      
+      // Parse the JSON response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        
+        // Auto-fill the form
+        if (parsed.opponentTeamId) {
+          const team = MLB_TEAMS.find(t => t.abbreviation === parsed.opponentTeamId || t.id === parsed.opponentTeamId);
+          if (team) setOpponentTeam(team.id);
+        }
+        if (parsed.userScore !== undefined) setUserScore(String(parsed.userScore));
+        if (parsed.opponentScore !== undefined) setOpponentScore(String(parsed.opponentScore));
+        if (parsed.winningPitcher) setWinningPitcher(parsed.winningPitcher);
+        if (parsed.losingPitcher) setLosingPitcher(parsed.losingPitcher);
+        if (parsed.savePitcher) setSavePitcher(parsed.savePitcher);
+        if (parsed.strikeouts) setStrikeouts(String(parsed.strikeouts));
+        if (parsed.homeRuns && Array.isArray(parsed.homeRuns)) {
+          setHomeRuns(parsed.homeRuns.filter((hr: any) => hr.player && hr.count > 0));
+        }
+        
+        setSubmitResult({
+          success: true,
+          message: 'Box score analyzed! Review the auto-filled stats and submit when ready.',
+        });
+      } else {
+        setBoxScoreError('Could not parse the box score. Please fill in manually.');
+      }
+    } catch (err: any) {
+      console.error('Box score analysis error:', err);
+      setBoxScoreError(err.message || 'Failed to analyze box score');
+    } finally {
+      setIsAnalyzingBoxScore(false);
+    }
+  };
+  
+  const clearBoxScore = () => {
+    setBoxScoreImage(null);
+    setBoxScoreFileName('');
+    setBoxScoreError(null);
   };
 
   const isWin = () => {
@@ -371,6 +520,82 @@ export default function GameLoggerPage() {
                     <span>+1 Recap Credit</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Box Score Upload */}
+              <div className="mb-6 p-4 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-transparent border border-purple-500/30 rounded-xl">
+                <h3 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
+                  <Scan className="w-4 h-4" />
+                  Quick Fill with Box Score Screenshot
+                  <span className="text-xs font-normal text-muted-foreground">(Optional)</span>
+                </h3>
+                
+                {!boxScoreImage ? (
+                  <div
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-all cursor-pointer ${
+                      isDragging 
+                        ? 'border-purple-500 bg-purple-500/10' 
+                        : 'border-slate-600 hover:border-purple-500/50 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => e.target.files?.[0] && handleBoxScoreUpload(e.target.files[0])}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <Camera className="w-8 h-8 text-purple-400 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Drop a box score screenshot here or <span className="text-purple-400">click to upload</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      AI will read the stats and auto-fill the form
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
+                      <img 
+                        src={boxScoreImage} 
+                        alt="Box score" 
+                        className="w-20 h-20 object-cover rounded-lg"
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-white truncate">{boxScoreFileName}</p>
+                        <p className="text-xs text-muted-foreground">Ready to analyze</p>
+                      </div>
+                      <button
+                        onClick={clearBoxScore}
+                        className="p-2 text-muted-foreground hover:text-red-400 transition-colors"
+                        title="Remove image"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    
+                    <Button
+                      onClick={analyzeBoxScore}
+                      disabled={isAnalyzingBoxScore}
+                      className="w-full bg-purple-600 hover:bg-purple-700"
+                      icon={isAnalyzingBoxScore ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scan className="w-4 h-4" />}
+                    >
+                      {isAnalyzingBoxScore ? 'Analyzing Box Score...' : 'Analyze & Auto-Fill Stats'}
+                    </Button>
+                    
+                    {boxScoreError && (
+                      <p className="text-sm text-red-400 text-center">{boxScoreError}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-1 h-px bg-slate-700" />
+                <span className="text-xs text-muted-foreground font-medium">OR FILL IN MANUALLY</span>
+                <div className="flex-1 h-px bg-slate-700" />
               </div>
 
               {/* Form */}
@@ -623,16 +848,32 @@ export default function GameLoggerPage() {
                       {homeRuns.map((hr, index) => (
                         <div
                           key={index}
-                          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-jkap-red-500/10 border border-jkap-red-500/30"
+                          className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-jkap-red-500/10 border border-jkap-red-500/30"
                         >
                           <Target className="w-3 h-3 text-jkap-red-400" />
-                          <span className="text-sm text-foreground">{hr.player}</span>
-                          {hr.count > 1 && (
-                            <Badge variant="delinquent" className="text-xs">{hr.count}</Badge>
-                          )}
+                          <span className="text-sm text-foreground font-medium">{hr.player}</span>
+                          <div className="flex items-center gap-1 ml-1 px-1 bg-slate-700/50 rounded">
+                            <button
+                              onClick={() => handleDecrementHR(hr.player)}
+                              disabled={hr.count <= 1}
+                              className="text-muted-foreground hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors p-0.5"
+                              title="Remove 1 HR"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="text-sm font-bold text-jkap-red-400 min-w-[20px] text-center">{hr.count}</span>
+                            <button
+                              onClick={() => handleIncrementHR(hr.player)}
+                              className="text-muted-foreground hover:text-white transition-colors p-0.5"
+                              title="Add 1 HR"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
                           <button
                             onClick={() => handleRemoveHomeRun(hr.player)}
-                            className="text-muted-foreground hover:text-jkap-red-400 transition-colors"
+                            className="text-muted-foreground hover:text-jkap-red-400 transition-colors ml-1"
+                            title="Remove player"
                           >
                             <X className="w-3 h-3" />
                           </button>
