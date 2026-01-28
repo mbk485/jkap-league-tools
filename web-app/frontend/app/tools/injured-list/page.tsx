@@ -14,6 +14,9 @@ import {
   getLeagueSettings,
   saveLeagueSettings,
   DBILPlacement,
+  submitRetroactiveILRequest,
+  getTeamRetroactiveILRequests,
+  RetroactiveILRequest,
 } from '@/lib/supabase';
 import {
   AlertTriangle,
@@ -43,6 +46,8 @@ import {
   Shield,
   Eye,
   Loader2,
+  CalendarClock,
+  History,
 } from 'lucide-react';
 
 // =============================================================================
@@ -795,6 +800,7 @@ interface AddPlacementModalProps {
 }
 
 function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddPlacementModalProps) {
+  const { user } = useAuth();
   const [selectedTeam, setSelectedTeam] = useState(userTeamId || '');
   const [playerName, setPlayerName] = useState('');
   const [position, setPosition] = useState('');
@@ -803,11 +809,25 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddP
   const [startGame, setStartGame] = useState(1);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [announceOnAdd, setAnnounceOnAdd] = useState(true);
+  
+  // Retroactive placement state
+  const [retroactiveReason, setRetroactiveReason] = useState('');
+  const [isSubmittingRetro, setIsSubmittingRetro] = useState(false);
+  const [retroSubmitResult, setRetroSubmitResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Check if the selected date is in the past
+  const today = new Date().toISOString().split('T')[0];
+  const isRetroactive = startDate < today;
 
   // Reset to user's team when modal opens
   useEffect(() => {
     if (isOpen && userTeamId && !isAdmin) {
       setSelectedTeam(userTeamId);
+    }
+    // Clear retroactive state when modal opens
+    if (isOpen) {
+      setRetroactiveReason('');
+      setRetroSubmitResult(null);
     }
   }, [isOpen, userTeamId, isAdmin]);
 
@@ -816,7 +836,57 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddP
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTeam || !playerName || !position || !injury) return;
+    
+    // If retroactive and not admin, submit as request
+    if (isRetroactive && !isAdmin) {
+      if (!retroactiveReason.trim()) {
+        setRetroSubmitResult({ success: false, message: 'Please provide a reason for the retroactive placement.' });
+        return;
+      }
+      
+      setIsSubmittingRetro(true);
+      
+      const teamInfo = allTeams.find(t => t.id === selectedTeam);
+      
+      submitRetroactiveILRequest({
+        team_id: selectedTeam,
+        team_name: teamInfo?.name || selectedTeam,
+        player_id: `player-${Date.now()}`,
+        player_name: playerName,
+        player_position: position,
+        player_type: playerType,
+        injury_type: injury,
+        requested_start_date: startDate,
+        requested_start_game: startGame,
+        reason: retroactiveReason,
+        requested_by: user?.id || '',
+        requested_by_name: user?.displayName || user?.username || 'Unknown',
+      });
+      
+      setRetroSubmitResult({ 
+        success: true, 
+        message: 'Retroactive IL request submitted! A commissioner will review and approve it.' 
+      });
+      
+      setIsSubmittingRetro(false);
+      
+      // Clear form after short delay
+      setTimeout(() => {
+        setPlayerName('');
+        setPosition('');
+        setPlayerType('position');
+        setInjury('');
+        setStartGame(1);
+        setStartDate(new Date().toISOString().split('T')[0]);
+        setRetroactiveReason('');
+        setRetroSubmitResult(null);
+        onClose();
+      }, 2000);
+      
+      return;
+    }
 
+    // Normal placement (today or future, or admin doing retroactive)
     onAdd(
       {
         player: {
@@ -838,6 +908,7 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddP
     setPlayerType('position');
     setInjury('');
     setStartGame(1);
+    setStartDate(new Date().toISOString().split('T')[0]);
     onClose();
   };
 
@@ -995,39 +1066,105 @@ function AddPlacementModal({ isOpen, onClose, onAdd, userTeamId, isAdmin }: AddP
             </div>
           </div>
 
-          {/* Announcement Toggle */}
-          <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-            <div className="flex items-center gap-3">
-              <Megaphone className="w-5 h-5 text-jkap-red-500" />
-              <div>
-                <p className="font-medium text-foreground text-sm">Announce placement</p>
-                <p className="text-xs text-muted-foreground">
-                  Show announcement preview after adding
-                </p>
+          {/* Retroactive Placement Warning & Reason */}
+          {isRetroactive && !isAdmin && (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-3">
+              <div className="flex items-center gap-2">
+                <CalendarClock className="w-5 h-5 text-amber-400" />
+                <p className="font-medium text-amber-400 text-sm">Retroactive Placement</p>
               </div>
+              <p className="text-xs text-muted-foreground">
+                The date you selected ({startDate}) is in the past. Retroactive IL placements require commissioner approval.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Reason for Retroactive Placement *
+                </label>
+                <textarea
+                  value={retroactiveReason}
+                  onChange={(e) => setRetroactiveReason(e.target.value)}
+                  placeholder="Explain why this placement needs to be backdated (e.g., 'Forgot to log it on game day', 'Player was injured last week but just reported it')..."
+                  className="w-full px-4 py-3 bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground focus:border-amber-500 focus:outline-none resize-none"
+                  rows={3}
+                  required
+                />
+              </div>
+              {retroSubmitResult && (
+                <div className={`p-3 rounded-lg text-sm ${
+                  retroSubmitResult.success 
+                    ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+                    : 'bg-red-500/10 border border-red-500/30 text-red-400'
+                }`}>
+                  {retroSubmitResult.message}
+                </div>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={() => setAnnounceOnAdd(!announceOnAdd)}
-              className={`relative w-12 h-6 rounded-full transition-colors ${
-                announceOnAdd ? 'bg-jkap-red-500' : 'bg-muted'
-              }`}
-            >
-              <span
-                className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                  announceOnAdd ? 'translate-x-7' : 'translate-x-1'
+          )}
+          
+          {isRetroactive && isAdmin && (
+            <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-purple-400" />
+                <p className="font-medium text-purple-400 text-sm">Admin: Direct Retroactive Placement</p>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                As commissioner, you can add retroactive placements directly without approval.
+              </p>
+            </div>
+          )}
+
+          {/* Announcement Toggle - only show for non-retroactive or admin */}
+          {(!isRetroactive || isAdmin) && (
+            <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+              <div className="flex items-center gap-3">
+                <Megaphone className="w-5 h-5 text-jkap-red-500" />
+                <div>
+                  <p className="font-medium text-foreground text-sm">Announce placement</p>
+                  <p className="text-xs text-muted-foreground">
+                    Show announcement preview after adding
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnnounceOnAdd(!announceOnAdd)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${
+                  announceOnAdd ? 'bg-jkap-red-500' : 'bg-muted'
                 }`}
-              />
-            </button>
-          </div>
+              >
+                <span
+                  className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                    announceOnAdd ? 'translate-x-7' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-4">
             <Button type="button" variant="secondary" onClick={onClose} fullWidth>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" fullWidth>
-              <Plus className="w-4 h-4" />
-              Add to IL
+            <Button 
+              type="submit" 
+              variant={isRetroactive && !isAdmin ? 'outline' : 'primary'} 
+              fullWidth
+              disabled={isSubmittingRetro}
+              className={isRetroactive && !isAdmin ? 'border-amber-500 text-amber-400 hover:bg-amber-500/10' : ''}
+            >
+              {isSubmittingRetro ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isRetroactive && !isAdmin ? (
+                <>
+                  <History className="w-4 h-4" />
+                  Submit for Approval
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  Add to IL
+                </>
+              )}
             </Button>
           </div>
         </form>

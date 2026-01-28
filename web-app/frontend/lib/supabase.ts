@@ -764,6 +764,179 @@ export async function deleteILPlacement(
 }
 
 // =============================================================================
+// RETROACTIVE IL REQUESTS (Requires Commissioner Approval)
+// =============================================================================
+
+const RETROACTIVE_IL_KEY = 'jkap_retroactive_il_requests';
+
+export interface RetroactiveILRequest {
+  id: string;
+  team_id: string;
+  team_name: string;
+  player_id: string;
+  player_name: string;
+  player_position: string;
+  player_type: 'pitcher' | 'position';
+  injury_type: string;
+  requested_start_date: string;
+  requested_start_game: number;
+  reason: string; // Why it needs to be retroactive
+  status: 'pending' | 'approved' | 'denied';
+  requested_by: string;
+  requested_by_name: string;
+  requested_at: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  review_notes?: string;
+}
+
+// Get all retroactive IL requests
+export function getRetroactiveILRequests(): RetroactiveILRequest[] {
+  if (typeof window === 'undefined') return [];
+  
+  try {
+    const stored = localStorage.getItem(RETROACTIVE_IL_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (e) {
+    console.error('Error getting retroactive IL requests:', e);
+    return [];
+  }
+}
+
+// Get pending retroactive IL requests (for commissioner review)
+export function getPendingRetroactiveILRequests(): RetroactiveILRequest[] {
+  return getRetroactiveILRequests().filter(r => r.status === 'pending');
+}
+
+// Get retroactive IL requests for a specific team
+export function getTeamRetroactiveILRequests(teamId: string): RetroactiveILRequest[] {
+  return getRetroactiveILRequests().filter(r => r.team_id === teamId);
+}
+
+// Submit a retroactive IL request
+export function submitRetroactiveILRequest(
+  request: Omit<RetroactiveILRequest, 'id' | 'status' | 'requested_at'>
+): RetroactiveILRequest {
+  const newRequest: RetroactiveILRequest = {
+    ...request,
+    id: `retro_il_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    status: 'pending',
+    requested_at: new Date().toISOString(),
+  };
+  
+  if (typeof window === 'undefined') return newRequest;
+  
+  try {
+    const requests = getRetroactiveILRequests();
+    requests.unshift(newRequest);
+    localStorage.setItem(RETROACTIVE_IL_KEY, JSON.stringify(requests));
+    console.log('Submitted retroactive IL request:', newRequest.id);
+  } catch (e) {
+    console.error('Error submitting retroactive IL request:', e);
+  }
+  
+  return newRequest;
+}
+
+// Approve a retroactive IL request (commissioner only)
+export async function approveRetroactiveILRequest(
+  requestId: string,
+  reviewerId: string,
+  reviewNotes?: string
+): Promise<{ success: boolean; placement?: DBILPlacement; error?: string }> {
+  if (typeof window === 'undefined') {
+    return { success: false, error: 'Cannot process on server' };
+  }
+  
+  try {
+    const requests = getRetroactiveILRequests();
+    const requestIndex = requests.findIndex(r => r.id === requestId);
+    
+    if (requestIndex === -1) {
+      return { success: false, error: 'Request not found' };
+    }
+    
+    const request = requests[requestIndex];
+    
+    // Create the actual IL placement
+    const placementId = `il_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const placementResult = await addILPlacement({
+      id: placementId,
+      team_id: request.team_id,
+      player_id: request.player_id,
+      player_name: request.player_name,
+      player_position: request.player_position,
+      player_type: request.player_type,
+      injury_type: request.injury_type,
+      start_game: request.requested_start_game,
+      start_date: request.requested_start_date,
+      end_game: null,
+      end_date: null,
+      games_on_il: 0,
+      status: 'active',
+      created_by: request.requested_by,
+    });
+    
+    if (!placementResult.success) {
+      return { success: false, error: placementResult.error };
+    }
+    
+    // Update the request status
+    requests[requestIndex] = {
+      ...request,
+      status: 'approved',
+      reviewed_by: reviewerId,
+      reviewed_at: new Date().toISOString(),
+      review_notes: reviewNotes,
+    };
+    
+    localStorage.setItem(RETROACTIVE_IL_KEY, JSON.stringify(requests));
+    console.log('Approved retroactive IL request:', requestId);
+    
+    return { success: true, placement: placementResult.placement };
+  } catch (e: any) {
+    console.error('Error approving retroactive IL request:', e);
+    return { success: false, error: e.message || 'Failed to approve request' };
+  }
+}
+
+// Deny a retroactive IL request (commissioner only)
+export function denyRetroactiveILRequest(
+  requestId: string,
+  reviewerId: string,
+  reviewNotes?: string
+): { success: boolean; error?: string } {
+  if (typeof window === 'undefined') {
+    return { success: false, error: 'Cannot process on server' };
+  }
+  
+  try {
+    const requests = getRetroactiveILRequests();
+    const requestIndex = requests.findIndex(r => r.id === requestId);
+    
+    if (requestIndex === -1) {
+      return { success: false, error: 'Request not found' };
+    }
+    
+    requests[requestIndex] = {
+      ...requests[requestIndex],
+      status: 'denied',
+      reviewed_by: reviewerId,
+      reviewed_at: new Date().toISOString(),
+      review_notes: reviewNotes || 'Request denied by commissioner',
+    };
+    
+    localStorage.setItem(RETROACTIVE_IL_KEY, JSON.stringify(requests));
+    console.log('Denied retroactive IL request:', requestId);
+    
+    return { success: true };
+  } catch (e: any) {
+    console.error('Error denying retroactive IL request:', e);
+    return { success: false, error: e.message || 'Failed to deny request' };
+  }
+}
+
+// =============================================================================
 // SCOUTING REPORTS
 // =============================================================================
 

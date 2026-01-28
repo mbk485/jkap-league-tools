@@ -79,6 +79,11 @@ import {
   getBanList,
   addToBanList,
   removeFromBanList,
+  // Retroactive IL Requests
+  getPendingRetroactiveILRequests,
+  approveRetroactiveILRequest,
+  denyRetroactiveILRequest,
+  RetroactiveILRequest,
   DBBannedPlayer,
   getTeamStatuses,
   updateTeamStatus,
@@ -139,6 +144,10 @@ export default function AdminPage() {
   const [banList, setBanList] = useState<DBBannedPlayer[]>([]);
   const [teamStatuses, setTeamStatuses] = useState<DBTeamStatus[]>([]);
   const [welcomePacket, setWelcomePacket] = useState<DBWelcomePacket | null>(null);
+  
+  // Retroactive IL Requests State
+  const [retroactiveILRequests, setRetroactiveILRequests] = useState<RetroactiveILRequest[]>([]);
+  const [processingILRequest, setProcessingILRequest] = useState<string | null>(null);
   const [isLoadingMemberManagement, setIsLoadingMemberManagement] = useState(true);
   
   // Member management modals
@@ -299,6 +308,8 @@ export default function AdminPage() {
         setBanList(bans);
         setTeamStatuses(statuses);
         setWelcomePacket(packet);
+        // Load retroactive IL requests
+        setRetroactiveILRequests(getPendingRetroactiveILRequests());
         if (packet) {
           setWelcomePacketForm({
             title: packet.title,
@@ -1553,6 +1564,105 @@ export default function AdminPage() {
                             </Button>
                           </div>
                         )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          
+          {/* Retroactive IL Requests */}
+          <Card className="bg-slate-800/50 border-slate-700 mt-6">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-400" />
+                Retroactive IL Requests
+                {retroactiveILRequests.length > 0 && (
+                  <Badge variant="active" className="ml-2 bg-amber-500/20 text-amber-400 border-amber-500/30">
+                    {retroactiveILRequests.length} pending
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {retroactiveILRequests.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No pending retroactive IL requests</p>
+                  <p className="text-xs mt-1">Requests submitted by members will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {retroactiveILRequests.map((request) => (
+                    <div
+                      key={request.id}
+                      className="p-4 bg-slate-700/50 rounded-xl border border-amber-500/30"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-white">{request.player_name}</span>
+                            <Badge variant="outline" className="border-slate-600 text-slate-300">
+                              {request.player_position}
+                            </Badge>
+                            <Badge variant="outline" className="border-blue-500/50 text-blue-400">
+                              {request.team_name}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            <strong>Injury:</strong> {request.injury_type}
+                          </p>
+                          <p className="text-sm text-amber-400 mt-1">
+                            <strong>Requested Start Date:</strong> {new Date(request.requested_start_date).toLocaleDateString()} (Game #{request.requested_start_game})
+                          </p>
+                          <div className="mt-2 p-2 bg-slate-800/50 rounded-lg">
+                            <p className="text-xs text-muted-foreground">
+                              <strong>Reason:</strong> {request.reason}
+                            </p>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-2">
+                            Requested by {request.requested_by_name} • {new Date(request.requested_at).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={async () => {
+                              setProcessingILRequest(request.id);
+                              const result = await approveRetroactiveILRequest(request.id, user?.id || '');
+                              if (result.success) {
+                                setRetroactiveILRequests(getPendingRetroactiveILRequests());
+                              }
+                              setProcessingILRequest(null);
+                            }}
+                            disabled={processingILRequest === request.id}
+                            className="bg-green-600 hover:bg-green-500"
+                          >
+                            {processingILRequest === request.id ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4" />
+                            )}
+                            Approve
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              const result = denyRetroactiveILRequest(request.id, user?.id || '', 'Request denied by commissioner');
+                              if (result.success) {
+                                setRetroactiveILRequests(getPendingRetroactiveILRequests());
+                              }
+                            }}
+                            disabled={processingILRequest === request.id}
+                            className="text-red-400"
+                          >
+                            <XCircle className="w-4 h-4" />
+                            Deny
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
