@@ -1463,6 +1463,7 @@ export default function AdminPage() {
 
         {/* ======================= REGISTRATION QUEUE TAB ======================= */}
         {adminTab === 'queue' && (
+          <>
           <Card className="bg-slate-800/50 border-slate-700">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
@@ -1670,6 +1671,7 @@ export default function AdminPage() {
               )}
             </CardContent>
           </Card>
+          </>
         )}
 
         {/* ======================= TEAMS STATUS TAB ======================= */}
