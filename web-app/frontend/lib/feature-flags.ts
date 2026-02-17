@@ -29,6 +29,15 @@ export interface FeatureFlags {
   showLeagueHierarchy: boolean; // Road to the Show progression
   showRewards: boolean;        // Badges, streaks, leaderboards
   showGameLogger: boolean;     // Manual game logging tool
+  
+  // MLB The Show Integration
+  showPlayerDatabase: boolean; // Live Series player search & database
+  showMyTeam: boolean;         // Roster builder / My Team
+  showRosterUpdates: boolean;  // Buff/Nerf tracking
+  showExhibitionGames: boolean; // Simulated exhibition games
+  
+  // Off-Season Program
+  showOffSeason: boolean;      // Off-season hub, questionnaire, free agents
 }
 
 const FEATURE_FLAGS_KEY = 'jkap_feature_flags';
@@ -52,6 +61,13 @@ const DEFAULT_FLAGS: FeatureFlags = {
   showLeagueHierarchy: false,  // Hide - Road to the Show
   showRewards: true,           // Show - badges/streaks/leaderboards for game logging
   showGameLogger: true,        // Show - game logging for all members
+  // MLB The Show Integration - All enabled by default
+  showPlayerDatabase: true,    // Show - Live Series database
+  showMyTeam: true,            // Show - Roster builder
+  showRosterUpdates: true,     // Show - Buff/Nerf tracking
+  showExhibitionGames: true,   // Show - Exhibition/Sim games (beta)
+  // Off-Season Program
+  showOffSeason: true,         // Show - Off-season hub (enable during off-season)
 };
 
 /**
@@ -190,6 +206,33 @@ export const FEATURE_LABELS: Record<keyof FeatureFlags, { name: string; descript
     name: 'Game Logger',
     description: 'Manual game logging for stats and tokens',
     category: 'Token Economy',
+  },
+  // MLB The Show Integration
+  showPlayerDatabase: {
+    name: 'Player Database',
+    description: 'Live Series player search, attributes, and comparisons',
+    category: 'MLB The Show',
+  },
+  showMyTeam: {
+    name: 'My Team',
+    description: 'Custom league roster builder and management',
+    category: 'MLB The Show',
+  },
+  showRosterUpdates: {
+    name: 'Roster Updates',
+    description: 'Live Series buff/nerf tracking and alerts',
+    category: 'MLB The Show',
+  },
+  showExhibitionGames: {
+    name: 'Exhibition Games',
+    description: 'Simulated games against members or CPU',
+    category: 'MLB The Show',
+  },
+  // Off-Season Program
+  showOffSeason: {
+    name: 'Off-Season Hub',
+    description: 'Off-season questionnaire, free agents, claims, and playoff tracking',
+    category: 'Off-Season',
   },
 };
 

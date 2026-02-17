@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
-import { LogIn, LogOut, User, ChevronDown, Shield, Wrench, Globe } from 'lucide-react';
+import { LogIn, LogOut, User, ChevronDown, Shield, Wrench, Globe, HelpCircle } from 'lucide-react';
 import { getFeatureFlags, FeatureFlags } from '@/lib/feature-flags';
 
 interface NavLink {
@@ -22,6 +22,7 @@ const navLinks: NavLink[] = [
   { label: 'Home', href: '/' },
   { label: 'The Ballyard', href: '/dashboard', adminOnly: true, featureFlag: 'showDashboard' },
   { label: 'League Tools', href: '/tools', featureFlag: 'showTools', forUserType: 'jkap_member' },
+  { label: 'Off-Season', href: '/offseason', forUserType: 'jkap_member', featureFlag: 'showOffSeason' }, // Off-season hub
   { label: 'Leaderboard', href: '/leaderboard', forUserType: 'jkap_member', featureFlag: 'showRewards' }, // Rankings & stats
   { label: 'Road to the Show', href: '/league-levels', forUserType: 'jkap_member', featureFlag: 'showLeagueHierarchy' }, // League hierarchy - HIDDEN until rollout
   { label: 'My Wallet', href: '/wallet', forUserType: 'jkap_member', featureFlag: 'showTokenEconomy' }, // Token wallet - HIDDEN until rollout
@@ -278,6 +279,14 @@ export function Navbar() {
                         My Dashboard
                       </Link>
                     )}
+                    <Link
+                      href="/support"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+                    >
+                      <HelpCircle className="w-4 h-4" />
+                      Help & Support
+                    </Link>
                     <button
                       onClick={handleLogout}
                       className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-jkap-red-500 hover:bg-muted transition-colors"

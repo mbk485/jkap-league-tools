@@ -52,6 +52,8 @@ import {
   Star,
   Flame,
   Award,
+  Ticket,
+  Inbox,
 } from 'lucide-react';
 import { setZapierWebhookUrl, getZapierWebhookUrl } from '@/contexts/AuthContext';
 import { 
@@ -114,6 +116,15 @@ import {
   getLeagueFromApprovalCode,
   DBLeague,
   DBUserLevel,
+  // Support Tickets
+  getAllTickets,
+  getTicketStats,
+  updateTicketStatus,
+  addTicketNotes,
+  getTicketComments,
+  addTicketComment,
+  DBSupportTicket,
+  DBTicketComment,
 } from '@/lib/supabase';
 
 export default function AdminPage() {
@@ -181,7 +192,17 @@ export default function AdminPage() {
   });
   
   // Active admin tab
-  const [adminTab, setAdminTab] = useState<'members' | 'queue' | 'teams' | 'banlist' | 'welcome' | 'activity' | 'rewards' | 'standings' | 'intel' | 'promotions' | 'settings'>('members');
+  const [adminTab, setAdminTab] = useState<'members' | 'queue' | 'teams' | 'banlist' | 'welcome' | 'activity' | 'rewards' | 'standings' | 'intel' | 'promotions' | 'support' | 'settings'>('members');
+  
+  // Support tickets state
+  const [supportTickets, setSupportTickets] = useState<DBSupportTicket[]>([]);
+  const [ticketStats, setTicketStats] = useState<{ total: number; open: number; inProgress: number; waiting: number; resolved: number; closed: number; byType: Record<string, number>; byPriority: Record<string, number> } | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<DBSupportTicket | null>(null);
+  const [ticketComments, setTicketComments] = useState<DBTicketComment[]>([]);
+  const [ticketFilter, setTicketFilter] = useState<{ status: string; type: string; priority: string }>({ status: 'all', type: 'all', priority: 'all' });
+  const [ticketResolution, setTicketResolution] = useState('');
+  const [adminReply, setAdminReply] = useState('');
+  const [ticketActionLoading, setTicketActionLoading] = useState(false);
   
   // Activity monitoring state
   const [activitySummary, setActivitySummary] = useState<Record<string, { gamesPlayed: number; recapsCreated: number; analysisUploads: number; wins: number; losses: number; lastActive: string; winRate: number }>>({});
@@ -448,6 +469,37 @@ export default function AdminPage() {
       loadPromotionsData();
     }
   }, [adminTab, users]);
+  
+  // Load support tickets when tab is selected
+  useEffect(() => {
+    const loadSupportData = async () => {
+      try {
+        const [tickets, stats] = await Promise.all([
+          getAllTickets(ticketFilter.status !== 'all' || ticketFilter.type !== 'all' || ticketFilter.priority !== 'all' ? ticketFilter : undefined),
+          getTicketStats(),
+        ]);
+        setSupportTickets(tickets);
+        setTicketStats(stats);
+      } catch (err) {
+        console.error('Failed to load support data:', err);
+      }
+    };
+    
+    if (adminTab === 'support') {
+      loadSupportData();
+    }
+  }, [adminTab, ticketFilter]);
+  
+  // Load ticket comments when a ticket is selected
+  useEffect(() => {
+    const loadComments = async () => {
+      if (selectedTicket) {
+        const comments = await getTicketComments(selectedTicket.id);
+        setTicketComments(comments);
+      }
+    };
+    loadComments();
+  }, [selectedTicket]);
   
   // Helper to get league summary data by ID
   const getLeagueSummaryById = (leagueId: string) => {
@@ -1198,6 +1250,18 @@ export default function AdminPage() {
               <span className="ml-1 px-1.5 py-0.5 text-xs bg-emerald-600 rounded-full">
                 {qualifiedUsers.length}
               </span>
+            )}
+          </button>
+          <button
+            onClick={() => setAdminTab('support')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'support' ? 'bg-purple-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <Ticket className="w-4 h-4" />
+            Support
+            {ticketStats && ticketStats.open > 0 && (
+              <Badge variant="active" className="text-xs">{ticketStats.open}</Badge>
             )}
           </button>
           <button
@@ -2180,6 +2244,315 @@ export default function AdminPage() {
                 </div>
               </CardContent>
             </Card>
+          </>
+        )}
+
+        {/* ======================= SUPPORT TICKETS TAB ======================= */}
+        {adminTab === 'support' && (
+          <>
+            {/* Stats Overview */}
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+              <Card className="bg-slate-800/50 border-slate-700">
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-white">{ticketStats?.total || 0}</p>
+                  <p className="text-xs text-slate-400">Total</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-emerald-500/10 border-emerald-500/30">
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-emerald-400">{ticketStats?.open || 0}</p>
+                  <p className="text-xs text-emerald-400/70">Open</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-blue-500/10 border-blue-500/30">
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-blue-400">{ticketStats?.inProgress || 0}</p>
+                  <p className="text-xs text-blue-400/70">In Progress</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-amber-500/10 border-amber-500/30">
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-amber-400">{ticketStats?.waiting || 0}</p>
+                  <p className="text-xs text-amber-400/70">Waiting</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-purple-500/10 border-purple-500/30">
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-purple-400">{ticketStats?.resolved || 0}</p>
+                  <p className="text-xs text-purple-400/70">Resolved</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-slate-500/10 border-slate-500/30">
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-slate-400">{ticketStats?.closed || 0}</p>
+                  <p className="text-xs text-slate-400/70">Closed</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3 mb-6">
+              <select
+                value={ticketFilter.status}
+                onChange={(e) => setTicketFilter({ ...ticketFilter, status: e.target.value })}
+                className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-purple-500 focus:outline-none"
+              >
+                <option value="all">All Status</option>
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="waiting">Waiting</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+              </select>
+              <select
+                value={ticketFilter.type}
+                onChange={(e) => setTicketFilter({ ...ticketFilter, type: e.target.value })}
+                className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-purple-500 focus:outline-none"
+              >
+                <option value="all">All Types</option>
+                <option value="bug">Bug Report</option>
+                <option value="feature">Feature Request</option>
+                <option value="question">Question</option>
+                <option value="account">Account Issue</option>
+                <option value="other">Other</option>
+              </select>
+              <select
+                value={ticketFilter.priority}
+                onChange={(e) => setTicketFilter({ ...ticketFilter, priority: e.target.value })}
+                className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-purple-500 focus:outline-none"
+              >
+                <option value="all">All Priority</option>
+                <option value="urgent">Urgent</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+
+            {/* Ticket List or Detail View */}
+            {selectedTicket ? (
+              <Card className="bg-slate-800/50 border-slate-700">
+                <CardHeader className="flex flex-row items-start justify-between">
+                  <div>
+                    <button
+                      onClick={() => { setSelectedTicket(null); setTicketResolution(''); setAdminReply(''); }}
+                      className="text-sm text-slate-400 hover:text-white mb-2 flex items-center gap-1"
+                    >
+                      ← Back to tickets
+                    </button>
+                    <CardTitle className="text-white">{selectedTicket.subject}</CardTitle>
+                    <p className="text-sm text-slate-400 mt-1">
+                      From: @{selectedTicket.username} • {new Date(selectedTicket.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      selectedTicket.priority === 'urgent' ? 'bg-red-500/20 text-red-400' :
+                      selectedTicket.priority === 'high' ? 'bg-amber-500/20 text-amber-400' :
+                      selectedTicket.priority === 'medium' ? 'bg-blue-500/20 text-blue-400' :
+                      'bg-slate-500/20 text-slate-400'
+                    }`}>
+                      {selectedTicket.priority.toUpperCase()}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      selectedTicket.status === 'open' ? 'bg-emerald-500/20 text-emerald-400' :
+                      selectedTicket.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                      selectedTicket.status === 'waiting' ? 'bg-amber-500/20 text-amber-400' :
+                      selectedTicket.status === 'resolved' ? 'bg-purple-500/20 text-purple-400' :
+                      'bg-slate-500/20 text-slate-400'
+                    }`}>
+                      {selectedTicket.status.replace('_', ' ').toUpperCase()}
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Original Description */}
+                  <div>
+                    <p className="text-xs text-slate-400 mb-2">Description</p>
+                    <div className="p-4 bg-slate-900/50 rounded-lg text-white whitespace-pre-wrap">
+                      {selectedTicket.description}
+                    </div>
+                  </div>
+
+                  {/* Attachments */}
+                  {selectedTicket.attachments && selectedTicket.attachments.length > 0 && (
+                    <div>
+                      <p className="text-xs text-slate-400 mb-2">Attachments</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedTicket.attachments.map((url, idx) => (
+                          <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="px-3 py-2 bg-slate-700 rounded-lg text-blue-400 text-sm hover:bg-slate-600">
+                            Attachment {idx + 1}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Conversation Thread */}
+                  <div>
+                    <p className="text-xs text-slate-400 mb-2">Conversation ({ticketComments.length})</p>
+                    <div className="space-y-3 max-h-64 overflow-y-auto mb-4">
+                      {ticketComments.length === 0 ? (
+                        <p className="text-slate-500 text-sm text-center py-4">No replies yet</p>
+                      ) : (
+                        ticketComments.map(comment => (
+                          <div
+                            key={comment.id}
+                            className={`p-3 rounded-lg ${comment.is_admin ? 'bg-purple-500/10 border border-purple-500/30' : 'bg-slate-700/50'}`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`font-medium text-sm ${comment.is_admin ? 'text-purple-400' : 'text-white'}`}>
+                                {comment.username}
+                              </span>
+                              {comment.is_admin && <span className="px-1.5 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">Staff</span>}
+                              <span className="text-xs text-slate-500">{new Date(comment.created_at).toLocaleString()}</span>
+                            </div>
+                            <p className="text-white text-sm">{comment.comment}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Admin Reply */}
+                    {selectedTicket.status !== 'closed' && (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={adminReply}
+                          onChange={(e) => setAdminReply(e.target.value)}
+                          placeholder="Type a reply..."
+                          className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-purple-500 focus:outline-none"
+                        />
+                        <Button
+                          variant="primary"
+                          onClick={async () => {
+                            if (!adminReply.trim()) return;
+                            setTicketActionLoading(true);
+                            await addTicketComment({
+                              ticket_id: selectedTicket.id,
+                              user_id: user?.id,
+                              username: user?.displayName || 'Admin',
+                              is_admin: true,
+                              comment: adminReply,
+                            });
+                            // If ticket is open, set to in_progress
+                            if (selectedTicket.status === 'open') {
+                              await updateTicketStatus(selectedTicket.id, 'in_progress');
+                            }
+                            const comments = await getTicketComments(selectedTicket.id);
+                            setTicketComments(comments);
+                            setAdminReply('');
+                            // Refresh ticket list
+                            const tickets = await getAllTickets(ticketFilter);
+                            setSupportTickets(tickets);
+                            setTicketActionLoading(false);
+                          }}
+                          disabled={ticketActionLoading || !adminReply.trim()}
+                        >
+                          <Send className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Status Actions */}
+                  <div className="pt-4 border-t border-slate-700">
+                    <p className="text-xs text-slate-400 mb-3">Update Status</p>
+                    <div className="flex flex-wrap gap-2">
+                      {['open', 'in_progress', 'waiting', 'resolved', 'closed'].map(status => (
+                        <Button
+                          key={status}
+                          variant={selectedTicket.status === status ? 'primary' : 'secondary'}
+                          size="sm"
+                          onClick={async () => {
+                            setTicketActionLoading(true);
+                            await updateTicketStatus(selectedTicket.id, status as any, user?.id, status === 'resolved' ? ticketResolution : undefined);
+                            // Refresh
+                            const tickets = await getAllTickets(ticketFilter);
+                            const stats = await getTicketStats();
+                            setSupportTickets(tickets);
+                            setTicketStats(stats);
+                            setSelectedTicket({ ...selectedTicket, status: status as any });
+                            setTicketActionLoading(false);
+                          }}
+                          disabled={ticketActionLoading}
+                        >
+                          {status.replace('_', ' ').charAt(0).toUpperCase() + status.replace('_', ' ').slice(1)}
+                        </Button>
+                      ))}
+                    </div>
+                    {(selectedTicket.status === 'resolved' || selectedTicket.status === 'closed') && (
+                      <div className="mt-3">
+                        <input
+                          type="text"
+                          value={ticketResolution}
+                          onChange={(e) => setTicketResolution(e.target.value)}
+                          placeholder="Resolution notes (optional)..."
+                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-purple-500 focus:outline-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="bg-slate-800/50 border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Inbox className="w-5 h-5 text-purple-400" />
+                    Support Tickets
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {supportTickets.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Inbox className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                      <p className="text-slate-400">No tickets found</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {supportTickets.map(ticket => (
+                        <div
+                          key={ticket.id}
+                          onClick={() => setSelectedTicket(ticket)}
+                          className="p-4 rounded-lg bg-slate-700/30 hover:bg-slate-700/50 cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                  ticket.status === 'open' ? 'bg-emerald-500/20 text-emerald-400' :
+                                  ticket.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                                  ticket.status === 'waiting' ? 'bg-amber-500/20 text-amber-400' :
+                                  ticket.status === 'resolved' ? 'bg-purple-500/20 text-purple-400' :
+                                  'bg-slate-500/20 text-slate-400'
+                                }`}>
+                                  {ticket.status.replace('_', ' ')}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-xs ${
+                                  ticket.priority === 'urgent' ? 'bg-red-500/20 text-red-400' :
+                                  ticket.priority === 'high' ? 'bg-amber-500/20 text-amber-400' :
+                                  'text-slate-400'
+                                }`}>
+                                  {ticket.priority}
+                                </span>
+                                <span className="text-xs text-slate-500 capitalize">{ticket.ticket_type}</span>
+                              </div>
+                              <h4 className="font-medium text-white truncate">{ticket.subject}</h4>
+                              <p className="text-sm text-slate-400 truncate">{ticket.description}</p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                @{ticket.username} • {new Date(ticket.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div className="text-slate-500 text-sm">→</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </>
         )}
 

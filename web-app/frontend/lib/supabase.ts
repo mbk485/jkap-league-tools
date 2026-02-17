@@ -4101,3 +4101,1141 @@ export async function getLeagueDirectors(): Promise<{
     return [];
   }
 }
+
+// =============================================================================
+// SUPPORT TICKETS SYSTEM
+// =============================================================================
+
+export interface DBSupportTicket {
+  id: string;
+  user_id: string | null;
+  username: string;
+  email: string | null;
+  ticket_type: 'bug' | 'feature' | 'question' | 'account' | 'other';
+  subject: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
+  attachments: string[]; // Array of file URLs
+  admin_notes: string | null;
+  assigned_to: string | null;
+  resolved_by: string | null;
+  resolution: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+}
+
+export interface DBTicketComment {
+  id: string;
+  ticket_id: string;
+  user_id: string | null;
+  username: string;
+  is_admin: boolean;
+  comment: string;
+  attachments: string[];
+  created_at: string;
+}
+
+// Create a new support ticket
+export async function createSupportTicket(ticket: {
+  user_id?: string;
+  username: string;
+  email?: string;
+  ticket_type: 'bug' | 'feature' | 'question' | 'account' | 'other';
+  subject: string;
+  description: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  attachments?: string[];
+}): Promise<{ success: boolean; ticket?: DBSupportTicket; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('support_tickets')
+      .insert({
+        user_id: ticket.user_id || null,
+        username: ticket.username,
+        email: ticket.email || null,
+        ticket_type: ticket.ticket_type,
+        subject: ticket.subject,
+        description: ticket.description,
+        priority: ticket.priority || 'medium',
+        attachments: ticket.attachments || [],
+        status: 'open',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, ticket: data };
+  } catch (err: any) {
+    console.error('Error creating support ticket:', err);
+    return { success: false, error: err.message || 'Failed to create ticket' };
+  }
+}
+
+// Get tickets for a user
+export async function getUserTickets(userId: string): Promise<DBSupportTicket[]> {
+  try {
+    const { data, error } = await supabase
+      .from('support_tickets')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching user tickets:', err);
+    return [];
+  }
+}
+
+// Get all tickets (admin only)
+export async function getAllTickets(filters?: {
+  status?: string;
+  type?: string;
+  priority?: string;
+}): Promise<DBSupportTicket[]> {
+  try {
+    let query = supabase
+      .from('support_tickets')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (filters?.status && filters.status !== 'all') {
+      query = query.eq('status', filters.status);
+    }
+    if (filters?.type && filters.type !== 'all') {
+      query = query.eq('ticket_type', filters.type);
+    }
+    if (filters?.priority && filters.priority !== 'all') {
+      query = query.eq('priority', filters.priority);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching all tickets:', err);
+    return [];
+  }
+}
+
+// Get a single ticket by ID
+export async function getTicketById(ticketId: string): Promise<DBSupportTicket | null> {
+  try {
+    const { data, error } = await supabase
+      .from('support_tickets')
+      .select('*')
+      .eq('id', ticketId)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.error('Error fetching ticket:', err);
+    return null;
+  }
+}
+
+// Update ticket status (admin)
+export async function updateTicketStatus(
+  ticketId: string,
+  status: 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed',
+  adminId?: string,
+  resolution?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const updates: any = { status };
+    
+    if (status === 'resolved' || status === 'closed') {
+      updates.resolved_at = new Date().toISOString();
+      if (adminId) updates.resolved_by = adminId;
+      if (resolution) updates.resolution = resolution;
+    }
+
+    const { error } = await supabase
+      .from('support_tickets')
+      .update(updates)
+      .eq('id', ticketId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating ticket status:', err);
+    return { success: false, error: err.message || 'Failed to update ticket' };
+  }
+}
+
+// Add admin notes to ticket
+export async function addTicketNotes(
+  ticketId: string,
+  notes: string,
+  assignTo?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const updates: any = { admin_notes: notes };
+    if (assignTo) updates.assigned_to = assignTo;
+
+    const { error } = await supabase
+      .from('support_tickets')
+      .update(updates)
+      .eq('id', ticketId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error adding ticket notes:', err);
+    return { success: false, error: err.message || 'Failed to add notes' };
+  }
+}
+
+// Add comment to ticket
+export async function addTicketComment(comment: {
+  ticket_id: string;
+  user_id?: string;
+  username: string;
+  is_admin: boolean;
+  comment: string;
+  attachments?: string[];
+}): Promise<{ success: boolean; comment?: DBTicketComment; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('ticket_comments')
+      .insert({
+        ticket_id: comment.ticket_id,
+        user_id: comment.user_id || null,
+        username: comment.username,
+        is_admin: comment.is_admin,
+        comment: comment.comment,
+        attachments: comment.attachments || [],
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, comment: data };
+  } catch (err: any) {
+    console.error('Error adding ticket comment:', err);
+    return { success: false, error: err.message || 'Failed to add comment' };
+  }
+}
+
+// Get comments for a ticket
+export async function getTicketComments(ticketId: string): Promise<DBTicketComment[]> {
+  try {
+    const { data, error } = await supabase
+      .from('ticket_comments')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching ticket comments:', err);
+    return [];
+  }
+}
+
+// Get ticket statistics for admin dashboard
+export async function getTicketStats(): Promise<{
+  total: number;
+  open: number;
+  inProgress: number;
+  waiting: number;
+  resolved: number;
+  closed: number;
+  byType: Record<string, number>;
+  byPriority: Record<string, number>;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('support_tickets')
+      .select('status, ticket_type, priority');
+
+    if (error) throw error;
+
+    const tickets = data || [];
+    const stats = {
+      total: tickets.length,
+      open: 0,
+      inProgress: 0,
+      waiting: 0,
+      resolved: 0,
+      closed: 0,
+      byType: {} as Record<string, number>,
+      byPriority: {} as Record<string, number>,
+    };
+
+    tickets.forEach(t => {
+      // Count by status
+      if (t.status === 'open') stats.open++;
+      else if (t.status === 'in_progress') stats.inProgress++;
+      else if (t.status === 'waiting') stats.waiting++;
+      else if (t.status === 'resolved') stats.resolved++;
+      else if (t.status === 'closed') stats.closed++;
+
+      // Count by type
+      stats.byType[t.ticket_type] = (stats.byType[t.ticket_type] || 0) + 1;
+
+      // Count by priority
+      stats.byPriority[t.priority] = (stats.byPriority[t.priority] || 0) + 1;
+    });
+
+    return stats;
+  } catch (err) {
+    console.error('Error fetching ticket stats:', err);
+    return {
+      total: 0,
+      open: 0,
+      inProgress: 0,
+      waiting: 0,
+      resolved: 0,
+      closed: 0,
+      byType: {},
+      byPriority: {},
+    };
+  }
+}
+
+// Upload attachment to Supabase storage
+export async function uploadTicketAttachment(
+  file: File,
+  ticketId?: string
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${ticketId || 'new'}_${Date.now()}.${fileExt}`;
+    const filePath = `ticket-attachments/${fileName}`;
+
+    const { data, error } = await supabase.storage
+      .from('ticket-attachments')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (error) throw error;
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('ticket-attachments')
+      .getPublicUrl(filePath);
+
+    return { success: true, url: urlData.publicUrl };
+  } catch (err: any) {
+    console.error('Error uploading attachment:', err);
+    return { success: false, error: err.message || 'Failed to upload file' };
+  }
+}
+
+// =============================================================================
+// OFF-SEASON MANAGEMENT SYSTEM
+// =============================================================================
+
+import type {
+  SeasonPhase,
+  SeasonState,
+  FreeAgentDeclaration,
+  FreeAgentClaim,
+  QuestionnaireStatus,
+  FinalStanding,
+  PlayerClassification,
+} from '@/types/offseason';
+
+// Types for off-season
+export interface DBSeasonState {
+  id: string;
+  season_number: number;
+  phase: SeasonPhase;
+  phase_started_at: string;
+  phase_deadline?: string;
+  world_series_start?: string;
+  world_series_end?: string;
+  claiming_deadline?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DBFreeAgentDeclaration {
+  id: string;
+  season_number: number;
+  declaring_team_id: string;
+  declaring_user_id: string;
+  player_name: string;
+  position: string;
+  classification: PlayerClassification;
+  overall_rating: number;
+  declared_at: string;
+  is_claimed: boolean;
+  claimed_by_team_id?: string;
+  claimed_at?: string;
+}
+
+export interface DBFreeAgentClaim {
+  id: string;
+  season_number: number;
+  claiming_team_id: string;
+  claiming_user_id: string;
+  claiming_team_record?: string;
+  claiming_team_wins?: number;
+  target_free_agent_id: string;
+  target_player_name: string;
+  target_classification: PlayerClassification;
+  offered_player_name: string;
+  offered_position: string;
+  offered_classification: PlayerClassification;
+  offered_overall_rating: number;
+  status: 'pending' | 'approved' | 'denied' | 'processed';
+  submitted_at: string;
+  resolved_at?: string;
+  resolution_notes?: string;
+}
+
+export interface DBQuestionnaireStatus {
+  id: string;
+  user_id: string;
+  season_number: number;
+  completed: boolean;
+  completed_at?: string;
+  continuing_participation: boolean;
+  team_retention_preference: 'keep' | 'switch' | 'open';
+  requested_team?: string;
+  feedback?: string;
+}
+
+// Get current season state
+export async function getCurrentSeasonState(): Promise<DBSeasonState | null> {
+  try {
+    const { data, error } = await supabase
+      .from('season_state')
+      .select('*')
+      .order('season_number', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.error('Error fetching season state:', err);
+    return null;
+  }
+}
+
+// Update season phase (commissioner only)
+export async function updateSeasonPhase(
+  seasonId: string,
+  phase: SeasonPhase,
+  deadline?: string,
+  notes?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('season_state')
+      .update({
+        phase,
+        phase_started_at: new Date().toISOString(),
+        phase_deadline: deadline,
+        notes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', seasonId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating season phase:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Create new season
+export async function createNewSeason(seasonNumber: number): Promise<{ success: boolean; season?: DBSeasonState; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('season_state')
+      .insert({
+        season_number: seasonNumber,
+        phase: 'pre_season',
+        phase_started_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, season: data };
+  } catch (err: any) {
+    console.error('Error creating new season:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// =============================================================================
+// FREE AGENT DECLARATIONS
+// =============================================================================
+
+// Get all free agent declarations for a season
+export async function getFreeAgentDeclarations(seasonNumber: number): Promise<DBFreeAgentDeclaration[]> {
+  try {
+    const { data, error } = await supabase
+      .from('free_agent_declarations')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .order('declared_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching free agent declarations:', err);
+    return [];
+  }
+}
+
+// Get available (unclaimed) free agents
+export async function getAvailableFreeAgents(seasonNumber: number): Promise<DBFreeAgentDeclaration[]> {
+  try {
+    const { data, error } = await supabase
+      .from('free_agent_declarations')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .eq('is_claimed', false)
+      .order('overall_rating', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching available free agents:', err);
+    return [];
+  }
+}
+
+// Get user's free agent declarations
+export async function getUserDeclarations(userId: string, seasonNumber: number): Promise<DBFreeAgentDeclaration[]> {
+  try {
+    const { data, error } = await supabase
+      .from('free_agent_declarations')
+      .select('*')
+      .eq('declaring_user_id', userId)
+      .eq('season_number', seasonNumber)
+      .order('declared_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching user declarations:', err);
+    return [];
+  }
+}
+
+// Submit a free agent declaration
+export async function submitFreeAgentDeclaration(declaration: {
+  season_number: number;
+  declaring_team_id: string;
+  declaring_user_id: string;
+  player_name: string;
+  position: string;
+  classification: PlayerClassification;
+  overall_rating: number;
+}): Promise<{ success: boolean; declaration?: DBFreeAgentDeclaration; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('free_agent_declarations')
+      .insert({
+        ...declaration,
+        declared_at: new Date().toISOString(),
+        is_claimed: false,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, declaration: data };
+  } catch (err: any) {
+    console.error('Error submitting free agent declaration:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// =============================================================================
+// FREE AGENT CLAIMS
+// =============================================================================
+
+// Get all claims for a season
+export async function getFreeAgentClaims(seasonNumber: number): Promise<DBFreeAgentClaim[]> {
+  try {
+    const { data, error } = await supabase
+      .from('free_agent_claims')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .order('submitted_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching free agent claims:', err);
+    return [];
+  }
+}
+
+// Get user's claims
+export async function getUserClaims(userId: string, seasonNumber: number): Promise<DBFreeAgentClaim[]> {
+  try {
+    const { data, error } = await supabase
+      .from('free_agent_claims')
+      .select('*')
+      .eq('claiming_user_id', userId)
+      .eq('season_number', seasonNumber)
+      .order('submitted_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching user claims:', err);
+    return [];
+  }
+}
+
+// Submit a free agent claim
+export async function submitFreeAgentClaim(claim: {
+  season_number: number;
+  claiming_team_id: string;
+  claiming_user_id: string;
+  claiming_team_record?: string;
+  claiming_team_wins?: number;
+  target_free_agent_id: string;
+  target_player_name: string;
+  target_classification: PlayerClassification;
+  offered_player_name: string;
+  offered_position: string;
+  offered_classification: PlayerClassification;
+  offered_overall_rating: number;
+}): Promise<{ success: boolean; claim?: DBFreeAgentClaim; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('free_agent_claims')
+      .insert({
+        ...claim,
+        status: 'pending',
+        submitted_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, claim: data };
+  } catch (err: any) {
+    console.error('Error submitting free agent claim:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Process a claim (commissioner only)
+export async function processFreeAgentClaim(
+  claimId: string,
+  status: 'approved' | 'denied',
+  notes?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('free_agent_claims')
+      .update({
+        status,
+        resolved_at: new Date().toISOString(),
+        resolution_notes: notes,
+      })
+      .eq('id', claimId);
+
+    if (error) throw error;
+
+    // If approved, mark the free agent as claimed
+    if (status === 'approved') {
+      const { data: claim } = await supabase
+        .from('free_agent_claims')
+        .select('target_free_agent_id, claiming_team_id')
+        .eq('id', claimId)
+        .single();
+
+      if (claim) {
+        await supabase
+          .from('free_agent_declarations')
+          .update({
+            is_claimed: true,
+            claimed_by_team_id: claim.claiming_team_id,
+            claimed_at: new Date().toISOString(),
+          })
+          .eq('id', claim.target_free_agent_id);
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error processing claim:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// =============================================================================
+// QUESTIONNAIRE STATUS
+// =============================================================================
+
+// Get questionnaire status for a user
+export async function getQuestionnaireStatus(userId: string, seasonNumber: number): Promise<DBQuestionnaireStatus | null> {
+  try {
+    const { data, error } = await supabase
+      .from('questionnaire_status')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('season_number', seasonNumber)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+    return data;
+  } catch (err) {
+    console.error('Error fetching questionnaire status:', err);
+    return null;
+  }
+}
+
+// Mark questionnaire as completed
+export async function completeQuestionnaire(
+  userId: string,
+  seasonNumber: number,
+  responses: {
+    continuing_participation: boolean;
+    team_retention_preference: 'keep' | 'switch' | 'open';
+    requested_team?: string;
+    feedback?: string;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('questionnaire_status')
+      .upsert({
+        user_id: userId,
+        season_number: seasonNumber,
+        completed: true,
+        completed_at: new Date().toISOString(),
+        ...responses,
+      });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error completing questionnaire:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Get all questionnaire completions for admin
+export async function getAllQuestionnaireStatus(seasonNumber: number): Promise<DBQuestionnaireStatus[]> {
+  try {
+    const { data, error } = await supabase
+      .from('questionnaire_status')
+      .select('*')
+      .eq('season_number', seasonNumber);
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching all questionnaire status:', err);
+    return [];
+  }
+}
+
+// Get off-season progress summary for admin
+export async function getOffseasonProgressSummary(seasonNumber: number): Promise<{
+  totalMembers: number;
+  questionnaireCompleted: number;
+  declarationsSubmitted: number;
+  claimsSubmitted: number;
+}> {
+  try {
+    const [questionnaires, declarations, claims, users] = await Promise.all([
+      getAllQuestionnaireStatus(seasonNumber),
+      getFreeAgentDeclarations(seasonNumber),
+      getFreeAgentClaims(seasonNumber),
+      getAllUsers(),
+    ]);
+
+    const jkapMembers = users.filter(u => u.user_type === 'jkap_member' && !u.is_admin);
+
+    return {
+      totalMembers: jkapMembers.length,
+      questionnaireCompleted: questionnaires.filter(q => q.completed).length,
+      declarationsSubmitted: new Set(declarations.map(d => d.declaring_user_id)).size,
+      claimsSubmitted: claims.length,
+    };
+  } catch (err) {
+    console.error('Error fetching offseason progress summary:', err);
+    return {
+      totalMembers: 0,
+      questionnaireCompleted: 0,
+      declarationsSubmitted: 0,
+      claimsSubmitted: 0,
+    };
+  }
+}
+
+// =============================================================================
+// MEMBER ACTIVITY TRACKING
+// =============================================================================
+
+export interface DBMemberActivity {
+  id: string;
+  user_id: string;
+  is_active: boolean;
+  last_active_at: string;
+  activity_score: number;
+  phone_number: string | null;
+  sms_opted_in: boolean;
+  email_opted_in: boolean;
+  seasons_participated: string[];
+  total_games_played: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Get all active members with their contact info
+export async function getActiveMembers(): Promise<(DBMemberActivity & { user?: DBUser })[]> {
+  try {
+    const { data, error } = await supabase
+      .from('member_status')
+      .select(`
+        *,
+        user:users(*)
+      `)
+      .eq('is_active', true)
+      .order('last_active_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching active members:', err);
+    return [];
+  }
+}
+
+// Get members with contact info for SMS export
+export async function getMembersForSMS(): Promise<{
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  teamId: string;
+  isActive: boolean;
+}[]> {
+  try {
+    const { data, error } = await supabase
+      .from('member_status')
+      .select(`
+        *,
+        user:users(display_name, email, team_id)
+      `)
+      .eq('is_active', true)
+      .eq('sms_opted_in', true)
+      .order('last_active_at', { ascending: false });
+
+    if (error) throw error;
+
+    return (data || []).map((m: any) => ({
+      id: m.user_id,
+      name: m.user?.display_name || 'Unknown',
+      phone: m.phone_number || '',
+      email: m.user?.email || '',
+      teamId: m.user?.team_id || '',
+      isActive: m.is_active,
+    }));
+  } catch (err) {
+    console.error('Error fetching members for SMS:', err);
+    return [];
+  }
+}
+
+// Update member status
+export async function updateMemberStatus(
+  userId: string,
+  status: Partial<DBMemberActivity>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('member_status')
+      .upsert({
+        user_id: userId,
+        ...status,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating member status:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Log off-season specific activity (questionnaire, voting, declarations, claims)
+export async function logOffseasonActivity(
+  userId: string,
+  activityType: 'questionnaire' | 'vote' | 'declaration' | 'claim' | 'login',
+  description?: string,
+  seasonNumber?: number
+): Promise<void> {
+  try {
+    await supabase.from('offseason_activity_log').insert({
+      user_id: userId,
+      activity_type: activityType,
+      activity_description: description,
+      season_number: seasonNumber,
+      activity_at: new Date().toISOString(),
+    });
+
+    // Also update last_active_at in member_status
+    await supabase
+      .from('member_status')
+      .update({ last_active_at: new Date().toISOString() })
+      .eq('user_id', userId);
+  } catch (err) {
+    console.error('Error logging offseason activity:', err);
+  }
+}
+
+// =============================================================================
+// AWARD VOTING
+// =============================================================================
+
+export interface DBAwardVote {
+  id: string;
+  season_number: number;
+  user_id: string;
+  team_id: string;
+  mvp_vote: string;
+  cy_young_vote: string;
+  submitted_at: string;
+  created_at: string;
+}
+
+export interface DBAwardCandidate {
+  id: string;
+  season_number: number;
+  award_type: 'mvp' | 'cy_young' | 'rookie' | 'relief';
+  player_name: string;
+  team_abbr: string;
+  stats: Record<string, any>;
+  rank_position: number;
+  is_finalist: boolean;
+  created_at: string;
+}
+
+// Get award candidates for a season
+export async function getAwardCandidates(
+  seasonNumber: number,
+  awardType?: 'mvp' | 'cy_young'
+): Promise<DBAwardCandidate[]> {
+  try {
+    let query = supabase
+      .from('award_candidates')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .order('rank_position', { ascending: true });
+
+    if (awardType) {
+      query = query.eq('award_type', awardType);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching award candidates:', err);
+    return [];
+  }
+}
+
+// Submit award vote
+export async function submitAwardVote(vote: {
+  season_number: number;
+  user_id: string;
+  team_id: string;
+  mvp_vote: string;
+  cy_young_vote: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('award_votes').upsert({
+      ...vote,
+      submitted_at: new Date().toISOString(),
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error submitting award vote:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Get user's vote
+export async function getUserAwardVote(
+  userId: string,
+  seasonNumber: number
+): Promise<DBAwardVote | null> {
+  try {
+    const { data, error } = await supabase
+      .from('award_votes')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('season_number', seasonNumber)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  } catch (err) {
+    console.error('Error fetching user award vote:', err);
+    return null;
+  }
+}
+
+// Get vote results (admin)
+export async function getAwardVoteResults(seasonNumber: number): Promise<{
+  mvpResults: { player: string; votes: number }[];
+  cyYoungResults: { player: string; votes: number }[];
+  totalVotes: number;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('award_votes')
+      .select('*')
+      .eq('season_number', seasonNumber);
+
+    if (error) throw error;
+
+    const votes = data || [];
+    const mvpCounts: Record<string, number> = {};
+    const cyYoungCounts: Record<string, number> = {};
+
+    votes.forEach((v: DBAwardVote) => {
+      mvpCounts[v.mvp_vote] = (mvpCounts[v.mvp_vote] || 0) + 1;
+      cyYoungCounts[v.cy_young_vote] = (cyYoungCounts[v.cy_young_vote] || 0) + 1;
+    });
+
+    return {
+      mvpResults: Object.entries(mvpCounts)
+        .map(([player, voteCount]) => ({ player, votes: voteCount }))
+        .sort((a, b) => b.votes - a.votes),
+      cyYoungResults: Object.entries(cyYoungCounts)
+        .map(([player, voteCount]) => ({ player, votes: voteCount }))
+        .sort((a, b) => b.votes - a.votes),
+      totalVotes: votes.length,
+    };
+  } catch (err) {
+    console.error('Error fetching award vote results:', err);
+    return { mvpResults: [], cyYoungResults: [], totalVotes: 0 };
+  }
+}
+
+// =============================================================================
+// WINTER LEAGUE
+// =============================================================================
+
+export interface DBWinterLeagueTeam {
+  id: string;
+  season_number: number;
+  team_id: string;
+  user_id: string;
+  wins: number;
+  losses: number;
+  games_played: number;
+  is_active: boolean;
+  last_game_at: string | null;
+  created_at: string;
+}
+
+export interface DBWinterLeagueGame {
+  id: string;
+  season_number: number;
+  home_team_id: string;
+  away_team_id: string;
+  home_score: number;
+  away_score: number;
+  winner_team_id: string;
+  played_at: string;
+  reported_by: string;
+  created_at: string;
+}
+
+// Get winter league standings
+export async function getWinterLeagueStandings(seasonNumber: number): Promise<DBWinterLeagueTeam[]> {
+  try {
+    const { data, error } = await supabase
+      .from('winter_league_teams')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .order('wins', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching winter league standings:', err);
+    return [];
+  }
+}
+
+// Get winter league games
+export async function getWinterLeagueGames(seasonNumber: number): Promise<DBWinterLeagueGame[]> {
+  try {
+    const { data, error } = await supabase
+      .from('winter_league_games')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .order('played_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching winter league games:', err);
+    return [];
+  }
+}
+
+// Report winter league game result
+export async function reportWinterLeagueGame(game: {
+  season_number: number;
+  home_team_id: string;
+  away_team_id: string;
+  home_score: number;
+  away_score: number;
+  reported_by: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const winnerId = game.home_score > game.away_score ? game.home_team_id : game.away_team_id;
+    const loserId = game.home_score > game.away_score ? game.away_team_id : game.home_team_id;
+
+    // Insert game record
+    const { error: gameError } = await supabase.from('winter_league_games').insert({
+      ...game,
+      winner_team_id: winnerId,
+      played_at: new Date().toISOString(),
+    });
+
+    if (gameError) throw gameError;
+
+    // Update winner's record
+    await supabase.rpc('increment_winter_league_wins', {
+      p_season: game.season_number,
+      p_team_id: winnerId,
+    });
+
+    // Update loser's record
+    await supabase.rpc('increment_winter_league_losses', {
+      p_season: game.season_number,
+      p_team_id: loserId,
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error reporting winter league game:', err);
+    return { success: false, error: err.message };
+  }
+}

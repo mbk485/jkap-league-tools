@@ -728,6 +728,7 @@ interface AnnouncementPreviewProps {
   onCopy: () => void;
   isPosting: boolean;
   hasWebhook: boolean;
+  discordStatus?: 'none' | 'success' | 'error';
 }
 
 function AnnouncementPreview({
@@ -738,7 +739,16 @@ function AnnouncementPreview({
   onCopy,
   isPosting,
   hasWebhook,
+  discordStatus = 'none',
 }: AnnouncementPreviewProps) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    onCopy();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -759,17 +769,48 @@ function AnnouncementPreview({
         </div>
 
         <div className="p-6">
+          {/* Discord Status Banner */}
+          {discordStatus === 'success' && (
+            <div className="mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              <span className="text-emerald-400 font-medium">Posted to Discord ✓</span>
+            </div>
+          )}
+          {discordStatus === 'error' && (
+            <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-red-400" />
+              <span className="text-red-400 font-medium">Discord post failed</span>
+            </div>
+          )}
+
           <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap text-foreground mb-6 max-h-[300px] overflow-y-auto">
             {announcement}
           </div>
 
-          <div className="flex gap-3">
-            <Button variant="secondary" onClick={onCopy} fullWidth>
-              <Copy className="w-4 h-4" />
-              Copy to Clipboard
+          {/* Copy for Facebook - Always show prominently */}
+          <div className="space-y-3">
+            <Button 
+              variant="primary" 
+              onClick={handleCopy} 
+              fullWidth
+              className={copied ? 'bg-emerald-600 hover:bg-emerald-500' : ''}
+            >
+              {copied ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  Copied! Paste in Facebook Group Chat
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  📋 Copy for Facebook
+                </>
+              )}
             </Button>
-            {hasWebhook && (
-              <Button variant="primary" onClick={onPost} disabled={isPosting} fullWidth>
+
+            {/* Discord button - only show if not auto-posted or if it failed */}
+            {hasWebhook && discordStatus !== 'success' && (
+              <Button variant="secondary" onClick={onPost} disabled={isPosting} fullWidth>
                 {isPosting ? (
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                 ) : (
@@ -1539,6 +1580,7 @@ export default function InjuredListPage() {
   const [showAnnouncementPreview, setShowAnnouncementPreview] = useState(false);
   const [pendingAnnouncement, setPendingAnnouncement] = useState('');
   const [isPostingAnnouncement, setIsPostingAnnouncement] = useState(false);
+  const [discordPostStatus, setDiscordPostStatus] = useState<'none' | 'success' | 'error'>('none');
 
   // Auto-expand user's team on load
   useEffect(() => {
@@ -1715,23 +1757,23 @@ export default function InjuredListPage() {
             ? generateESPNAnnouncement('placement', placement, team.name, team.abbreviation)
             : generateSimpleAnnouncement('placement', placement, team.name);
 
-        let alreadyPosted = false;
+        let postStatus: 'none' | 'success' | 'error' = 'none';
         if (webhookSettings.autoPostToDiscord && webhookSettings.discordWebhookUrl) {
           console.log('[IL Manager] Auto-posting enabled, sending to Discord...');
           const result = await postToDiscord(webhookSettings.discordWebhookUrl, announcement);
           if (result.success) {
             console.log('[IL Manager] Auto-post successful!');
-            alreadyPosted = true;
+            postStatus = 'success';
           } else {
             console.error('[IL Manager] Auto-post failed:', result.error);
+            postStatus = 'error';
           }
         }
 
-        // Only show preview if NOT auto-posted (to avoid duplicate posting)
-        if (!alreadyPosted) {
-          setPendingAnnouncement(announcement);
-          setShowAnnouncementPreview(true);
-        }
+        // ALWAYS show the preview modal so user can copy for Facebook
+        setDiscordPostStatus(postStatus);
+        setPendingAnnouncement(announcement);
+        setShowAnnouncementPreview(true);
       }
     },
     [currentGame, webhookSettings, user?.id]
@@ -1789,23 +1831,23 @@ export default function InjuredListPage() {
               ? generateESPNAnnouncement('activation', activatedPlacement, team.name, team.abbreviation)
               : generateSimpleAnnouncement('activation', activatedPlacement, team.name);
 
-          let alreadyPosted = false;
+          let postStatus: 'none' | 'success' | 'error' = 'none';
           if (webhookSettings.autoPostToDiscord && webhookSettings.discordWebhookUrl) {
             console.log('[IL Manager] Auto-posting activation to Discord...');
             const result = await postToDiscord(webhookSettings.discordWebhookUrl, announcement);
             if (result.success) {
               console.log('[IL Manager] Activation auto-post successful!');
-              alreadyPosted = true;
+              postStatus = 'success';
             } else {
               console.error('[IL Manager] Activation auto-post failed:', result.error);
+              postStatus = 'error';
             }
           }
 
-          // Only show preview if NOT auto-posted (to avoid duplicate posting)
-          if (!alreadyPosted) {
-            setPendingAnnouncement(announcement);
-            setShowAnnouncementPreview(true);
-          }
+          // ALWAYS show the preview modal so user can copy for Facebook
+          setDiscordPostStatus(postStatus);
+          setPendingAnnouncement(announcement);
+          setShowAnnouncementPreview(true);
         }
       }
     },
@@ -2153,12 +2195,16 @@ export default function InjuredListPage() {
 
       <AnnouncementPreview
         isOpen={showAnnouncementPreview}
-        onClose={() => setShowAnnouncementPreview(false)}
+        onClose={() => {
+          setShowAnnouncementPreview(false);
+          setDiscordPostStatus('none');
+        }}
         announcement={pendingAnnouncement}
         onPost={handlePostAnnouncement}
         onCopy={handleCopyAnnouncement}
         isPosting={isPostingAnnouncement}
         hasWebhook={!!webhookSettings.discordWebhookUrl}
+        discordStatus={discordPostStatus}
       />
     </div>
   );
