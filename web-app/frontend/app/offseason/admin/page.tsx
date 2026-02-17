@@ -250,7 +250,7 @@ export default function OffSeasonAdminPage() {
           playerName: c.player_name,
           teamAbbr: c.team_abbr,
           stats: c.stats || {},
-          voteCount: c.vote_count,
+          voteCount: 0, // Vote tracking not yet implemented
         })));
       }
 
@@ -260,7 +260,7 @@ export default function OffSeasonAdminPage() {
           playerName: c.player_name,
           teamAbbr: c.team_abbr,
           stats: c.stats || {},
-          voteCount: c.vote_count,
+          voteCount: 0, // Vote tracking not yet implemented
         })));
       }
 
