@@ -160,7 +160,8 @@ export default function OffSeasonAdminPage() {
       setSeasonNumber(currentSeasonNum);
       if (seasonState) {
         setCurrentPhase(seasonState.phase as SeasonPhase);
-        setPlayoffTeamCount(seasonState.playoff_team_count || 4);
+        // Default playoff team count to 4 if not stored
+        setPlayoffTeamCount(4);
       }
 
       // Process standings
