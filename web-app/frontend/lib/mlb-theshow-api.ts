@@ -538,8 +538,8 @@ export function comparePlayersAttributes(
     : []; // Mixed comparison not supported
   
   return attributes.map(attr => {
-    const v1 = (player1 as Record<string, number>)[attr.key] || 0;
-    const v2 = (player2 as Record<string, number>)[attr.key] || 0;
+    const v1 = (player1 as unknown as Record<string, number>)[attr.key] || 0;
+    const v2 = (player2 as unknown as Record<string, number>)[attr.key] || 0;
     const diff = v1 - v2;
     
     return {

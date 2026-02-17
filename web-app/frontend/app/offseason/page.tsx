@@ -58,6 +58,7 @@ import {
   Vote,
   Snowflake,
   Search,
+  ArrowDownCircle,
   Gamepad2,
 } from 'lucide-react';
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
@@ -639,7 +640,7 @@ function OffSeasonContent() {
 
           {/* Standings Tab */}
           {activeTab === 'standings' && (
-            <StandingsSection />
+            <StandingsSection seasonNumber={seasonState.season_number} />
           )}
 
           {/* Winter League Tab */}
@@ -1328,18 +1329,93 @@ function ClaimsSection({ claims, onClaim }: ClaimsSectionProps) {
 // STANDINGS SECTION
 // =============================================================================
 
-function StandingsSection() {
-  // Mock standings data
-  const mockStandings = [
-    { rank: 1, team: 'New York Yankees', record: '98-64', pct: '.605', gb: '-', playoffs: true },
-    { rank: 2, team: 'Los Angeles Dodgers', record: '95-67', pct: '.586', gb: '3.0', playoffs: true },
-    { rank: 3, team: 'Atlanta Braves', record: '92-70', pct: '.568', gb: '6.0', playoffs: true },
-    { rank: 4, team: 'Houston Astros', record: '90-72', pct: '.556', gb: '8.0', playoffs: true },
-    { rank: 5, team: 'Philadelphia Phillies', record: '88-74', pct: '.543', gb: '10.0', playoffs: true },
-    { rank: 6, team: 'Cleveland Guardians', record: '85-77', pct: '.525', gb: '13.0', playoffs: true },
-    { rank: 7, team: 'San Diego Padres', record: '82-80', pct: '.506', gb: '16.0', playoffs: false },
-    { rank: 8, team: 'Toronto Blue Jays', record: '80-82', pct: '.494', gb: '18.0', playoffs: false },
-  ];
+interface StandingsData {
+  rank: number;
+  team: string;
+  teamAbbr: string;
+  record: string;
+  pct: string;
+  gb: string;
+  playoffs: boolean;
+  owner: string;
+}
+
+function StandingsSection({ seasonNumber }: { seasonNumber: number }) {
+  const [standings, setStandings] = useState<StandingsData[]>([]);
+  const [draftOrder, setDraftOrder] = useState<StandingsData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadStandings = async () => {
+      try {
+        const { getFinalStandings, getDraftOrder, getAllUsers } = await import('@/lib/supabase');
+        const [finalStandings, draftOrderData, users] = await Promise.all([
+          getFinalStandings(seasonNumber),
+          getDraftOrder(seasonNumber),
+          getAllUsers(),
+        ]);
+
+        if (finalStandings && finalStandings.length > 0) {
+          const processedStandings = finalStandings.map((s) => {
+            const owner = users.find(u => u.team_id === s.team_abbreviation);
+            return {
+              rank: s.overall_rank,
+              team: s.team_name,
+              teamAbbr: s.team_abbreviation,
+              record: `${s.wins}-${s.losses}`,
+              pct: s.win_percentage.toFixed(3),
+              gb: s.games_back === 0 ? '-' : s.games_back.toFixed(1),
+              playoffs: s.made_playoffs,
+              owner: owner?.display_name || 'Unknown',
+            };
+          });
+          setStandings(processedStandings);
+
+          // Draft order is reverse
+          const processedDraftOrder = draftOrderData.map((s, index) => {
+            const owner = users.find(u => u.team_id === s.team_abbreviation);
+            return {
+              rank: index + 1,
+              team: s.team_name,
+              teamAbbr: s.team_abbreviation,
+              record: `${s.wins}-${s.losses}`,
+              pct: s.win_percentage.toFixed(3),
+              gb: '-',
+              playoffs: s.made_playoffs,
+              owner: owner?.display_name || 'Unknown',
+            };
+          });
+          setDraftOrder(processedDraftOrder);
+        }
+      } catch (err) {
+        console.error('Error loading standings:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadStandings();
+  }, [seasonNumber]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (standings.length === 0) {
+    return (
+      <Card className="bg-slate-800/50 border-slate-700">
+        <CardContent className="py-12 text-center">
+          <BarChart3 className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+          <p className="text-slate-400">Final standings have not been posted yet.</p>
+          <p className="text-slate-500 text-sm mt-2">Check back after the regular season ends.</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="grid lg:grid-cols-3 gap-6">
@@ -1348,7 +1424,7 @@ function StandingsSection() {
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-emerald-400" />
-              Season {4} Final Standings
+              Season {seasonNumber} Final Standings
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1358,6 +1434,7 @@ function StandingsSection() {
                   <tr className="text-left text-sm text-slate-400 border-b border-slate-700">
                     <th className="pb-3 pl-2">Rank</th>
                     <th className="pb-3">Team</th>
+                    <th className="pb-3">Owner</th>
                     <th className="pb-3 text-center">Record</th>
                     <th className="pb-3 text-center">PCT</th>
                     <th className="pb-3 text-center">GB</th>
@@ -1365,7 +1442,7 @@ function StandingsSection() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mockStandings.map((team, index) => (
+                  {standings.map((team) => (
                     <tr
                       key={team.rank}
                       className={`border-b border-slate-700/50 ${
@@ -1378,8 +1455,14 @@ function StandingsSection() {
                         </span>
                       </td>
                       <td className="py-3">
-                        <span className="text-white font-medium">{team.team}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="w-8 h-8 rounded bg-slate-700/50 flex items-center justify-center text-xs font-bold text-slate-300">
+                            {team.teamAbbr}
+                          </span>
+                          <span className="text-white font-medium">{team.team}</span>
+                        </div>
                       </td>
+                      <td className="py-3 text-slate-300 text-sm">{team.owner}</td>
                       <td className="py-3 text-center text-slate-300">{team.record}</td>
                       <td className="py-3 text-center text-slate-300">{team.pct}</td>
                       <td className="py-3 text-center text-slate-400">{team.gb}</td>
@@ -1403,6 +1486,50 @@ function StandingsSection() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Draft Order */}
+        {draftOrder.length > 0 && (
+          <Card className="bg-purple-500/10 border-purple-500/30 mt-6">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <ArrowDownCircle className="w-5 h-5 text-purple-400" />
+                Season {seasonNumber + 1} Draft Order
+              </CardTitle>
+              <p className="text-slate-400 text-sm">
+                Worst record picks first (inverse of final standings)
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {draftOrder.map((team, index) => (
+                  <div
+                    key={team.teamAbbr}
+                    className={`p-3 rounded-lg border ${
+                      index < 4 
+                        ? 'bg-purple-500/10 border-purple-500/30' 
+                        : 'bg-slate-700/30 border-slate-600'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        index === 0 ? 'bg-amber-500 text-black' :
+                        index === 1 ? 'bg-slate-400 text-black' :
+                        index === 2 ? 'bg-orange-600 text-white' :
+                        'bg-slate-600 text-white'
+                      }`}>
+                        {index + 1}
+                      </span>
+                      <div>
+                        <p className="text-white font-medium text-sm">{team.teamAbbr}</p>
+                        <p className="text-slate-400 text-xs">{team.record}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Sidebar */}
@@ -1419,7 +1546,7 @@ function StandingsSection() {
               Top 6 teams advance to the postseason tournament.
             </p>
             <div className="space-y-2">
-              {mockStandings.filter(t => t.playoffs).map((team) => (
+              {standings.filter(t => t.playoffs).map((team) => (
                 <div key={team.rank} className="flex items-center gap-2 text-sm">
                   <span className="text-amber-400 font-bold w-4">{team.rank}</span>
                   <span className="text-white">{team.team}</span>

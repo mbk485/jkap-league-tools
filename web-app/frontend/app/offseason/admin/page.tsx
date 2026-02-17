@@ -129,6 +129,12 @@ export default function OffSeasonAdminPage() {
   // Real data state
   const [members, setMembers] = useState<MemberData[]>([]);
   const [standings, setStandings] = useState<StandingsData[]>([]);
+  const [editableStandings, setEditableStandings] = useState<StandingsData[]>([]);
+  const [isEditingStandings, setIsEditingStandings] = useState(false);
+  const [isSavingStandings, setIsSavingStandings] = useState(false);
+  const [standingsMessage, setStandingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [draftOrder, setDraftOrder] = useState<StandingsData[]>([]);
+  const [hasSavedStandings, setHasSavedStandings] = useState(false);
   const [progressSummary, setProgressSummary] = useState({
     totalMembers: 0,
     questionnaireCompleted: 0,
@@ -1103,6 +1109,254 @@ export default function OffSeasonAdminPage() {
           {/* Standings Tab */}
           {activeTab === 'standings' && (
             <div className="space-y-6">
+              {/* Status Message */}
+              {standingsMessage && (
+                <div className={`p-4 rounded-xl border ${
+                  standingsMessage.type === 'success' 
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                    : 'bg-red-500/10 border-red-500/30 text-red-400'
+                }`}>
+                  {standingsMessage.text}
+                </div>
+              )}
+
+              {/* Editable Standings */}
+              <Card className="bg-slate-800/50 border-slate-700">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <Edit3 className="w-5 h-5 text-amber-400" />
+                      Season {seasonNumber} Final Standings
+                      {hasSavedStandings && (
+                        <Badge className="ml-2 bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                          Saved
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <div className="flex gap-2">
+                      {isEditingStandings ? (
+                        <>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={cancelEditStandings}
+                            disabled={isSavingStandings}
+                          >
+                            <X className="w-4 h-4 mr-1" />
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleSaveStandings}
+                            disabled={isSavingStandings}
+                            className="bg-emerald-600 hover:bg-emerald-500"
+                          >
+                            {isSavingStandings ? (
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                            ) : (
+                              <Save className="w-4 h-4 mr-1" />
+                            )}
+                            Save Standings
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => setIsEditingStandings(true)}
+                          className="bg-amber-600 hover:bg-amber-500"
+                        >
+                          <Edit3 className="w-4 h-4 mr-1" />
+                          Edit Standings
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-slate-400 text-sm mt-2">
+                    {isEditingStandings 
+                      ? 'Drag teams to reorder, edit W/L records, and set playoff status. Changes are saved when you click Save.'
+                      : 'Click Edit to manually input final standings. The draft order will be the reverse of these standings.'}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-left text-sm text-slate-400 border-b border-slate-700">
+                          {isEditingStandings && <th className="pb-3 w-16">Order</th>}
+                          <th className="pb-3 pl-2">Rank</th>
+                          <th className="pb-3">Team</th>
+                          <th className="pb-3">Owner</th>
+                          <th className="pb-3 text-center">W</th>
+                          <th className="pb-3 text-center">L</th>
+                          <th className="pb-3 text-center">PCT</th>
+                          <th className="pb-3 text-center">Playoffs</th>
+                          <th className="pb-3 text-center">Seed</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(isEditingStandings ? editableStandings : standings).map((team, index) => (
+                          <tr
+                            key={team.teamId}
+                            className={`border-b border-slate-700/50 ${
+                              team.madePlayoffs ? 'bg-emerald-500/5' : 'bg-blue-500/5'
+                            }`}
+                          >
+                            {isEditingStandings && (
+                              <td className="py-2">
+                                <div className="flex flex-col gap-1">
+                                  <button
+                                    onClick={() => moveTeamUp(index)}
+                                    disabled={index === 0}
+                                    className="p-1 rounded hover:bg-slate-600 disabled:opacity-30"
+                                  >
+                                    <ArrowUp className="w-4 h-4 text-slate-400" />
+                                  </button>
+                                  <button
+                                    onClick={() => moveTeamDown(index)}
+                                    disabled={index === editableStandings.length - 1}
+                                    className="p-1 rounded hover:bg-slate-600 disabled:opacity-30"
+                                  >
+                                    <ArrowDown className="w-4 h-4 text-slate-400" />
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+                            <td className="py-3 pl-2">
+                              <span className={`font-bold ${
+                                (index + 1) === 1 ? 'text-amber-400' :
+                                (index + 1) === 2 ? 'text-slate-300' :
+                                (index + 1) === 3 ? 'text-orange-400' :
+                                'text-slate-400'
+                              }`}>
+                                {index + 1}
+                              </span>
+                            </td>
+                            <td className="py-3">
+                              <div className="flex items-center gap-2">
+                                <span className="w-10 h-10 rounded-lg bg-slate-700/50 flex items-center justify-center text-xs font-bold text-slate-300">
+                                  {team.teamAbbr}
+                                </span>
+                                <span className="text-white font-medium">{team.teamName}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 text-slate-300">{team.owner}</td>
+                            <td className="py-3 text-center">
+                              {isEditingStandings ? (
+                                <input
+                                  type="number"
+                                  value={team.wins}
+                                  onChange={(e) => updateTeamStanding(team.teamId, 'wins', parseInt(e.target.value) || 0)}
+                                  className="w-14 px-2 py-1 rounded bg-slate-700 border border-slate-600 text-white text-center"
+                                />
+                              ) : (
+                                <span className="text-white font-medium">{team.wins}</span>
+                              )}
+                            </td>
+                            <td className="py-3 text-center">
+                              {isEditingStandings ? (
+                                <input
+                                  type="number"
+                                  value={team.losses}
+                                  onChange={(e) => updateTeamStanding(team.teamId, 'losses', parseInt(e.target.value) || 0)}
+                                  className="w-14 px-2 py-1 rounded bg-slate-700 border border-slate-600 text-white text-center"
+                                />
+                              ) : (
+                                <span className="text-slate-400">{team.losses}</span>
+                              )}
+                            </td>
+                            <td className="py-3 text-center text-white">{team.pct.toFixed(3)}</td>
+                            <td className="py-3 text-center">
+                              {isEditingStandings ? (
+                                <button
+                                  onClick={() => updateTeamStanding(team.teamId, 'madePlayoffs', !team.madePlayoffs)}
+                                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                                    team.madePlayoffs 
+                                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                      : 'bg-slate-600/50 text-slate-400 border border-slate-500/30'
+                                  }`}
+                                >
+                                  {team.madePlayoffs ? 'Yes' : 'No'}
+                                </button>
+                              ) : (
+                                team.madePlayoffs ? (
+                                  <CheckCircle className="w-5 h-5 text-emerald-400 mx-auto" />
+                                ) : (
+                                  <XCircle className="w-5 h-5 text-slate-500 mx-auto" />
+                                )
+                              )}
+                            </td>
+                            <td className="py-3 text-center">
+                              {isEditingStandings && team.madePlayoffs ? (
+                                <input
+                                  type="number"
+                                  value={team.seed || ''}
+                                  onChange={(e) => updateTeamStanding(team.teamId, 'seed', parseInt(e.target.value) || undefined)}
+                                  className="w-14 px-2 py-1 rounded bg-slate-700 border border-slate-600 text-white text-center"
+                                  placeholder="#"
+                                />
+                              ) : team.madePlayoffs && team.seed ? (
+                                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                                  #{team.seed}
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-500">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Draft Order (Reverse of Standings) */}
+              <Card className="bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-blue-500/10 border-purple-500/30">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <ListOrdered className="w-5 h-5 text-purple-400" />
+                    Season {seasonNumber + 1} Draft Order
+                  </CardTitle>
+                  <p className="text-slate-400 text-sm mt-1">
+                    Draft order is the reverse of final standings - worst record picks first.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {draftOrder.map((team, index) => (
+                      <div
+                        key={team.teamId}
+                        className={`flex items-center gap-3 p-3 rounded-xl border ${
+                          index < 4 
+                            ? 'bg-purple-500/10 border-purple-500/30' 
+                            : 'bg-slate-700/30 border-slate-600'
+                        }`}
+                      >
+                        <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                          index === 0 ? 'bg-amber-500 text-black' :
+                          index === 1 ? 'bg-slate-400 text-black' :
+                          index === 2 ? 'bg-orange-600 text-white' :
+                          'bg-slate-600 text-white'
+                        }`}>
+                          {index + 1}
+                        </span>
+                        <div className="flex-1">
+                          <p className="text-white font-medium">{team.teamName}</p>
+                          <p className="text-slate-400 text-xs">
+                            {team.owner} • {team.wins}-{team.losses}
+                          </p>
+                        </div>
+                        {index < 4 && (
+                          <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
+                            Top 4
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Shareable Standings */}
               <Card className="bg-gradient-to-r from-blue-500/10 via-cyan-500/5 to-emerald-500/10 border-blue-500/30">
                 <CardHeader>
@@ -1118,96 +1372,48 @@ export default function OffSeasonAdminPage() {
                   <div className="p-4 rounded-xl bg-slate-900 border border-slate-700 font-mono text-sm text-slate-300 whitespace-pre-wrap mb-4">
                     {generateStandingsText()}
                   </div>
-                  <Button
-                    onClick={() => copyToClipboard(generateStandingsText(), 'standings-text')}
-                    className="bg-blue-500 hover:bg-blue-400"
-                  >
-                    {copiedField === 'standings-text' ? (
-                      <>
-                        <Check className="w-4 h-4 mr-2" />
-                        Copied!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4 mr-2" />
-                        Copy Standings Text
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Full Standings Table */}
-              <Card className="bg-slate-800/50 border-slate-700">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-emerald-400" />
-                    Season {seasonNumber} Final Standings
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="text-left text-sm text-slate-400 border-b border-slate-700">
-                          <th className="pb-3 pl-2">Rank</th>
-                          <th className="pb-3">Team</th>
-                          <th className="pb-3">Owner</th>
-                          <th className="pb-3 text-center">W</th>
-                          <th className="pb-3 text-center">L</th>
-                          <th className="pb-3 text-center">PCT</th>
-                          <th className="pb-3 text-center">GB</th>
-                          <th className="pb-3 text-center">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {standings.map((team) => (
-                          <tr
-                            key={team.teamId}
-                            className={`border-b border-slate-700/50 ${
-                              team.madePlayoffs ? 'bg-emerald-500/5' : 'bg-blue-500/5'
-                            }`}
-                          >
-                            <td className="py-3 pl-2">
-                              <span className={`font-bold ${
-                                team.rank === 1 ? 'text-amber-400' :
-                                team.rank === 2 ? 'text-slate-300' :
-                                team.rank === 3 ? 'text-orange-400' :
-                                'text-slate-400'
-                              }`}>
-                                {team.rank}
-                              </span>
-                            </td>
-                            <td className="py-3">
-                              <div className="flex items-center gap-2">
-                                <span className="w-10 h-10 rounded-lg bg-slate-700/50 flex items-center justify-center text-xs font-bold text-slate-300">
-                                  {team.teamAbbr}
-                                </span>
-                                <span className="text-white font-medium">{team.teamName}</span>
-                              </div>
-                            </td>
-                            <td className="py-3 text-slate-300">{team.owner}</td>
-                            <td className="py-3 text-center text-white font-medium">{team.wins}</td>
-                            <td className="py-3 text-center text-slate-400">{team.losses}</td>
-                            <td className="py-3 text-center text-white">{team.pct.toFixed(3)}</td>
-                            <td className="py-3 text-center text-slate-400">{team.gb}</td>
-                            <td className="py-3 text-center">
-                              {team.madePlayoffs ? (
-                                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                                  <Trophy className="w-3 h-3 mr-1" />
-                                  #{team.seed} Seed
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
-                                  <Snowflake className="w-3 h-3 mr-1" />
-                                  Winter League
-                                </Badge>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => copyToClipboard(generateStandingsText(), 'standings-text')}
+                      className="bg-blue-500 hover:bg-blue-400"
+                    >
+                      {copiedField === 'standings-text' ? (
+                        <>
+                          <Check className="w-4 h-4 mr-2" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4 mr-2" />
+                          Copy Standings Text
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const draftText = [
+                          `📋 JKAP League Season ${seasonNumber + 1} Draft Order`,
+                          '',
+                          ...draftOrder.map((team, i) => 
+                            `${i + 1}. ${team.teamAbbr} (${team.wins}-${team.losses}) - ${team.owner}`
+                          ),
+                        ].join('\n');
+                        copyToClipboard(draftText, 'draft-order-text');
+                      }}
+                      variant="secondary"
+                    >
+                      {copiedField === 'draft-order-text' ? (
+                        <>
+                          <Check className="w-4 h-4 mr-2" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <ListOrdered className="w-4 h-4 mr-2" />
+                          Copy Draft Order
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
