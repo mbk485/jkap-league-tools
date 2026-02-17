@@ -60,8 +60,12 @@ import {
   getFreeAgentDeclarations,
   getAwardCandidates,
   getCurrentSeasonState,
+  getFinalStandings,
+  saveFinalStandings,
+  getDraftOrder,
   TeamStats,
   DBUser,
+  DBFinalStanding,
 } from '@/lib/supabase';
 import { MLB_TEAMS } from '@/types/league';
 import { checkQuestionnaireCompletions } from '@/lib/typeform-api';
@@ -805,13 +809,13 @@ export default function OffSeasonAdminPage() {
                     Based on AVG, HR, RBI, SB, and OPS. Each team gets one vote.
                   </p>
                   <div className="space-y-3">
-                    {MVP_CANDIDATES.map((candidate, index) => (
+                    {mvpCandidates.map((candidate, index) => (
                       <button
-                        key={candidate.name}
-                        onClick={() => setMvpVote(candidate.name)}
+                        key={candidate.playerName}
+                        onClick={() => setMvpVote(candidate.playerName)}
                         disabled={votingSubmitted}
                         className={`w-full p-4 rounded-xl border transition-all text-left ${
-                          mvpVote === candidate.name
+                          mvpVote === candidate.playerName
                             ? 'bg-amber-500/20 border-amber-500/50'
                             : 'bg-slate-700/30 border-slate-600 hover:bg-slate-700/50'
                         }`}
@@ -827,26 +831,26 @@ export default function OffSeasonAdminPage() {
                               {index + 1}
                             </span>
                             <div>
-                              <p className="text-white font-medium">{candidate.name}</p>
-                              <p className="text-slate-400 text-xs">{candidate.team}</p>
+                              <p className="text-white font-medium">{candidate.playerName}</p>
+                              <p className="text-slate-400 text-xs">{candidate.teamAbbr}</p>
                             </div>
                           </div>
-                          {mvpVote === candidate.name && (
+                          {mvpVote === candidate.playerName && (
                             <CheckCircle className="w-5 h-5 text-amber-400" />
                           )}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs">
                           <span className="px-2 py-1 rounded bg-slate-600/50 text-slate-300">
-                            AVG: {candidate.stats.avg}
+                            AVG: {candidate.stats.avg || 'N/A'}
                           </span>
                           <span className="px-2 py-1 rounded bg-slate-600/50 text-slate-300">
-                            HR: {candidate.stats.hr}
+                            HR: {candidate.stats.hr || 'N/A'}
                           </span>
                           <span className="px-2 py-1 rounded bg-slate-600/50 text-slate-300">
-                            RBI: {candidate.stats.rbi}
+                            RBI: {candidate.stats.rbi || 'N/A'}
                           </span>
                           <span className="px-2 py-1 rounded bg-slate-600/50 text-slate-300">
-                            OPS: {candidate.stats.ops}
+                            OPS: {candidate.stats.ops || 'N/A'}
                           </span>
                         </div>
                       </button>
@@ -868,13 +872,13 @@ export default function OffSeasonAdminPage() {
                     Based on Wins, ERA, Strikeouts, and WHIP. Each team gets one vote.
                   </p>
                   <div className="space-y-3">
-                    {CY_YOUNG_CANDIDATES.map((candidate, index) => (
+                    {cyYoungCandidates.map((candidate, index) => (
                       <button
-                        key={candidate.name}
-                        onClick={() => setCyYoungVote(candidate.name)}
+                        key={candidate.playerName}
+                        onClick={() => setCyYoungVote(candidate.playerName)}
                         disabled={votingSubmitted}
                         className={`w-full p-4 rounded-xl border transition-all text-left ${
-                          cyYoungVote === candidate.name
+                          cyYoungVote === candidate.playerName
                             ? 'bg-cyan-500/20 border-cyan-500/50'
                             : 'bg-slate-700/30 border-slate-600 hover:bg-slate-700/50'
                         }`}
@@ -890,26 +894,26 @@ export default function OffSeasonAdminPage() {
                               {index + 1}
                             </span>
                             <div>
-                              <p className="text-white font-medium">{candidate.name}</p>
-                              <p className="text-slate-400 text-xs">{candidate.team}</p>
+                              <p className="text-white font-medium">{candidate.playerName}</p>
+                              <p className="text-slate-400 text-xs">{candidate.teamAbbr}</p>
                             </div>
                           </div>
-                          {cyYoungVote === candidate.name && (
+                          {cyYoungVote === candidate.playerName && (
                             <CheckCircle className="w-5 h-5 text-cyan-400" />
                           )}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs">
                           <span className="px-2 py-1 rounded bg-slate-600/50 text-slate-300">
-                            W: {candidate.stats.wins}
+                            W: {candidate.stats.wins || 'N/A'}
                           </span>
                           <span className="px-2 py-1 rounded bg-slate-600/50 text-slate-300">
-                            ERA: {candidate.stats.era}
+                            ERA: {candidate.stats.era || 'N/A'}
                           </span>
                           <span className="px-2 py-1 rounded bg-slate-600/50 text-slate-300">
-                            K: {candidate.stats.so}
+                            K: {candidate.stats.so || 'N/A'}
                           </span>
                           <span className="px-2 py-1 rounded bg-slate-600/50 text-slate-300">
-                            WHIP: {candidate.stats.whip}
+                            WHIP: {candidate.stats.whip || 'N/A'}
                           </span>
                         </div>
                       </button>

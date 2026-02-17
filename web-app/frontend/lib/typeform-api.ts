@@ -56,73 +56,36 @@ export interface QuestionnaireCompletion {
   answers: Record<string, any>;
 }
 
-// Environment variables for Typeform
-const TYPEFORM_API_KEY = process.env.NEXT_PUBLIC_TYPEFORM_API_KEY || '';
-const TYPEFORM_FORM_ID = process.env.NEXT_PUBLIC_TYPEFORM_QUESTIONNAIRE_FORM_ID || '';
-
 /**
- * Fetch questionnaire responses from Typeform
+ * Fetch questionnaire responses from Typeform via our server-side API route
+ * This avoids CORS issues with direct browser-to-Typeform API calls
  * @param daysBack - Number of days to look back (default 45)
  * @returns Array of questionnaire completions
  */
 export async function getQuestionnaireResponses(daysBack: number = 45): Promise<QuestionnaireCompletion[]> {
-  if (!TYPEFORM_API_KEY || !TYPEFORM_FORM_ID) {
-    console.warn('Typeform API key or form ID not configured');
-    return [];
-  }
-
   try {
-    // Calculate the "since" date (daysBack days ago)
-    const sinceDate = new Date();
-    sinceDate.setDate(sinceDate.getDate() - daysBack);
-    const sinceISO = sinceDate.toISOString().split('.')[0]; // Remove milliseconds
-
-    const url = `https://api.typeform.com/forms/${TYPEFORM_FORM_ID}/responses?since=${sinceISO}&page_size=100`;
-
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${TYPEFORM_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    // Call our server-side API route
+    const response = await fetch(`/api/typeform/responses?days=${daysBack}`);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Typeform API error:', response.status, errorText);
+      console.error('API route error:', response.status);
       return [];
     }
 
-    const data: TypeformResponsesResult = await response.json();
+    const data = await response.json();
 
-    // Process responses and extract email + answers
-    const completions: QuestionnaireCompletion[] = [];
-
-    for (const item of data.items) {
-      // Find the email answer (usually a field with type "email")
-      const emailAnswer = item.answers?.find(a => a.type === 'email');
-      const email = emailAnswer?.email || item.hidden?.email || '';
-
-      if (email) {
-        // Convert answers to a simple key-value format
-        const answersMap: Record<string, any> = {};
-        for (const answer of item.answers || []) {
-          const key = answer.field.ref || answer.field.id;
-          if (answer.text) answersMap[key] = answer.text;
-          else if (answer.email) answersMap[key] = answer.email;
-          else if (answer.number !== undefined) answersMap[key] = answer.number;
-          else if (answer.boolean !== undefined) answersMap[key] = answer.boolean;
-          else if (answer.choice) answersMap[key] = answer.choice.label;
-          else if (answer.choices) answersMap[key] = answer.choices.labels;
-        }
-
-        completions.push({
-          email: email.toLowerCase(),
-          submittedAt: item.submitted_at,
-          responseId: item.response_id,
-          answers: answersMap,
-        });
-      }
+    if (data.error) {
+      console.warn('Typeform API warning:', data.error);
+      return [];
     }
+
+    // Convert to QuestionnaireCompletion format
+    const completions: QuestionnaireCompletion[] = (data.completions || []).map((c: any) => ({
+      email: c.email,
+      submittedAt: c.submittedAt,
+      responseId: '',
+      answers: {},
+    }));
 
     return completions;
   } catch (err) {

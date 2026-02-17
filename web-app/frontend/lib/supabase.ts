@@ -5239,3 +5239,138 @@ export async function reportWinterLeagueGame(game: {
     return { success: false, error: err.message };
   }
 }
+
+// =============================================================================
+// FINAL STANDINGS (Commissioner-Controlled)
+// =============================================================================
+
+export interface DBFinalStanding {
+  id: string;
+  season_number: number;
+  team_id: string;
+  team_name: string;
+  team_abbreviation: string;
+  wins: number;
+  losses: number;
+  win_percentage: number;
+  games_back: number;
+  division?: string;
+  division_rank?: number;
+  league_rank?: number;
+  overall_rank: number;
+  made_playoffs: boolean;
+  playoff_seed?: number;
+  recorded_at: string;
+  created_at: string;
+}
+
+// Get final standings for a season
+export async function getFinalStandings(seasonNumber: number): Promise<DBFinalStanding[]> {
+  try {
+    const { data, error } = await supabase
+      .from('final_standings')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .order('overall_rank', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching final standings:', err);
+    return [];
+  }
+}
+
+// Get draft order (reverse of final standings - worst team picks first)
+export async function getDraftOrder(seasonNumber: number): Promise<DBFinalStanding[]> {
+  try {
+    const { data, error } = await supabase
+      .from('final_standings')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .order('overall_rank', { ascending: false }); // Reverse order
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching draft order:', err);
+    return [];
+  }
+}
+
+// Save final standings (commissioner only)
+export async function saveFinalStandings(
+  seasonNumber: number,
+  standings: {
+    team_id: string;
+    team_name: string;
+    team_abbreviation: string;
+    wins: number;
+    losses: number;
+    overall_rank: number;
+    made_playoffs: boolean;
+    playoff_seed?: number;
+  }[]
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Delete existing standings for this season
+    await supabase
+      .from('final_standings')
+      .delete()
+      .eq('season_number', seasonNumber);
+
+    // Calculate win percentage and games back
+    const topWins = standings[0]?.wins || 0;
+    const topLosses = standings[0]?.losses || 0;
+
+    const processedStandings = standings.map((s, index) => {
+      const totalGames = s.wins + s.losses;
+      const winPct = totalGames > 0 ? s.wins / totalGames : 0;
+      const gb = index === 0 ? 0 : ((topWins - s.wins) + (s.losses - topLosses)) / 2;
+
+      return {
+        season_number: seasonNumber,
+        team_id: s.team_id,
+        team_name: s.team_name,
+        team_abbreviation: s.team_abbreviation,
+        wins: s.wins,
+        losses: s.losses,
+        win_percentage: Number(winPct.toFixed(3)),
+        games_back: Number(gb.toFixed(1)),
+        overall_rank: s.overall_rank,
+        made_playoffs: s.made_playoffs,
+        playoff_seed: s.playoff_seed,
+        recorded_at: new Date().toISOString(),
+      };
+    });
+
+    const { error } = await supabase
+      .from('final_standings')
+      .insert(processedStandings);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error saving final standings:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Update single team standing
+export async function updateTeamStanding(
+  standingId: string,
+  updates: Partial<DBFinalStanding>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('final_standings')
+      .update(updates)
+      .eq('id', standingId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating team standing:', err);
+    return { success: false, error: err.message };
+  }
+}
