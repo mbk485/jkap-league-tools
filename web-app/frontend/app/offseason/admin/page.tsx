@@ -226,8 +226,8 @@ export default function OffSeasonAdminPage() {
           teamName: mlbTeam?.name || u.team_id || 'No Team',
           email: u.email || '',
           phone: u.phone || '',
-          isActive: u.is_active !== false, // Default to active
-          lastActive: u.last_login || u.created_at || '',
+          isActive: true, // Default to active (no tracking yet)
+          lastActive: u.created_at || '',
           questionnaireCompleted: questionnaireCompletedMap.get(u.id) || false,
           freeAgentsDeclared: declarationsMap.has(u.id),
         };
