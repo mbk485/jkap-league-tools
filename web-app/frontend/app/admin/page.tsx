@@ -1010,6 +1010,13 @@ export default function AdminPage() {
       showLeagueHierarchy: true,
       showRewards: true,
       showGameLogger: true,
+      // MLB The Show Integration
+      showPlayerDatabase: true,
+      showMyTeam: true,
+      showRosterUpdates: true,
+      showExhibitionGames: true,
+      // Off-Season Program
+      showOffSeason: true,
     };
     setFeatureFlagsState(allEnabled);
     setFeatureFlags(allEnabled);
@@ -1036,6 +1043,13 @@ export default function AdminPage() {
       showLeagueHierarchy: false,
       showRewards: false,
       showGameLogger: false,
+      // MLB The Show Integration - keep hidden
+      showPlayerDatabase: false,
+      showMyTeam: false,
+      showRosterUpdates: false,
+      showExhibitionGames: false,
+      // Off-Season Program - keep hidden
+      showOffSeason: false,
     };
     setFeatureFlagsState(toolsOnly);
     setFeatureFlags(toolsOnly);
