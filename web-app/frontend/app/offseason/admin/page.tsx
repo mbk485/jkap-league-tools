@@ -63,7 +63,7 @@ import {
   TeamStats,
   DBUser,
 } from '@/lib/supabase';
-import { MLB_TEAMS } from '@/types/teams';
+import { MLB_TEAMS } from '@/types/league';
 import { checkQuestionnaireCompletions } from '@/lib/typeform-api';
 
 // Types for admin data
