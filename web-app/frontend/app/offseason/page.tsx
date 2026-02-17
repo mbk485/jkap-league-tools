@@ -60,6 +60,8 @@ import {
   Search,
   ArrowDownCircle,
   Gamepad2,
+  Home,
+  Eye,
 } from 'lucide-react';
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
 
@@ -120,6 +122,9 @@ function OffSeasonContent() {
   // Player search modal state
   const [showPlayerSearch, setShowPlayerSearch] = useState(false);
   const [playerSearchMode, setPlayerSearchMode] = useState<'declare' | 'offer'>('declare');
+
+  // Preview mode - when true, hide all admin elements to see exactly what members see
+  const [previewMode, setPreviewMode] = useState(false);
 
   useEffect(() => {
     // Load season state and user progress from the database
@@ -191,6 +196,112 @@ function OffSeasonContent() {
       <Navbar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* View Mode Toggle - For admins to switch between views */}
+        {isAdmin && !previewMode ? (
+          <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-blue-500/10 via-slate-800/50 to-emerald-500/10 border border-slate-600">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              {/* Current Mode Indicator */}
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
+                  <Eye className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-blue-400 font-bold text-sm">MEMBER VIEW</p>
+                  <p className="text-slate-400 text-xs">Seeing member page (with admin controls visible)</p>
+                </div>
+              </div>
+
+              {/* View Switching */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button 
+                  size="sm" 
+                  onClick={() => setPreviewMode(true)}
+                  className="bg-purple-600 hover:bg-purple-500 text-white"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Preview as Regular Member
+                </Button>
+                
+                <Link href="/offseason/admin">
+                  <Button size="sm" className="bg-amber-600 hover:bg-amber-500 text-white">
+                    <Shield className="w-4 h-4 mr-2" />
+                    Commissioner Dashboard
+                  </Button>
+                </Link>
+                
+                <Link href="/ballyard">
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white">
+                    <Target className="w-4 h-4 mr-2" />
+                    My Team (Diamondbacks)
+                  </Button>
+                </Link>
+              </div>
+            </div>
+            
+            {/* Quick Navigation */}
+            <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-600/50">
+              <span className="text-slate-500 text-xs">Quick links:</span>
+              <Link href="/" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+                <Home className="w-3 h-3" /> Home
+              </Link>
+              <Link href="/ballyard" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+                <Target className="w-3 h-3" /> The Ballyard
+              </Link>
+              <Link href="/standings" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+                <BarChart3 className="w-3 h-3" /> Standings
+              </Link>
+              <Link href="/free-agents" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+                <Users className="w-3 h-3" /> Free Agents
+              </Link>
+            </div>
+          </div>
+        ) : isAdmin && previewMode ? (
+          /* Preview Mode Banner - Shows admin is previewing as regular member */
+          <div className="mb-6 p-3 rounded-xl bg-purple-500/20 border border-purple-500/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Eye className="w-5 h-5 text-purple-400" />
+                <div>
+                  <p className="text-purple-400 font-bold text-sm">PREVIEW MODE</p>
+                  <p className="text-slate-400 text-xs">Viewing exactly what regular members see (no admin controls)</p>
+                </div>
+              </div>
+              <Button 
+                size="sm" 
+                onClick={() => setPreviewMode(false)}
+                variant="secondary"
+                className="bg-slate-700 hover:bg-slate-600"
+              >
+                Exit Preview
+              </Button>
+            </div>
+          </div>
+        ) : (
+          /* Regular member navigation */
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-700">
+            <div className="flex items-center gap-2">
+              <Link href="/">
+                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
+                  <Home className="w-4 h-4 mr-1" />
+                  Home
+                </Button>
+              </Link>
+              <Link href="/ballyard">
+                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
+                  <Target className="w-4 h-4 mr-1" />
+                  The Ballyard
+                </Button>
+              </Link>
+            </div>
+            <Link href="/ballyard">
+              <Button variant="secondary" size="sm" className="bg-emerald-600/20 hover:bg-emerald-600/30 border-emerald-500/30 text-emerald-400">
+                <Users className="w-4 h-4 mr-1" />
+                My Team
+              </Button>
+            </Link>
+          </div>
+        )}
+
         {/* Hero Header */}
         <div
           className={`mb-8 transition-all duration-500 ${
@@ -674,8 +785,8 @@ function OffSeasonContent() {
           title={playerSearchMode === 'declare' ? 'Search Player to Declare' : 'Search Player to Offer'}
         />
 
-        {/* Commissioner Controls - Only show for admins */}
-        {isAdmin && (
+        {/* Commissioner Controls - Only show for admins and NOT in preview mode */}
+        {isAdmin && !previewMode && (
           <div
             className={`mt-8 transition-all duration-500 delay-300 ${
               isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'

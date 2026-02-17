@@ -59,6 +59,13 @@ import {
   Edit3,
   X,
   ListOrdered,
+  Home,
+  ArrowLeft,
+  Shuffle,
+  Dices,
+  Lock,
+  UserCog,
+  Eye,
 } from 'lucide-react';
 import {
   getLeagueStandings,
@@ -148,6 +155,12 @@ export default function OffSeasonAdminPage() {
   const [mvpVote, setMvpVote] = useState<string | null>(null);
   const [cyYoungVote, setCyYoungVote] = useState<string | null>(null);
   const [votingSubmitted, setVotingSubmitted] = useState(false);
+
+  // Draft lottery state
+  const [contractedTeams, setContractedTeams] = useState<string[]>([]); // Team IDs that are contracted/omitted
+  const [lockedPicksCount, setLockedPicksCount] = useState(5); // Top 5 picks are locked by default
+  const [lotteryRun, setLotteryRun] = useState(false); // Whether lottery has been run
+  const [lotteryResults, setLotteryResults] = useState<StandingsData[]>([]); // Final lottery results
 
   // Load real data from database
   const loadData = useCallback(async () => {
@@ -443,6 +456,88 @@ export default function OffSeasonAdminPage() {
     setStandingsMessage(null);
   };
 
+  // Toggle team contracted status
+  const toggleContractedTeam = (teamId: string) => {
+    setContractedTeams(prev => 
+      prev.includes(teamId) 
+        ? prev.filter(id => id !== teamId)
+        : [...prev, teamId]
+    );
+    // Reset lottery when teams change
+    setLotteryRun(false);
+    setLotteryResults([]);
+  };
+
+  // Run the draft lottery
+  const runDraftLottery = () => {
+    // Get active teams (not contracted) sorted by standings (worst first)
+    const activeTeams = standings
+      .filter(team => !contractedTeams.includes(team.teamId))
+      .sort((a, b) => b.rank - a.rank); // Worst record first (highest rank number = worst)
+
+    if (activeTeams.length === 0) {
+      setStandingsMessage({ type: 'error', text: 'No active teams to run lottery!' });
+      return;
+    }
+
+    // Locked picks: Top N picks go to worst N teams
+    const lockedTeams = activeTeams.slice(0, lockedPicksCount);
+    const lotteryTeams = activeTeams.slice(lockedPicksCount);
+
+    // Weighted lottery for remaining picks
+    // Worse teams get higher weights (more lottery balls)
+    const weightedLottery = (teams: StandingsData[]): StandingsData[] => {
+      if (teams.length === 0) return [];
+      
+      const result: StandingsData[] = [];
+      const remaining = [...teams];
+      
+      while (remaining.length > 0) {
+        // Calculate weights - team at index 0 (worst remaining) gets highest weight
+        const totalWeight = remaining.reduce((sum, _, index) => sum + (remaining.length - index), 0);
+        let random = Math.random() * totalWeight;
+        
+        for (let i = 0; i < remaining.length; i++) {
+          const weight = remaining.length - i; // Worst team gets highest weight
+          random -= weight;
+          if (random <= 0) {
+            result.push(remaining[i]);
+            remaining.splice(i, 1);
+            break;
+          }
+        }
+      }
+      
+      return result;
+    };
+
+    // Run the lottery for non-locked picks
+    const lotteryOrder = weightedLottery(lotteryTeams);
+
+    // Combine locked + lottery results
+    const finalOrder = [...lockedTeams, ...lotteryOrder].map((team, index) => ({
+      ...team,
+      rank: index + 1, // Draft pick number
+    }));
+
+    setLotteryResults(finalOrder);
+    setDraftOrder(finalOrder);
+    setLotteryRun(true);
+    setStandingsMessage({ type: 'success', text: 'Draft lottery complete! Results shown below.' });
+  };
+
+  // Reset lottery
+  const resetLottery = () => {
+    setLotteryRun(false);
+    setLotteryResults([]);
+    // Reset to reverse standings
+    const activeTeams = standings
+      .filter(team => !contractedTeams.includes(team.teamId))
+      .sort((a, b) => b.rank - a.rank)
+      .map((team, index) => ({ ...team, rank: index + 1 }));
+    setDraftOrder(activeTeams);
+  };
+
   // Get active members only
   const activeMembers = members.filter(m => m.isActive);
   const inactiveMembers = members.filter(m => !m.isActive);
@@ -540,6 +635,58 @@ export default function OffSeasonAdminPage() {
             isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}
         >
+          {/* View Mode Toggle - Prominent switching between Commissioner and Member view */}
+          <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-slate-800/50 to-blue-500/10 border border-slate-600">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              {/* Current Mode Indicator */}
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30">
+                  <Shield className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-amber-400 font-bold text-sm">COMMISSIONER MODE</p>
+                  <p className="text-slate-400 text-xs">Managing league as admin</p>
+                </div>
+              </div>
+
+              {/* View Switching */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-slate-400 text-sm mr-2">Switch to:</span>
+                
+                <Link href="/offseason">
+                  <Button size="sm" className="bg-blue-600 hover:bg-blue-500 text-white">
+                    <Eye className="w-4 h-4 mr-2" />
+                    Member Off-Season View
+                  </Button>
+                </Link>
+                
+                <Link href="/ballyard">
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white">
+                    <Target className="w-4 h-4 mr-2" />
+                    My Team (Diamondbacks)
+                  </Button>
+                </Link>
+              </div>
+            </div>
+            
+            {/* Quick Navigation */}
+            <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-600/50">
+              <span className="text-slate-500 text-xs">Quick links:</span>
+              <Link href="/" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+                <Home className="w-3 h-3" /> Home
+              </Link>
+              <Link href="/ballyard" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+                <Target className="w-3 h-3" /> The Ballyard
+              </Link>
+              <Link href="/standings" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+                <BarChart3 className="w-3 h-3" /> Standings
+              </Link>
+              <Link href="/free-agents" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+                <Users className="w-3 h-3" /> Free Agents
+              </Link>
+            </div>
+          </div>
+
           <div className="flex items-center gap-4 mb-4">
             <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/30">
               <Shield className="w-8 h-8 text-amber-400" />
@@ -1310,49 +1457,163 @@ export default function OffSeasonAdminPage() {
                 </CardContent>
               </Card>
 
-              {/* Draft Order (Reverse of Standings) */}
+              {/* JKAP Draft Lottery */}
               <Card className="bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-blue-500/10 border-purple-500/30">
                 <CardHeader>
                   <CardTitle className="text-white flex items-center gap-2">
-                    <ListOrdered className="w-5 h-5 text-purple-400" />
-                    Season {seasonNumber + 1} Draft Order
+                    <Dices className="w-5 h-5 text-purple-400" />
+                    JKAP Draft Lottery - Season {seasonNumber + 1}
                   </CardTitle>
                   <p className="text-slate-400 text-sm mt-1">
-                    Draft order is the reverse of final standings - worst record picks first.
+                    Top {lockedPicksCount} picks are locked to worst records. Remaining picks determined by weighted lottery.
                   </p>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {draftOrder.map((team, index) => (
-                      <div
-                        key={team.teamId}
-                        className={`flex items-center gap-3 p-3 rounded-xl border ${
-                          index < 4 
-                            ? 'bg-purple-500/10 border-purple-500/30' 
-                            : 'bg-slate-700/30 border-slate-600'
-                        }`}
-                      >
-                        <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                          index === 0 ? 'bg-amber-500 text-black' :
-                          index === 1 ? 'bg-slate-400 text-black' :
-                          index === 2 ? 'bg-orange-600 text-white' :
-                          'bg-slate-600 text-white'
-                        }`}>
-                          {index + 1}
+                <CardContent className="space-y-6">
+                  {/* Lottery Settings */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {/* Locked Picks Setting */}
+                    <div className="p-4 rounded-xl bg-slate-700/30 border border-slate-600">
+                      <label className="text-white font-medium flex items-center gap-2 mb-3">
+                        <Lock className="w-4 h-4 text-amber-400" />
+                        Locked Picks (Non-Lottery)
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          min={0}
+                          max={standings.length - contractedTeams.length}
+                          value={lockedPicksCount}
+                          onChange={(e) => {
+                            setLockedPicksCount(parseInt(e.target.value) || 0);
+                            setLotteryRun(false);
+                          }}
+                          className="w-20 px-3 py-2 rounded bg-slate-800 border border-slate-600 text-white text-center"
+                        />
+                        <span className="text-slate-400 text-sm">
+                          worst teams get picks 1-{lockedPicksCount} automatically
                         </span>
-                        <div className="flex-1">
-                          <p className="text-white font-medium">{team.teamName}</p>
-                          <p className="text-slate-400 text-xs">
-                            {team.owner} • {team.wins}-{team.losses}
-                          </p>
-                        </div>
-                        {index < 4 && (
-                          <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
-                            Top 4
-                          </Badge>
+                      </div>
+                    </div>
+
+                    {/* Run Lottery Button */}
+                    <div className="p-4 rounded-xl bg-slate-700/30 border border-slate-600">
+                      <label className="text-white font-medium flex items-center gap-2 mb-3">
+                        <Shuffle className="w-4 h-4 text-purple-400" />
+                        Lottery Actions
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={runDraftLottery}
+                          className="bg-purple-600 hover:bg-purple-500"
+                        >
+                          <Dices className="w-4 h-4 mr-2" />
+                          {lotteryRun ? 'Re-Run Lottery' : 'Run Draft Lottery'}
+                        </Button>
+                        {lotteryRun && (
+                          <Button
+                            variant="secondary"
+                            onClick={resetLottery}
+                          >
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            Reset
+                          </Button>
                         )}
                       </div>
-                    ))}
+                    </div>
+                  </div>
+
+                  {/* Contracted/Omitted Teams */}
+                  <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+                    <label className="text-white font-medium flex items-center gap-2 mb-3">
+                      <XCircle className="w-4 h-4 text-red-400" />
+                      Contracted Teams (Omit from Draft)
+                    </label>
+                    <p className="text-slate-400 text-sm mb-3">
+                      Select teams that have been contracted this season. They will be excluded from the draft order.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {standings.map(team => (
+                        <button
+                          key={team.teamId}
+                          onClick={() => toggleContractedTeam(team.teamId)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                            contractedTeams.includes(team.teamId)
+                              ? 'bg-red-500/30 text-red-400 border border-red-500/50 line-through'
+                              : 'bg-slate-600/50 text-slate-300 border border-slate-500/30 hover:bg-slate-600'
+                          }`}
+                        >
+                          {team.teamAbbr}
+                        </button>
+                      ))}
+                    </div>
+                    {contractedTeams.length > 0 && (
+                      <p className="text-red-400 text-sm mt-2">
+                        {contractedTeams.length} team(s) contracted: {contractedTeams.join(', ')}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Draft Order Results */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <h3 className="text-white font-medium">Draft Order</h3>
+                      {lotteryRun && (
+                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                          Lottery Complete
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {draftOrder.map((team, index) => {
+                        const isLocked = index < lockedPicksCount;
+                        const isContracted = contractedTeams.includes(team.teamId);
+                        
+                        if (isContracted) return null;
+                        
+                        return (
+                          <div
+                            key={team.teamId}
+                            className={`flex items-center gap-3 p-3 rounded-xl border ${
+                              isLocked 
+                                ? 'bg-amber-500/10 border-amber-500/30' 
+                                : lotteryRun 
+                                  ? 'bg-purple-500/10 border-purple-500/30'
+                                  : 'bg-slate-700/30 border-slate-600'
+                            }`}
+                          >
+                            <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                              index === 0 ? 'bg-amber-500 text-black' :
+                              index === 1 ? 'bg-slate-400 text-black' :
+                              index === 2 ? 'bg-orange-600 text-white' :
+                              isLocked ? 'bg-amber-600/80 text-white' :
+                              'bg-slate-600 text-white'
+                            }`}>
+                              {index + 1}
+                            </span>
+                            <div className="flex-1">
+                              <p className="text-white font-medium">{team.teamName}</p>
+                              <p className="text-slate-400 text-xs">
+                                {team.owner} • {team.wins}-{team.losses}
+                              </p>
+                            </div>
+                            {isLocked ? (
+                              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                                <Lock className="w-3 h-3 mr-1" />
+                                Locked
+                              </Badge>
+                            ) : lotteryRun ? (
+                              <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
+                                <Shuffle className="w-3 h-3 mr-1" />
+                                Lottery
+                              </Badge>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-slate-500 text-xs mt-3">
+                      {standings.length - contractedTeams.length} active teams • {lockedPicksCount} locked picks • {Math.max(0, standings.length - contractedTeams.length - lockedPicksCount)} lottery picks
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -1391,13 +1652,23 @@ export default function OffSeasonAdminPage() {
                     </Button>
                     <Button
                       onClick={() => {
+                        const activeTeams = draftOrder.filter(t => !contractedTeams.includes(t.teamId));
                         const draftText = [
-                          `📋 JKAP League Season ${seasonNumber + 1} Draft Order`,
+                          `🎲 JKAP League Season ${seasonNumber + 1} Draft Order`,
+                          lotteryRun ? '(Lottery Complete)' : '',
                           '',
-                          ...draftOrder.map((team, i) => 
+                          `🔒 LOCKED PICKS (1-${lockedPicksCount}):`,
+                          ...activeTeams.slice(0, lockedPicksCount).map((team, i) => 
                             `${i + 1}. ${team.teamAbbr} (${team.wins}-${team.losses}) - ${team.owner}`
                           ),
-                        ].join('\n');
+                          '',
+                          `🎰 LOTTERY PICKS (${lockedPicksCount + 1}-${activeTeams.length}):`,
+                          ...activeTeams.slice(lockedPicksCount).map((team, i) => 
+                            `${lockedPicksCount + i + 1}. ${team.teamAbbr} (${team.wins}-${team.losses}) - ${team.owner}`
+                          ),
+                          '',
+                          contractedTeams.length > 0 ? `❌ Contracted: ${contractedTeams.join(', ')}` : '',
+                        ].filter(Boolean).join('\n');
                         copyToClipboard(draftText, 'draft-order-text');
                       }}
                       variant="secondary"
@@ -1409,7 +1680,7 @@ export default function OffSeasonAdminPage() {
                         </>
                       ) : (
                         <>
-                          <ListOrdered className="w-4 h-4 mr-2" />
+                          <Dices className="w-4 h-4 mr-2" />
                           Copy Draft Order
                         </>
                       )}
