@@ -4879,10 +4879,10 @@ export async function getOffseasonProgressSummary(seasonNumber: number): Promise
 }
 
 // =============================================================================
-// MEMBER ACTIVITY TRACKING
+// MEMBER STATUS TRACKING
 // =============================================================================
 
-export interface DBMemberActivity {
+export interface DBMemberStatus {
   id: string;
   user_id: string;
   is_active: boolean;
@@ -4899,7 +4899,7 @@ export interface DBMemberActivity {
 }
 
 // Get all active members with their contact info
-export async function getActiveMembers(): Promise<(DBMemberActivity & { user?: DBUser })[]> {
+export async function getActiveMembers(): Promise<(DBMemberStatus & { user?: DBUser })[]> {
   try {
     const { data, error } = await supabase
       .from('member_status')

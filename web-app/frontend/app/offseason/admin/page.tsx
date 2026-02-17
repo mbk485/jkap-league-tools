@@ -53,6 +53,12 @@ import {
   Flame,
   Target,
   Loader2,
+  ArrowUp,
+  ArrowDown,
+  Save,
+  Edit3,
+  X,
+  ListOrdered,
 } from 'lucide-react';
 import {
   getLeagueStandings,
@@ -152,12 +158,16 @@ export default function OffSeasonAdminPage() {
         declarationsData,
         mvpData,
         cyYoungData,
+        finalStandingsData,
+        draftOrderData,
       ] = await Promise.all([
         getLeagueStandings(),
         getAllUsers(),
         getFreeAgentDeclarations(currentSeasonNum),
         getAwardCandidates(currentSeasonNum, 'mvp'),
         getAwardCandidates(currentSeasonNum, 'cy_young'),
+        getFinalStandings(currentSeasonNum),
+        getDraftOrder(currentSeasonNum),
       ]);
 
       // Set season info
@@ -168,32 +178,88 @@ export default function OffSeasonAdminPage() {
         setPlayoffTeamCount(4);
       }
 
-      // Process standings
-      const processedStandings: StandingsData[] = standingsData.map((team, index) => {
-        const mlbTeam = MLB_TEAMS.find(t => t.abbreviation === team.teamId);
-        const owner = usersData.find(u => u.team_id === team.teamId);
-        
-        let gb = '-';
-        if (index > 0) {
-          const gamesBackNum = ((standingsData[0].wins - team.wins) + (team.losses - standingsData[0].losses)) / 2;
-          gb = gamesBackNum.toFixed(1);
-        }
-        
-        return {
+      // Check if we have commissioner-saved final standings
+      const hasFinalStandings = finalStandingsData && finalStandingsData.length > 0;
+      setHasSavedStandings(hasFinalStandings);
+
+      // Use final standings if available, otherwise fall back to calculated standings
+      let processedStandings: StandingsData[];
+      
+      if (hasFinalStandings) {
+        // Use commissioner-saved standings
+        processedStandings = finalStandingsData.map((team) => {
+          const mlbTeam = MLB_TEAMS.find(t => t.abbreviation === team.team_abbreviation);
+          const owner = usersData.find(u => u.team_id === team.team_abbreviation);
+          
+          return {
+            rank: team.overall_rank,
+            teamId: team.team_id,
+            teamName: team.team_name,
+            teamAbbr: team.team_abbreviation,
+            wins: team.wins,
+            losses: team.losses,
+            pct: team.win_percentage,
+            gb: team.games_back === 0 ? '-' : team.games_back.toFixed(1),
+            madePlayoffs: team.made_playoffs,
+            seed: team.playoff_seed,
+            owner: owner?.display_name || 'Unknown',
+          };
+        });
+
+        // Process draft order (reverse of standings)
+        const processedDraftOrder = draftOrderData.map((team, index) => {
+          const owner = usersData.find(u => u.team_id === team.team_abbreviation);
+          return {
+            rank: index + 1, // Draft pick number
+            teamId: team.team_id,
+            teamName: team.team_name,
+            teamAbbr: team.team_abbreviation,
+            wins: team.wins,
+            losses: team.losses,
+            pct: team.win_percentage,
+            gb: '-',
+            madePlayoffs: team.made_playoffs,
+            seed: team.playoff_seed,
+            owner: owner?.display_name || 'Unknown',
+          };
+        });
+        setDraftOrder(processedDraftOrder);
+      } else {
+        // Fall back to calculated standings from game results
+        processedStandings = standingsData.map((team, index) => {
+          const mlbTeam = MLB_TEAMS.find(t => t.abbreviation === team.teamId);
+          const owner = usersData.find(u => u.team_id === team.teamId);
+          
+          let gb = '-';
+          if (index > 0) {
+            const gamesBackNum = ((standingsData[0].wins - team.wins) + (team.losses - standingsData[0].losses)) / 2;
+            gb = gamesBackNum.toFixed(1);
+          }
+          
+          return {
+            rank: index + 1,
+            teamId: team.teamId,
+            teamName: mlbTeam?.name || team.teamId,
+            teamAbbr: team.teamId,
+            wins: team.wins,
+            losses: team.losses,
+            pct: team.wins / (team.wins + team.losses) || 0,
+            gb,
+            madePlayoffs: index < playoffTeamCount,
+            seed: index < playoffTeamCount ? index + 1 : undefined,
+            owner: owner?.display_name || 'Unknown',
+          };
+        });
+
+        // Set draft order as reverse (for preview before saving)
+        setDraftOrder([...processedStandings].reverse().map((team, index) => ({
+          ...team,
           rank: index + 1,
-          teamId: team.teamId,
-          teamName: mlbTeam?.name || team.teamId,
-          teamAbbr: team.teamId,
-          wins: team.wins,
-          losses: team.losses,
-          pct: team.wins / (team.wins + team.losses) || 0,
-          gb,
-          madePlayoffs: index < playoffTeamCount,
-          seed: index < playoffTeamCount ? index + 1 : undefined,
-          owner: owner?.display_name || 'Unknown',
-        };
-      });
+        })));
+      }
+      
       setStandings(processedStandings);
+      setEditableStandings(processedStandings);
 
       // Get member emails for Typeform lookup
       const jkapMembers = usersData.filter(u => u.user_type === 'jkap_member');
@@ -290,6 +356,85 @@ export default function OffSeasonAdminPage() {
     navigator.clipboard.writeText(text);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  // Update a single team's standings
+  const updateTeamStanding = (teamId: string, field: keyof StandingsData, value: any) => {
+    setEditableStandings(prev => prev.map(team => {
+      if (team.teamId === teamId) {
+        const updated = { ...team, [field]: value };
+        // Auto-calculate pct when wins/losses change
+        if (field === 'wins' || field === 'losses') {
+          const totalGames = (field === 'wins' ? value : team.wins) + (field === 'losses' ? value : team.losses);
+          updated.pct = totalGames > 0 ? (field === 'wins' ? value : team.wins) / totalGames : 0;
+        }
+        return updated;
+      }
+      return team;
+    }));
+  };
+
+  // Move team up in standings
+  const moveTeamUp = (index: number) => {
+    if (index === 0) return;
+    setEditableStandings(prev => {
+      const newOrder = [...prev];
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+      return newOrder.map((team, i) => ({ ...team, rank: i + 1 }));
+    });
+  };
+
+  // Move team down in standings
+  const moveTeamDown = (index: number) => {
+    if (index === editableStandings.length - 1) return;
+    setEditableStandings(prev => {
+      const newOrder = [...prev];
+      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      return newOrder.map((team, i) => ({ ...team, rank: i + 1 }));
+    });
+  };
+
+  // Save standings to database
+  const handleSaveStandings = async () => {
+    setIsSavingStandings(true);
+    setStandingsMessage(null);
+    
+    try {
+      const standingsToSave = editableStandings.map((team, index) => ({
+        team_id: team.teamId,
+        team_name: team.teamName,
+        team_abbreviation: team.teamAbbr,
+        wins: team.wins,
+        losses: team.losses,
+        overall_rank: index + 1,
+        made_playoffs: team.madePlayoffs,
+        playoff_seed: team.seed,
+      }));
+
+      const result = await saveFinalStandings(seasonNumber, standingsToSave);
+      
+      if (result.success) {
+        setStandingsMessage({ type: 'success', text: 'Standings saved successfully!' });
+        setIsEditingStandings(false);
+        setHasSavedStandings(true);
+        // Update main standings and draft order
+        setStandings(editableStandings);
+        setDraftOrder([...editableStandings].reverse().map((team, i) => ({ ...team, rank: i + 1 })));
+      } else {
+        setStandingsMessage({ type: 'error', text: result.error || 'Failed to save standings' });
+      }
+    } catch (err: any) {
+      setStandingsMessage({ type: 'error', text: err.message || 'Error saving standings' });
+    } finally {
+      setIsSavingStandings(false);
+    }
+  };
+
+  // Cancel editing and reset
+  const cancelEditStandings = () => {
+    setEditableStandings(standings);
+    setIsEditingStandings(false);
+    setStandingsMessage(null);
   };
 
   // Get active members only
