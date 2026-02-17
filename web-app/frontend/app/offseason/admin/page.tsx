@@ -168,8 +168,12 @@ export default function OffSeasonAdminPage() {
       const processedStandings: StandingsData[] = standingsData.map((team, index) => {
         const mlbTeam = MLB_TEAMS.find(t => t.abbreviation === team.teamId);
         const owner = usersData.find(u => u.team_id === team.teamId);
-        const gamesBack = index === 0 ? '-' : 
-          ((standingsData[0].wins - team.wins) + (team.losses - standingsData[0].losses)) / 2;
+        
+        let gb = '-';
+        if (index > 0) {
+          const gamesBackNum = ((standingsData[0].wins - team.wins) + (team.losses - standingsData[0].losses)) / 2;
+          gb = gamesBackNum.toFixed(1);
+        }
         
         return {
           rank: index + 1,
@@ -179,7 +183,7 @@ export default function OffSeasonAdminPage() {
           wins: team.wins,
           losses: team.losses,
           pct: team.wins / (team.wins + team.losses) || 0,
-          gb: index === 0 ? '-' : gamesBack.toFixed(1),
+          gb,
           madePlayoffs: index < playoffTeamCount,
           seed: index < playoffTeamCount ? index + 1 : undefined,
           owner: owner?.display_name || 'Unknown',
