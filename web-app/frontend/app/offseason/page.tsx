@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -109,11 +110,25 @@ const PHASE_COLORS: Record<SeasonPhase, string> = {
   pre_season: 'teal',
 };
 
+type TabType = 'overview' | 'questionnaire' | 'free-agents' | 'claims' | 'standings' | 'winter-league';
+
 function OffSeasonContent() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [isLoaded, setIsLoaded] = useState(false);
   const [seasonState, setSeasonState] = useState<SeasonState>(DEFAULT_SEASON_STATE);
-  const [activeTab, setActiveTab] = useState<'overview' | 'questionnaire' | 'free-agents' | 'claims' | 'standings' | 'winter-league'>('overview');
+  
+  // Read initial tab from URL query parameter
+  const getInitialTab = (): TabType => {
+    const tabParam = searchParams.get('tab');
+    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'winter-league'];
+    if (tabParam && validTabs.includes(tabParam as TabType)) {
+      return tabParam as TabType;
+    }
+    return 'overview';
+  };
+  
+  const [activeTab, setActiveTab] = useState<TabType>(getInitialTab());
   
   // User progress tracking
   const [questionnaireCompleted, setQuestionnaireCompleted] = useState(false);

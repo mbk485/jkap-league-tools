@@ -29,7 +29,7 @@ const navLinks: NavLink[] = [
   { label: 'Rules', href: '/rules', forUserType: 'jkap_member' }, // League rulebook
   { label: 'Director Dashboard', href: '/director', directorOnly: true }, // For Miguel (AAA), Roy (AA)
   { label: 'Commissioner Hub', href: '/commissioner', forUserType: 'external_commissioner' },
-  { label: 'Free Agents', href: '/free-agents', adminOnly: true, featureFlag: 'showFreeAgents' },
+  { label: 'Free Agents', href: '/offseason?tab=free-agents', forUserType: 'jkap_member', featureFlag: 'showFreeAgents' },
   { label: 'Documents', href: '/documents', adminOnly: true, featureFlag: 'showDocuments' },
   { label: 'Admin', href: '/admin', adminOnly: true }, // Always admin-only, no feature flag needed
 ];
