@@ -131,6 +131,10 @@ export interface FreeAgentDeclaration {
   position: string;
   classification: PlayerClassification;
   overall_rating: number;
+  // MLB The Show integration
+  player_uuid?: string;        // UUID from MLB The Show API for fetching full stats
+  card_img?: string;           // Card image URL
+  team_short_name?: string;    // Team abbreviation
   // Status
   declared_at: string;
   is_claimed: boolean;
@@ -150,11 +154,15 @@ export interface FreeAgentClaim {
   target_free_agent_id: string;
   target_player_name: string;
   target_classification: PlayerClassification;
+  target_player_uuid?: string;   // UUID from MLB The Show API
+  target_card_img?: string;      // Card image URL
   // What they're offering
   offered_player_name: string;
   offered_position: string;
   offered_classification: PlayerClassification;
   offered_overall_rating: number;
+  offered_player_uuid?: string;  // UUID from MLB The Show API
+  offered_card_img?: string;     // Card image URL
   // Status
   status: 'pending' | 'approved' | 'denied' | 'processed';
   submitted_at: string;

@@ -64,6 +64,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
+import { PlayerStatsCard, PlayerStatsPopover } from '@/components/players';
 
 // Default season state (will be replaced by API data)
 const DEFAULT_SEASON_STATE: SeasonState = {
@@ -775,6 +776,9 @@ function OffSeasonContent() {
                 position: player.position,
                 classification: player.classification,
                 overall_rating: player.overall_rating,
+                player_uuid: player.player_uuid,
+                card_img: player.card_img,
+                team_short_name: player.team_short_name,
                 declared_at: new Date().toISOString(),
                 is_claimed: false,
               };
@@ -1154,22 +1158,46 @@ function FreeAgentSection({ declarations, onDeclare, onSearchPlayer }: FreeAgent
             {declarations.length > 0 ? (
               <div className="space-y-3">
                 {declarations.map((dec) => (
-                  <div
-                    key={dec.id}
-                    className={`p-4 rounded-xl border ${CLASSIFICATION_COLORS[dec.classification].bg} ${CLASSIFICATION_COLORS[dec.classification].border}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-lg bg-slate-700/50 flex items-center justify-center">
-                          <span className="text-xs font-mono text-slate-300">{dec.position}</span>
-                        </div>
-                        <div>
-                          <p className="font-medium text-white">{dec.player_name}</p>
-                          <p className={`text-sm capitalize ${CLASSIFICATION_COLORS[dec.classification].text}`}>
-                            {dec.classification} - {dec.overall_rating} OVR
-                          </p>
+                  <div key={dec.id} className="relative">
+                    {dec.player_uuid ? (
+                      <PlayerStatsCard
+                        playerUUID={dec.player_uuid}
+                        playerName={dec.player_name}
+                        position={dec.position}
+                        team={dec.team_short_name}
+                        ovr={dec.overall_rating}
+                        rarity={dec.classification.charAt(0).toUpperCase() + dec.classification.slice(1)}
+                        cardImg={dec.card_img}
+                        compact
+                      />
+                    ) : (
+                      <div
+                        className={`p-4 rounded-xl border ${CLASSIFICATION_COLORS[dec.classification].bg} ${CLASSIFICATION_COLORS[dec.classification].border}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-lg bg-slate-700/50 flex items-center justify-center">
+                              <span className="text-xs font-mono text-slate-300">{dec.position}</span>
+                            </div>
+                            <div>
+                              <PlayerStatsPopover playerName={dec.player_name} position={dec.position}>
+                                <span className="font-medium text-white hover:text-cyan-400 cursor-pointer underline decoration-dotted underline-offset-2">
+                                  {dec.player_name}
+                                </span>
+                              </PlayerStatsPopover>
+                              <p className={`text-sm capitalize ${CLASSIFICATION_COLORS[dec.classification].text}`}>
+                                {dec.classification} - {dec.overall_rating} OVR
+                              </p>
+                            </div>
+                          </div>
+                          <Badge className={`${CLASSIFICATION_COLORS[dec.classification].bg} ${CLASSIFICATION_COLORS[dec.classification].text} ${CLASSIFICATION_COLORS[dec.classification].border}`}>
+                            {dec.is_claimed ? 'Claimed' : 'Available'}
+                          </Badge>
                         </div>
                       </div>
+                    )}
+                    {/* Status badge overlay */}
+                    <div className="absolute top-2 right-2">
                       <Badge className={`${CLASSIFICATION_COLORS[dec.classification].bg} ${CLASSIFICATION_COLORS[dec.classification].text} ${CLASSIFICATION_COLORS[dec.classification].border}`}>
                         {dec.is_claimed ? 'Claimed' : 'Available'}
                       </Badge>
@@ -1181,7 +1209,7 @@ function FreeAgentSection({ declarations, onDeclare, onSearchPlayer }: FreeAgent
               <div className="text-center py-12 text-slate-400">
                 <UserMinus className="w-12 h-12 mx-auto mb-4 opacity-20" />
                 <p>No players declared yet</p>
-                <p className="text-sm mt-1">Click "Declare Player" to add your first free agent</p>
+                <p className="text-sm mt-1">Click "Search Database" to add your first free agent</p>
               </div>
             )}
           </CardContent>
@@ -1238,45 +1266,34 @@ interface ClaimsSectionProps {
 }
 
 function ClaimsSection({ claims, onClaim }: ClaimsSectionProps) {
-  // Mock available free agents for demo
-  const [availableFreeAgents] = useState<FreeAgentDeclaration[]>([
-    {
-      id: 'fa-1',
-      season_number: 4,
-      declaring_team_id: 'team-1',
-      declaring_user_id: 'user-1',
-      player_name: 'Mike Trout',
-      position: 'CF',
-      classification: 'diamond',
-      overall_rating: 94,
-      declared_at: new Date().toISOString(),
-      is_claimed: false,
-    },
-    {
-      id: 'fa-2',
-      season_number: 4,
-      declaring_team_id: 'team-2',
-      declaring_user_id: 'user-2',
-      player_name: 'Shohei Ohtani',
-      position: 'SP',
-      classification: 'diamond',
-      overall_rating: 97,
-      declared_at: new Date().toISOString(),
-      is_claimed: false,
-    },
-    {
-      id: 'fa-3',
-      season_number: 4,
-      declaring_team_id: 'team-3',
-      declaring_user_id: 'user-3',
-      player_name: 'Freddie Freeman',
-      position: '1B',
-      classification: 'gold',
-      overall_rating: 89,
-      declared_at: new Date().toISOString(),
-      is_claimed: false,
-    },
-  ]);
+  const [availableFreeAgents, setAvailableFreeAgents] = useState<FreeAgentDeclaration[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Load available free agents from Supabase
+  useEffect(() => {
+    const loadFreeAgents = async () => {
+      setLoading(true);
+      try {
+        const { getAvailableFreeAgents } = await import('@/lib/supabase');
+        const agents = await getAvailableFreeAgents(4); // Season 4
+        setAvailableFreeAgents(agents || []);
+      } catch (err) {
+        console.error('Failed to load free agents:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadFreeAgents();
+  }, []);
+
+  // Filter free agents by search query
+  const filteredAgents = searchQuery
+    ? availableFreeAgents.filter(fa => 
+        fa.player_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        fa.position.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : availableFreeAgents;
 
   return (
     <div className="grid lg:grid-cols-3 gap-6">
@@ -1291,6 +1308,7 @@ function ClaimsSection({ claims, onClaim }: ClaimsSectionProps) {
                 <p className="text-sm text-slate-400">
                   Browse available free agents and submit claims. Remember: to claim a player, 
                   you must offer one of <span className="text-cyan-300 font-medium">equal or higher</span> classification.
+                  Click on any player to view their full stats.
                 </p>
                 <p className="text-sm text-cyan-300 mt-2 font-medium">
                   Max 2 successful claims per team!
@@ -1303,45 +1321,92 @@ function ClaimsSection({ claims, onClaim }: ClaimsSectionProps) {
         {/* Available Free Agents */}
         <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <Users className="w-5 h-5 text-cyan-400" />
-              Available Free Agents
-            </CardTitle>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <CardTitle className="text-white flex items-center gap-2">
+                <Users className="w-5 h-5 text-cyan-400" />
+                Available Free Agents ({availableFreeAgents.length})
+              </CardTitle>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search players..."
+                  className="pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {availableFreeAgents.map((fa) => (
-                <div
-                  key={fa.id}
-                  className={`p-4 rounded-xl border ${CLASSIFICATION_COLORS[fa.classification].bg} ${CLASSIFICATION_COLORS[fa.classification].border}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-14 h-14 rounded-lg bg-slate-700/50 flex flex-col items-center justify-center">
-                        <span className="text-xs font-mono text-slate-300">{fa.position}</span>
-                        <span className={`text-lg font-bold ${CLASSIFICATION_COLORS[fa.classification].text}`}>
-                          {fa.overall_rating}
-                        </span>
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : filteredAgents.length > 0 ? (
+              <div className="space-y-3">
+                {filteredAgents.map((fa) => (
+                  <div key={fa.id} className="relative">
+                    {fa.player_uuid ? (
+                      <PlayerStatsCard
+                        playerUUID={fa.player_uuid}
+                        playerName={fa.player_name}
+                        position={fa.position}
+                        team={fa.team_short_name}
+                        ovr={fa.overall_rating}
+                        rarity={fa.classification.charAt(0).toUpperCase() + fa.classification.slice(1)}
+                        cardImg={fa.card_img}
+                        compact
+                      />
+                    ) : (
+                      <div
+                        className={`p-4 rounded-xl border ${CLASSIFICATION_COLORS[fa.classification].bg} ${CLASSIFICATION_COLORS[fa.classification].border}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-14 h-14 rounded-lg bg-slate-700/50 flex flex-col items-center justify-center">
+                              <span className="text-xs font-mono text-slate-300">{fa.position}</span>
+                              <span className={`text-lg font-bold ${CLASSIFICATION_COLORS[fa.classification].text}`}>
+                                {fa.overall_rating}
+                              </span>
+                            </div>
+                            <div>
+                              <PlayerStatsPopover playerName={fa.player_name} position={fa.position}>
+                                <span className="font-medium text-white text-lg hover:text-cyan-400 cursor-pointer underline decoration-dotted underline-offset-2">
+                                  {fa.player_name}
+                                </span>
+                              </PlayerStatsPopover>
+                              <p className={`text-sm capitalize ${CLASSIFICATION_COLORS[fa.classification].text}`}>
+                                {fa.classification}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-white text-lg">{fa.player_name}</p>
-                        <p className={`text-sm capitalize ${CLASSIFICATION_COLORS[fa.classification].text}`}>
-                          {fa.classification}
-                        </p>
-                      </div>
+                    )}
+                    {/* Claim button */}
+                    <div className="absolute top-3 right-3">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="bg-cyan-500 hover:bg-cyan-400"
+                      >
+                        <UserPlus className="w-4 h-4 mr-1" />
+                        Claim
+                      </Button>
                     </div>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      className="bg-cyan-500 hover:bg-cyan-400"
-                    >
-                      <UserPlus className="w-4 h-4 mr-2" />
-                      Submit Claim
-                    </Button>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-slate-400">
+                <Users className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                <p>{searchQuery ? 'No matching players found' : 'No free agents declared yet'}</p>
+                <p className="text-sm mt-1">
+                  {searchQuery ? 'Try a different search term' : 'Check back after the declaration period'}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -1361,13 +1426,7 @@ function ClaimsSection({ claims, onClaim }: ClaimsSectionProps) {
                     key={claim.id}
                     className="p-4 rounded-xl bg-slate-700/30 border border-slate-600"
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-white">{claim.target_player_name}</p>
-                        <p className="text-sm text-slate-400">
-                          Offered: {claim.offered_player_name}
-                        </p>
-                      </div>
+                    <div className="flex items-center justify-between mb-2">
                       <Badge
                         className={
                           claim.status === 'approved'
@@ -1379,6 +1438,37 @@ function ClaimsSection({ claims, onClaim }: ClaimsSectionProps) {
                       >
                         {claim.status}
                       </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-slate-500 mb-1">Claiming</p>
+                        <PlayerStatsPopover 
+                          playerName={claim.target_player_name}
+                          playerUUID={claim.target_player_uuid}
+                        >
+                          <span className="font-medium text-white hover:text-cyan-400 cursor-pointer">
+                            {claim.target_player_name}
+                          </span>
+                        </PlayerStatsPopover>
+                        <p className={`text-xs capitalize ${CLASSIFICATION_COLORS[claim.target_classification].text}`}>
+                          {claim.target_classification}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 mb-1">Offering</p>
+                        <PlayerStatsPopover 
+                          playerName={claim.offered_player_name}
+                          playerUUID={claim.offered_player_uuid}
+                          position={claim.offered_position}
+                        >
+                          <span className="font-medium text-white hover:text-cyan-400 cursor-pointer">
+                            {claim.offered_player_name}
+                          </span>
+                        </PlayerStatsPopover>
+                        <p className={`text-xs capitalize ${CLASSIFICATION_COLORS[claim.offered_classification].text}`}>
+                          {claim.offered_classification} · {claim.offered_overall_rating} OVR
+                        </p>
+                      </div>
                     </div>
                   </div>
                 ))}

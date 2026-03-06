@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { PlayerStatsPopover } from '@/components/players';
+import { searchPlayers, PlayerSearchResult } from '@/lib/mlb-theshow-api';
 
 interface Player {
   id: number;
@@ -10,6 +12,8 @@ interface Player {
   cardType: string;
   pickedBy?: string;
   pickNumber?: number;
+  playerUUID?: string;
+  cardImg?: string;
 }
 
 interface Team {
@@ -290,6 +294,36 @@ export default function DraftPage() {
     setTeams(sampleTeams.map(name => ({ name, picks: [] })));
   };
 
+  // Load Live Series players from MLB The Show API
+  const [loadingMLB, setLoadingMLB] = useState(false);
+  const [mlbLoadProgress, setMlbLoadProgress] = useState('');
+  
+  const loadMLBPlayers = async (minOvr: number = 70) => {
+    setLoadingMLB(true);
+    setMlbLoadProgress('Loading player database...');
+    try {
+      const results = await searchPlayers('', { minOvr });
+      
+      const mlbPlayers: Player[] = results.map((p: PlayerSearchResult, idx: number) => ({
+        id: idx,
+        name: p.name,
+        position: p.display_position,
+        rating: p.ovr,
+        cardType: `Live ${p.rarity}`,
+        playerUUID: p.uuid,
+        cardImg: p.baked_img || p.img,
+      }));
+      
+      setPlayers(mlbPlayers);
+      setMlbLoadProgress(`${mlbPlayers.length} players loaded!`);
+    } catch (err) {
+      console.error('Failed to load MLB players:', err);
+      setMlbLoadProgress('Failed to load players');
+    } finally {
+      setLoadingMLB(false);
+    }
+  };
+
   const availablePlayers = players.filter(p => !p.pickedBy);
   const filteredPlayers = availablePlayers.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -399,14 +433,55 @@ export default function DraftPage() {
             </div>
           </div>
 
-          {/* Quick Load Sample Data */}
-          <div className="mt-8 text-center">
-            <button
-              onClick={loadSampleData}
-              className="text-slate-400 hover:text-white underline text-sm"
-            >
-              Load sample data for quick test
-            </button>
+          {/* Quick Load Options */}
+          <div className="mt-8 space-y-4">
+            {/* Load from MLB The Show API */}
+            <div className="glass-card p-6">
+              <h3 className="font-display text-xl text-white mb-3 flex items-center gap-2">
+                <span className="text-2xl">⚾</span>
+                LOAD FROM MLB THE SHOW DATABASE
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                Load Live Series players directly from MLB The Show. Click a player during the draft to view their full stats.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => loadMLBPlayers(85)}
+                  disabled={loadingMLB}
+                  className="btn btn-primary flex-1 disabled:opacity-50"
+                >
+                  {loadingMLB ? 'Loading...' : 'Load 85+ OVR Players'}
+                </button>
+                <button
+                  onClick={() => loadMLBPlayers(75)}
+                  disabled={loadingMLB}
+                  className="btn btn-secondary flex-1 disabled:opacity-50"
+                >
+                  {loadingMLB ? 'Loading...' : 'Load 75+ OVR Players'}
+                </button>
+                <button
+                  onClick={() => loadMLBPlayers(65)}
+                  disabled={loadingMLB}
+                  className="btn btn-secondary flex-1 disabled:opacity-50"
+                >
+                  {loadingMLB ? 'Loading...' : 'Load All Players'}
+                </button>
+              </div>
+              {mlbLoadProgress && (
+                <p className={`mt-3 text-sm ${mlbLoadProgress.includes('Failed') ? 'text-red-400' : 'text-green-400'}`}>
+                  {mlbLoadProgress}
+                </p>
+              )}
+            </div>
+
+            <div className="text-center">
+              <button
+                onClick={loadSampleData}
+                className="text-slate-400 hover:text-white underline text-sm"
+              >
+                Or load sample data for quick test
+              </button>
+            </div>
           </div>
 
           {/* Start Draft Button */}
@@ -589,9 +664,8 @@ export default function DraftPage() {
               {filteredPlayers.map((player) => {
                 const cardStyle = getCardTypeStyle(player.cardType);
                 return (
-                  <button
+                  <div
                     key={player.id}
-                    onClick={() => makePick(player)}
                     className="group relative p-4 rounded-xl border-2 text-left transition-all duration-200 hover:scale-[1.02] hover:shadow-2xl"
                     style={{
                       background: `linear-gradient(135deg, ${cardStyle.bg} 0%, rgba(30,41,59,0.8) 100%)`,
@@ -611,7 +685,19 @@ export default function DraftPage() {
 
                     {/* Player Info */}
                     <div className="pr-14">
-                      <p className="text-white font-bold text-lg truncate">{player.name}</p>
+                      {player.playerUUID ? (
+                        <PlayerStatsPopover 
+                          playerName={player.name} 
+                          playerUUID={player.playerUUID}
+                          position={player.position}
+                        >
+                          <p className="text-white font-bold text-lg truncate cursor-pointer hover:text-cyan-400 underline decoration-dotted underline-offset-2">
+                            {player.name}
+                          </p>
+                        </PlayerStatsPopover>
+                      ) : (
+                        <p className="text-white font-bold text-lg truncate">{player.name}</p>
+                      )}
                       <p className="text-slate-400">{player.position}</p>
                       {player.cardType && (
                         <span 
@@ -627,11 +713,14 @@ export default function DraftPage() {
                       )}
                     </div>
 
-                    {/* Hover overlay */}
-                    <div className="absolute inset-0 bg-green-500/20 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <span className="font-display text-2xl text-green-400">+ DRAFT</span>
-                    </div>
-                  </button>
+                    {/* Draft button */}
+                    <button
+                      onClick={() => makePick(player)}
+                      className="absolute bottom-3 right-3 px-4 py-2 rounded-lg bg-green-500/20 text-green-400 border border-green-500/50 font-semibold text-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-green-500/30"
+                    >
+                      + DRAFT
+                    </button>
+                  </div>
                 );
               })}
             </div>

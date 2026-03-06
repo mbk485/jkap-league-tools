@@ -37,6 +37,8 @@ interface PlayerSearchModalProps {
     classification: 'common' | 'bronze' | 'silver' | 'gold' | 'diamond';
     overall_rating: number;
     card_img?: string;
+    player_uuid?: string;
+    team_short_name?: string;
   }) => void;
   title?: string;
 }
@@ -109,6 +111,8 @@ export function PlayerSearchModal({
       classification: player.rarity.toLowerCase() as any,
       overall_rating: player.ovr,
       card_img: player.baked_img || player.img,
+      player_uuid: player.uuid,
+      team_short_name: player.team_short_name,
     });
     onClose();
   };

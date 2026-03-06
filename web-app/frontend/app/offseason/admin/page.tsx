@@ -82,6 +82,12 @@ import {
 } from '@/lib/supabase';
 import { MLB_TEAMS } from '@/types/league';
 import { checkQuestionnaireCompletions, getAllQuestionnaireCompletions } from '@/lib/typeform-api';
+import { 
+  postQuestionnaireReminder, 
+  postCustomAnnouncement, 
+  postDraftOrder,
+  postStandingsUpdate,
+} from '@/lib/discord';
 
 // Types for admin data
 interface MemberData {
@@ -168,6 +174,12 @@ export default function OffSeasonAdminPage() {
     submittedAt: string;
     displayDate: string;
   }[]>([]);
+
+  // Discord announcement state
+  const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
+  const [customAnnouncementTitle, setCustomAnnouncementTitle] = useState('');
+  const [customAnnouncementMessage, setCustomAnnouncementMessage] = useState('');
+  const [discordStatus, setDiscordStatus] = useState<{ type: 'success' | 'error' | 'sending'; text: string } | null>(null);
 
   // Load real data from database
   const loadData = useCallback(async () => {
@@ -1024,6 +1036,207 @@ export default function OffSeasonAdminPage() {
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-400" />
                   </Link>
+                </CardContent>
+              </Card>
+
+              {/* Discord Announcements */}
+              <Card className="bg-gradient-to-r from-indigo-500/10 via-purple-500/5 to-blue-500/10 border-indigo-500/30">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Send className="w-5 h-5 text-indigo-400" />
+                    Discord Announcements
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Webhook URL Input */}
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">
+                      Discord Webhook URL (Main Chat)
+                    </label>
+                    <input
+                      type="text"
+                      value={discordWebhookUrl}
+                      onChange={(e) => setDiscordWebhookUrl(e.target.value)}
+                      placeholder="https://discord.com/api/webhooks/..."
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none text-sm"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Get this from Discord: Server Settings → Integrations → Webhooks → New Webhook
+                    </p>
+                  </div>
+
+                  {/* Status Message */}
+                  {discordStatus && (
+                    <div className={`p-3 rounded-lg text-sm ${
+                      discordStatus.type === 'success' 
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : discordStatus.type === 'error'
+                        ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                        : 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
+                    }`}>
+                      {discordStatus.type === 'sending' && <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />}
+                      {discordStatus.text}
+                    </div>
+                  )}
+
+                  {/* Quick Announcements */}
+                  <div className="space-y-2">
+                    <p className="text-sm text-slate-400 font-medium">Quick Announcements</p>
+                    
+                    {/* Questionnaire Reminder */}
+                    <button
+                      onClick={async () => {
+                        if (!discordWebhookUrl) {
+                          setDiscordStatus({ type: 'error', text: 'Please enter a Discord webhook URL first' });
+                          return;
+                        }
+                        setDiscordStatus({ type: 'sending', text: 'Sending questionnaire reminder...' });
+                        const teamsNotCompleted = members
+                          .filter(m => !m.questionnaireCompleted)
+                          .map(m => m.teamId.toUpperCase());
+                        const completedCount = members.filter(m => m.questionnaireCompleted).length;
+                        const result = await postQuestionnaireReminder(
+                          discordWebhookUrl,
+                          teamsNotCompleted,
+                          members.length,
+                          completedCount
+                        );
+                        if (result.success) {
+                          setDiscordStatus({ type: 'success', text: '✓ Questionnaire reminder sent to Discord!' });
+                        } else {
+                          setDiscordStatus({ type: 'error', text: result.error || 'Failed to send' });
+                        }
+                        setTimeout(() => setDiscordStatus(null), 5000);
+                      }}
+                      disabled={!discordWebhookUrl}
+                      className="w-full flex items-center justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <div className="flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-amber-400" />
+                        <span className="text-white text-sm">Send Questionnaire Reminder</span>
+                      </div>
+                      <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
+                        {members.filter(m => !m.questionnaireCompleted).length} pending
+                      </Badge>
+                    </button>
+
+                    {/* Post Draft Order */}
+                    {lotteryResults.length > 0 && (
+                      <button
+                        onClick={async () => {
+                          if (!discordWebhookUrl) {
+                            setDiscordStatus({ type: 'error', text: 'Please enter a Discord webhook URL first' });
+                            return;
+                          }
+                          setDiscordStatus({ type: 'sending', text: 'Posting draft order...' });
+                          const draftOrderData = lotteryResults.map((team, idx) => ({
+                            pick: idx + 1,
+                            teamAbbr: team.teamAbbr.toUpperCase(),
+                            teamName: team.teamName,
+                          }));
+                          const result = await postDraftOrder(discordWebhookUrl, draftOrderData, seasonNumber);
+                          if (result.success) {
+                            setDiscordStatus({ type: 'success', text: '✓ Draft order posted to Discord!' });
+                          } else {
+                            setDiscordStatus({ type: 'error', text: result.error || 'Failed to send' });
+                          }
+                          setTimeout(() => setDiscordStatus(null), 5000);
+                        }}
+                        disabled={!discordWebhookUrl}
+                        className="w-full flex items-center justify-between p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ListOrdered className="w-4 h-4 text-blue-400" />
+                          <span className="text-white text-sm">Post Draft Order</span>
+                        </div>
+                        <Send className="w-4 h-4 text-blue-400" />
+                      </button>
+                    )}
+
+                    {/* Post Standings */}
+                    {standings.length > 0 && (
+                      <button
+                        onClick={async () => {
+                          if (!discordWebhookUrl) {
+                            setDiscordStatus({ type: 'error', text: 'Please enter a Discord webhook URL first' });
+                            return;
+                          }
+                          setDiscordStatus({ type: 'sending', text: 'Posting standings...' });
+                          const standingsData = standings.map(s => ({
+                            rank: s.rank,
+                            teamAbbr: s.teamAbbr.toUpperCase(),
+                            wins: s.wins,
+                            losses: s.losses,
+                          }));
+                          const result = await postStandingsUpdate(discordWebhookUrl, standingsData, seasonNumber);
+                          if (result.success) {
+                            setDiscordStatus({ type: 'success', text: '✓ Standings posted to Discord!' });
+                          } else {
+                            setDiscordStatus({ type: 'error', text: result.error || 'Failed to send' });
+                          }
+                          setTimeout(() => setDiscordStatus(null), 5000);
+                        }}
+                        disabled={!discordWebhookUrl}
+                        className="w-full flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Trophy className="w-4 h-4 text-emerald-400" />
+                          <span className="text-white text-sm">Post Standings</span>
+                        </div>
+                        <Send className="w-4 h-4 text-emerald-400" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Custom Announcement */}
+                  <div className="pt-3 border-t border-slate-700">
+                    <p className="text-sm text-slate-400 font-medium mb-2">Custom Announcement</p>
+                    <input
+                      type="text"
+                      value={customAnnouncementTitle}
+                      onChange={(e) => setCustomAnnouncementTitle(e.target.value)}
+                      placeholder="Announcement title..."
+                      className="w-full px-3 py-2 mb-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none text-sm"
+                    />
+                    <textarea
+                      value={customAnnouncementMessage}
+                      onChange={(e) => setCustomAnnouncementMessage(e.target.value)}
+                      placeholder="Type your announcement message here..."
+                      rows={3}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none text-sm resize-none"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!discordWebhookUrl) {
+                          setDiscordStatus({ type: 'error', text: 'Please enter a Discord webhook URL first' });
+                          return;
+                        }
+                        if (!customAnnouncementTitle.trim() || !customAnnouncementMessage.trim()) {
+                          setDiscordStatus({ type: 'error', text: 'Please enter both title and message' });
+                          return;
+                        }
+                        setDiscordStatus({ type: 'sending', text: 'Sending announcement...' });
+                        const result = await postCustomAnnouncement(
+                          discordWebhookUrl,
+                          customAnnouncementTitle,
+                          customAnnouncementMessage
+                        );
+                        if (result.success) {
+                          setDiscordStatus({ type: 'success', text: '✓ Announcement posted to Discord!' });
+                          setCustomAnnouncementTitle('');
+                          setCustomAnnouncementMessage('');
+                        } else {
+                          setDiscordStatus({ type: 'error', text: result.error || 'Failed to send' });
+                        }
+                        setTimeout(() => setDiscordStatus(null), 5000);
+                      }}
+                      disabled={!discordWebhookUrl || !customAnnouncementTitle.trim() || !customAnnouncementMessage.trim()}
+                      className="mt-2 w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Send className="w-4 h-4" />
+                      Send Custom Announcement
+                    </button>
+                  </div>
                 </CardContent>
               </Card>
             </div>
