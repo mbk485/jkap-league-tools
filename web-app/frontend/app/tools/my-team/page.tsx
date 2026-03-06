@@ -282,8 +282,9 @@ function MyTeamContent() {
 
     return (
       <Card className="bg-slate-800/50 border-slate-700">
-        <CardHeader className="cursor-pointer" onClick={() => toggleSection(sectionKey)}>
-          <div className="flex items-center justify-between">
+        <div className="cursor-pointer" onClick={() => toggleSection(sectionKey)}>
+          <CardHeader>
+            <div className="flex items-center justify-between">
             <CardTitle className="text-white flex items-center gap-2">
               {icon}
               {title}
@@ -302,7 +303,8 @@ function MyTeamContent() {
               <ChevronDown className="w-5 h-5 text-slate-400" />
             )}
           </div>
-        </CardHeader>
+          </CardHeader>
+        </div>
         {expandedSections[sectionKey] && (
           <CardContent>
             <div className={`grid gap-3 ${
