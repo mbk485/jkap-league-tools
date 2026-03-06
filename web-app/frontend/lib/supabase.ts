@@ -467,7 +467,7 @@ export async function updateUserPassword(
 
 export async function updateUser(
   userId: string,
-  updates: Partial<Pick<DBUser, 'display_name' | 'team_id' | 'username'>>
+  updates: Partial<Pick<DBUser, 'display_name' | 'team_id' | 'username' | 'email' | 'phone'>>
 ): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase
     .from('users')
@@ -479,6 +479,48 @@ export async function updateUser(
   }
 
   return { success: true };
+}
+
+/**
+ * Update member email by team abbreviation
+ * Used by commissioner to match Typeform emails to members
+ */
+export async function updateMemberEmailByTeam(
+  teamAbbr: string,
+  email: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('users')
+    .update({ email: email.toLowerCase() })
+    .eq('team_id', teamAbbr)
+    .eq('user_type', 'jkap_member');
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+}
+
+/**
+ * Bulk update member emails from a mapping of team -> email
+ */
+export async function bulkUpdateMemberEmails(
+  emailMapping: Record<string, string>
+): Promise<{ success: boolean; updated: number; errors: string[] }> {
+  const errors: string[] = [];
+  let updated = 0;
+
+  for (const [teamAbbr, email] of Object.entries(emailMapping)) {
+    const result = await updateMemberEmailByTeam(teamAbbr, email);
+    if (result.success) {
+      updated++;
+    } else {
+      errors.push(`${teamAbbr}: ${result.error}`);
+    }
+  }
+
+  return { success: errors.length === 0, updated, errors };
 }
 
 // =============================================================================

@@ -81,7 +81,7 @@ import {
   DBFinalStanding,
 } from '@/lib/supabase';
 import { MLB_TEAMS } from '@/types/league';
-import { checkQuestionnaireCompletions } from '@/lib/typeform-api';
+import { checkQuestionnaireCompletions, getAllQuestionnaireCompletions } from '@/lib/typeform-api';
 
 // Types for admin data
 interface MemberData {
@@ -161,6 +161,13 @@ export default function OffSeasonAdminPage() {
   const [lockedPicksCount, setLockedPicksCount] = useState(5); // Top 5 picks are locked by default
   const [lotteryRun, setLotteryRun] = useState(false); // Whether lottery has been run
   const [lotteryResults, setLotteryResults] = useState<StandingsData[]>([]); // Final lottery results
+
+  // Typeform completions state - ALL responses from Typeform
+  const [typeformCompletions, setTypeformCompletions] = useState<{
+    email: string;
+    submittedAt: string;
+    displayDate: string;
+  }[]>([]);
 
   // Load real data from database
   const loadData = useCallback(async () => {
@@ -286,6 +293,10 @@ export default function OffSeasonAdminPage() {
       
       // Fetch questionnaire completions from Typeform (last 45 days)
       const questionnaireCompletions = await checkQuestionnaireCompletions(memberEmails, 45);
+      
+      // Also fetch ALL Typeform completions (to show who actually completed regardless of email match)
+      const allTypeformResponses = await getAllQuestionnaireCompletions(45);
+      setTypeformCompletions(allTypeformResponses);
       
       // Build questionnaire completion map by user ID
       const questionnaireCompletedMap = new Map<string, boolean>();
@@ -893,6 +904,62 @@ export default function OffSeasonAdminPage() {
                         </span>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Typeform Responses - Show who actually completed */}
+                  <div className="p-4 rounded-xl bg-emerald-900/20 border border-emerald-500/30">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-white font-medium flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-emerald-400" />
+                        Typeform Submissions ({typeformCompletions.length})
+                      </span>
+                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                        Last 45 Days
+                      </Badge>
+                    </div>
+                    {typeformCompletions.length > 0 ? (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {typeformCompletions.map((completion, idx) => (
+                          <div 
+                            key={idx}
+                            className="flex items-center justify-between p-2 rounded-lg bg-slate-800/50 border border-slate-700"
+                          >
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="w-4 h-4 text-emerald-400" />
+                              <span className="text-sm text-white">{completion.email}</span>
+                            </div>
+                            <span className="text-xs text-slate-400">{completion.displayDate}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-slate-400">
+                        <Mail className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No questionnaire responses found</p>
+                        <p className="text-xs text-slate-500">Check Typeform credentials in Vercel</p>
+                      </div>
+                    )}
+                    {typeformCompletions.length > 0 && (
+                      <button
+                        onClick={() => {
+                          const emails = typeformCompletions.map(c => c.email).join('\n');
+                          copyToClipboard(emails, 'typeform-emails');
+                        }}
+                        className="mt-3 w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-colors text-sm"
+                      >
+                        {copiedField === 'typeform-emails' ? (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4" />
+                            Copy All Emails
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

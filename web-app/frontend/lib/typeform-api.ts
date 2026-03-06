@@ -167,3 +167,28 @@ export async function getQuestionnaireStats(
     pendingEmails,
   };
 }
+
+/**
+ * Get ALL Typeform completions regardless of member matching
+ * This shows everyone who actually completed the questionnaire
+ * @param daysBack - Number of days to look back (default 45)
+ * @returns Array of all completions with email and date
+ */
+export async function getAllQuestionnaireCompletions(daysBack: number = 45): Promise<{
+  email: string;
+  submittedAt: string;
+  displayDate: string;
+}[]> {
+  const responses = await getQuestionnaireResponses(daysBack);
+  
+  return responses.map(r => ({
+    email: r.email,
+    submittedAt: r.submittedAt,
+    displayDate: new Date(r.submittedAt).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }),
+  }));
+}

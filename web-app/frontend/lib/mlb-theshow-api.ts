@@ -154,7 +154,8 @@ export interface MLBTheShowAPIResponse<T> {
 // API CONFIGURATION
 // =============================================================================
 
-const MLB_THESHOW_API_BASE = 'https://mlb25.theshow.com/apis';
+// Use our Next.js API route to proxy requests (avoids CORS issues)
+const API_PROXY_BASE = '/api/mlb-theshow';
 
 // Cache configuration
 const CACHE_DURATION_MS = 1000 * 60 * 60; // 1 hour for player data
@@ -163,6 +164,30 @@ const ROSTER_UPDATE_CACHE_MS = 1000 * 60 * 15; // 15 minutes for roster updates
 // In-memory cache (will be replaced with Supabase caching later)
 const playerCache = new Map<string, { data: MLBTheShowPlayer; timestamp: number }>();
 const searchCache = new Map<string, { data: PlayerSearchResult[]; timestamp: number }>();
+
+// Cache for all Live Series players - loaded once, used for all searches
+let allLiveSeriesPlayersCache: {
+  players: PlayerSearchResult[];
+  timestamp: number;
+  loading: boolean;
+  promise: Promise<PlayerSearchResult[]> | null;
+} = {
+  players: [],
+  timestamp: 0,
+  loading: false,
+  promise: null,
+};
+
+// Helper to build proxy URL
+function buildProxyUrl(endpoint: string, params: Record<string, string | number> = {}): string {
+  const searchParams = new URLSearchParams({ endpoint });
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      searchParams.append(key, String(value));
+    }
+  });
+  return `${API_PROXY_BASE}?${searchParams.toString()}`;
+}
 
 // =============================================================================
 // API FUNCTIONS
@@ -178,9 +203,8 @@ export async function fetchLiveSeriesPlayers(page: number = 1): Promise<{
   currentPage: number;
 }> {
   try {
-    const response = await fetch(
-      `${MLB_THESHOW_API_BASE}/items.json?type=mlb_card&page=${page}`
-    );
+    const url = buildProxyUrl('items', { type: 'mlb_card', page });
+    const response = await fetch(url);
     
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
@@ -215,7 +239,8 @@ export async function fetchPlayerByUUID(uuid: string): Promise<MLBTheShowPlayer 
   }
   
   try {
-    const response = await fetch(`${MLB_THESHOW_API_BASE}/item.json?uuid=${uuid}`);
+    const url = buildProxyUrl('item', { uuid });
+    const response = await fetch(url);
     
     if (!response.ok) {
       if (response.status === 404) return null;
@@ -235,7 +260,120 @@ export async function fetchPlayerByUUID(uuid: string): Promise<MLBTheShowPlayer 
 }
 
 /**
+ * Load ALL Live Series players and cache them
+ * This is called once and the data is reused for all searches
+ */
+async function loadAllLiveSeriesPlayers(): Promise<PlayerSearchResult[]> {
+  // Return cached data if still valid (cache for 30 min)
+  const FULL_CACHE_DURATION = 1000 * 60 * 30;
+  if (allLiveSeriesPlayersCache.players.length > 0 && 
+      Date.now() - allLiveSeriesPlayersCache.timestamp < FULL_CACHE_DURATION) {
+    return allLiveSeriesPlayersCache.players;
+  }
+  
+  // If already loading, wait for that promise
+  if (allLiveSeriesPlayersCache.loading && allLiveSeriesPlayersCache.promise) {
+    return allLiveSeriesPlayersCache.promise;
+  }
+  
+  allLiveSeriesPlayersCache.loading = true;
+  
+  const loadPromise = (async () => {
+    console.log('[MLB API] Loading all Live Series players...');
+    const allPlayers: PlayerSearchResult[] = [];
+    
+    // First, get total pages
+    const firstUrl = buildProxyUrl('items', { type: 'mlb_card', page: 1 });
+    const firstResponse = await fetch(firstUrl);
+    if (!firstResponse.ok) throw new Error('Failed to fetch first page');
+    
+    const firstData: MLBTheShowAPIResponse<MLBTheShowPlayer> = await firstResponse.json();
+    const totalPages = firstData.total_pages;
+    console.log(`[MLB API] Total pages to fetch: ${totalPages}`);
+    
+    // Process first page
+    const firstFiltered = (firstData.items || [])
+      .filter(p => p.series === 'Live' && p.is_live_set)
+      .map(p => ({
+        uuid: p.uuid,
+        name: p.name,
+        team: p.team,
+        team_short_name: p.team_short_name,
+        ovr: p.ovr,
+        rarity: p.rarity,
+        display_position: p.display_position,
+        img: p.img,
+        baked_img: p.baked_img,
+        is_hitter: p.is_hitter,
+      }));
+    allPlayers.push(...firstFiltered);
+    
+    // Fetch remaining pages in batches of 10 (to avoid overwhelming the API)
+    const BATCH_SIZE = 10;
+    for (let batchStart = 2; batchStart <= totalPages; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, totalPages);
+      const pagePromises = [];
+      
+      for (let page = batchStart; page <= batchEnd; page++) {
+        const url = buildProxyUrl('items', { type: 'mlb_card', page });
+        pagePromises.push(
+          fetch(url)
+            .then(res => res.ok ? res.json() : null)
+            .catch(() => null)
+        );
+      }
+      
+      const results = await Promise.all(pagePromises);
+      
+      for (const data of results) {
+        if (!data || !data.items) continue;
+        
+        const filtered = data.items
+          .filter((p: MLBTheShowPlayer) => p.series === 'Live' && p.is_live_set)
+          .map((p: MLBTheShowPlayer) => ({
+            uuid: p.uuid,
+            name: p.name,
+            team: p.team,
+            team_short_name: p.team_short_name,
+            ovr: p.ovr,
+            rarity: p.rarity,
+            display_position: p.display_position,
+            img: p.img,
+            baked_img: p.baked_img,
+            is_hitter: p.is_hitter,
+          }));
+        allPlayers.push(...filtered);
+      }
+    }
+    
+    console.log(`[MLB API] Loaded ${allPlayers.length} Live Series players`);
+    
+    // Sort by OVR descending
+    allPlayers.sort((a, b) => b.ovr - a.ovr);
+    
+    // Update cache
+    allLiveSeriesPlayersCache.players = allPlayers;
+    allLiveSeriesPlayersCache.timestamp = Date.now();
+    allLiveSeriesPlayersCache.loading = false;
+    allLiveSeriesPlayersCache.promise = null;
+    
+    return allPlayers;
+  })();
+  
+  allLiveSeriesPlayersCache.promise = loadPromise;
+  
+  try {
+    return await loadPromise;
+  } catch (error) {
+    allLiveSeriesPlayersCache.loading = false;
+    allLiveSeriesPlayersCache.promise = null;
+    throw error;
+  }
+}
+
+/**
  * Search players by name (Live Series only)
+ * Uses cached data for instant search results
  */
 export async function searchPlayers(
   query: string,
@@ -247,88 +385,33 @@ export async function searchPlayers(
     rarity?: string;
   } = {}
 ): Promise<PlayerSearchResult[]> {
-  const cacheKey = JSON.stringify({ query, ...options });
-  const cached = searchCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION_MS) {
-    return cached.data;
-  }
+  // Load all players first (uses cache if available)
+  const allPlayers = await loadAllLiveSeriesPlayers();
   
-  try {
-    // Build query params
-    const params = new URLSearchParams({
-      type: 'mlb_card',
-    });
-    
-    // The API doesn't have a direct search, so we fetch and filter client-side
-    // For a production app, we'd cache all Live Series players and search locally
-    const allPlayers: PlayerSearchResult[] = [];
-    let page = 1;
-    let hasMore = true;
-    
-    // Fetch up to 5 pages for search (125 players)
-    while (hasMore && page <= 5) {
-      const response = await fetch(
-        `${MLB_THESHOW_API_BASE}/items.json?type=mlb_card&page=${page}`
-      );
-      
-      if (!response.ok) break;
-      
-      const data: MLBTheShowAPIResponse<MLBTheShowPlayer> = await response.json();
-      
-      // Filter for Live Series only
-      const filtered = (data.items || [])
-        .filter(p => p.series === 'Live' && p.is_live_set)
-        .filter(p => {
-          // Name search
-          if (query && !p.name.toLowerCase().includes(query.toLowerCase())) {
-            return false;
-          }
-          // Team filter
-          if (options.team && p.team_short_name !== options.team && p.team !== options.team) {
-            return false;
-          }
-          // Position filter
-          if (options.position && p.display_position !== options.position) {
-            return false;
-          }
-          // OVR range
-          if (options.minOvr && p.ovr < options.minOvr) return false;
-          if (options.maxOvr && p.ovr > options.maxOvr) return false;
-          // Rarity
-          if (options.rarity && p.rarity !== options.rarity) return false;
-          
-          return true;
-        })
-        .map(p => ({
-          uuid: p.uuid,
-          name: p.name,
-          team: p.team,
-          team_short_name: p.team_short_name,
-          ovr: p.ovr,
-          rarity: p.rarity,
-          display_position: p.display_position,
-          img: p.img,
-          baked_img: p.baked_img,
-          is_hitter: p.is_hitter,
-        }));
-      
-      allPlayers.push(...filtered);
-      
-      hasMore = page < data.total_pages;
-      page++;
+  // Filter based on criteria
+  const filtered = allPlayers.filter(p => {
+    // Name search
+    if (query && !p.name.toLowerCase().includes(query.toLowerCase())) {
+      return false;
     }
+    // Team filter
+    if (options.team && p.team_short_name !== options.team && p.team !== options.team) {
+      return false;
+    }
+    // Position filter
+    if (options.position && p.display_position !== options.position) {
+      return false;
+    }
+    // OVR range
+    if (options.minOvr && p.ovr < options.minOvr) return false;
+    if (options.maxOvr && p.ovr > options.maxOvr) return false;
+    // Rarity
+    if (options.rarity && p.rarity !== options.rarity) return false;
     
-    // Sort by OVR descending
-    allPlayers.sort((a, b) => b.ovr - a.ovr);
-    
-    // Cache results
-    searchCache.set(cacheKey, { data: allPlayers, timestamp: Date.now() });
-    
-    return allPlayers;
-  } catch (error) {
-    console.error('Failed to search players:', error);
-    throw error;
-  }
+    return true;
+  });
+  
+  return filtered;
 }
 
 /**
@@ -339,9 +422,8 @@ export async function fetchRosterUpdates(page: number = 1): Promise<{
   totalPages: number;
 }> {
   try {
-    const response = await fetch(
-      `${MLB_THESHOW_API_BASE}/roster_updates.json?page=${page}`
-    );
+    const url = buildProxyUrl('roster_updates', { page });
+    const response = await fetch(url);
     
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
@@ -364,9 +446,8 @@ export async function fetchRosterUpdates(page: number = 1): Promise<{
  */
 export async function fetchRosterUpdateById(id: number): Promise<MLBTheShowRosterUpdate | null> {
   try {
-    const response = await fetch(
-      `${MLB_THESHOW_API_BASE}/roster_update.json?id=${id}`
-    );
+    const url = buildProxyUrl('roster_update', { id });
+    const response = await fetch(url);
     
     if (!response.ok) {
       if (response.status === 404) return null;
