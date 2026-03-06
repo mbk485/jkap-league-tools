@@ -4699,6 +4699,22 @@ export async function submitFreeAgentDeclaration(declaration: {
   try {
     const now = new Date().toISOString();
     
+    // Check for duplicate BEFORE inserting (prevents race conditions)
+    const { data: existing } = await supabase
+      .from('free_agent_declarations')
+      .select('id, player_name')
+      .eq('declaring_user_id', declaration.declaring_user_id)
+      .eq('player_name', declaration.player_name)
+      .eq('season_number', declaration.season_number)
+      .limit(1);
+    
+    if (existing && existing.length > 0) {
+      return { 
+        success: false, 
+        error: `You have already declared ${declaration.player_name}. Each player can only be declared once.` 
+      };
+    }
+    
     const { data, error } = await supabase
       .from('free_agent_declarations')
       .insert({
