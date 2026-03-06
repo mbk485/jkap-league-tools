@@ -735,10 +735,11 @@ function OffSeasonContent() {
             <FreeAgentSection
               declarations={freeAgentsDeclared}
               onDeclare={(declaration) => setFreeAgentsDeclared([...freeAgentsDeclared, declaration])}
-              onSearchPlayer={() => {
-                setPlayerSearchMode('declare');
-                setShowPlayerSearch(true);
-              }}
+              seasonNumber={seasonState.season_number}
+              userId={user?.id}
+              userTeamId={user?.teamId}
+              userTeamName={user?.teamName}
+              userName={user?.displayName || user?.email}
             />
           )}
 
@@ -761,33 +762,7 @@ function OffSeasonContent() {
           )}
         </div>
 
-        {/* Player Search Modal */}
-        <PlayerSearchModal
-          isOpen={showPlayerSearch}
-          onClose={() => setShowPlayerSearch(false)}
-          onSelectPlayer={(player) => {
-            if (playerSearchMode === 'declare') {
-              const newDeclaration: FreeAgentDeclaration = {
-                id: `fa-${Date.now()}`,
-                season_number: seasonState.season_number,
-                declaring_team_id: user?.teamId || 'user-team',
-                declaring_user_id: user?.id || 'user-id',
-                player_name: player.player_name,
-                position: player.position,
-                classification: player.classification,
-                overall_rating: player.overall_rating,
-                player_uuid: player.player_uuid,
-                card_img: player.card_img,
-                team_short_name: player.team_short_name,
-                declared_at: new Date().toISOString(),
-                is_claimed: false,
-              };
-              setFreeAgentsDeclared([...freeAgentsDeclared, newDeclaration]);
-            }
-            setShowPlayerSearch(false);
-          }}
-          title={playerSearchMode === 'declare' ? 'Search Player to Declare' : 'Search Player to Offer'}
-        />
+        {/* Player Search Modal - Now handled within FreeAgentSection for proper confirmation flow */}
 
         {/* Commissioner Controls - Only show for admins and NOT in preview mode */}
         {isAdmin && !previewMode && (
@@ -983,222 +958,489 @@ interface FreeAgentSectionProps {
   declarations: FreeAgentDeclaration[];
   onDeclare: (declaration: FreeAgentDeclaration) => void;
   onSearchPlayer?: () => void;
+  seasonNumber: number;
+  userId?: string;
+  userTeamId?: string;
+  userTeamName?: string;
+  userName?: string;
 }
 
-function FreeAgentSection({ declarations, onDeclare, onSearchPlayer }: FreeAgentSectionProps) {
+function FreeAgentSection({ 
+  declarations, 
+  onDeclare, 
+  seasonNumber,
+  userId,
+  userTeamId,
+  userTeamName,
+  userName,
+}: FreeAgentSectionProps) {
   const [showForm, setShowForm] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [position, setPosition] = useState('');
   const [classification, setClassification] = useState<PlayerClassification>('gold');
   const [overallRating, setOverallRating] = useState(85);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  
+  // Player search modal (managed here for proper confirmation flow)
+  const [showPlayerSearch, setShowPlayerSearch] = useState(false);
+  
+  // Confirmation modal state
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [pendingDeclaration, setPendingDeclaration] = useState<any>(null);
+  
+  // Master free agent list
+  const [masterList, setMasterList] = useState<FreeAgentDeclaration[]>([]);
+  const [loadingMasterList, setLoadingMasterList] = useState(true);
+  const [activeView, setActiveView] = useState<'your' | 'all'>('your');
 
-  const handleSubmit = () => {
+  // Load master free agent list
+  useEffect(() => {
+    const loadMasterList = async () => {
+      setLoadingMasterList(true);
+      try {
+        const { getMasterFreeAgentList } = await import('@/lib/supabase');
+        const list = await getMasterFreeAgentList(seasonNumber);
+        setMasterList(list as FreeAgentDeclaration[]);
+      } catch (err) {
+        console.error('Failed to load master list:', err);
+      } finally {
+        setLoadingMasterList(false);
+      }
+    };
+    loadMasterList();
+  }, [seasonNumber]);
+
+  const handleSubmitRequest = (player: any) => {
+    // Check for duplicate
+    const isDuplicate = declarations.some(
+      d => d.player_name.toLowerCase() === player.player_name.toLowerCase()
+    );
+    if (isDuplicate) {
+      setSubmitError(`You have already declared ${player.player_name}`);
+      return;
+    }
+    
+    setPendingDeclaration(player);
+    setShowConfirmation(true);
+    setSubmitError(null);
+  };
+
+  const handleConfirmSubmit = async () => {
+    if (!pendingDeclaration || !userId) return;
+    
+    setIsSubmitting(true);
+    setSubmitError(null);
+    
+    try {
+      const { submitFreeAgentDeclaration } = await import('@/lib/supabase');
+      
+      const result = await submitFreeAgentDeclaration({
+        season_number: seasonNumber,
+        declaring_team_id: userTeamId || 'unknown',
+        declaring_user_id: userId,
+        declaring_team_name: userTeamName,
+        declaring_user_name: userName,
+        player_name: pendingDeclaration.player_name,
+        position: pendingDeclaration.position,
+        classification: pendingDeclaration.classification,
+        overall_rating: pendingDeclaration.overall_rating,
+        player_uuid: pendingDeclaration.player_uuid,
+        card_img: pendingDeclaration.card_img,
+        team_short_name: pendingDeclaration.team_short_name,
+      });
+      
+      if (result.success && result.declaration) {
+        onDeclare(result.declaration as unknown as FreeAgentDeclaration);
+        // Update master list
+        setMasterList(prev => [...prev, result.declaration as unknown as FreeAgentDeclaration]);
+        setShowConfirmation(false);
+        setPendingDeclaration(null);
+        setPlayerName('');
+        setPosition('');
+        setShowForm(false);
+      } else {
+        setSubmitError(result.error || 'Failed to submit declaration');
+      }
+    } catch (err: any) {
+      console.error('Declaration error:', err);
+      setSubmitError(err.message || 'Failed to submit declaration');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleManualSubmit = () => {
     if (!playerName || !position) return;
     
-    const newDeclaration: FreeAgentDeclaration = {
-      id: `fa-${Date.now()}`,
-      season_number: 4,
-      declaring_team_id: 'user-team', // TODO: Get from auth
-      declaring_user_id: 'user-id', // TODO: Get from auth
+    handleSubmitRequest({
       player_name: playerName,
       position,
       classification,
       overall_rating: overallRating,
-      declared_at: new Date().toISOString(),
-      is_claimed: false,
-    };
+    });
+  };
 
-    onDeclare(newDeclaration);
-    setPlayerName('');
-    setPosition('');
-    setShowForm(false);
+  const formatDateTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
   };
 
   return (
-    <div className="grid lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-6">
-        {/* Info Card */}
-        <Card className="bg-orange-500/10 border-orange-500/30">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <UserMinus className="w-6 h-6 text-orange-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-medium text-orange-400 mb-1">Free Agent Declaration</h4>
-                <p className="text-sm text-slate-400">
-                  Every team must declare at least one player as a free agent. You can declare more if you choose, 
-                  but one is the minimum. Submit your declarations BEFORE the first pitch of the World Series.
-                </p>
-                <p className="text-sm text-orange-300 mt-2 font-medium">
-                  No declarations = no ability to claim players!
-                </p>
-              </div>
+    <div className="space-y-6">
+      {/* Important Notice */}
+      <Card className="bg-red-500/10 border-red-500/30">
+        <CardContent className="py-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-red-400 mb-1">Important: Declarations Are Final</h4>
+              <p className="text-sm text-slate-300">
+                Once you submit a free agent declaration, it is <span className="text-red-400 font-bold">permanently locked</span> and 
+                cannot be removed or changed. Make sure you want to declare this player before confirming.
+              </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Declaration Form */}
+      {/* Info Card */}
+      <Card className="bg-orange-500/10 border-orange-500/30">
+        <CardContent className="py-4">
+          <div className="flex items-start gap-3">
+            <UserMinus className="w-6 h-6 text-orange-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-orange-400 mb-1">Free Agent Declaration Rules</h4>
+              <ul className="text-sm text-slate-400 space-y-1 list-disc list-inside">
+                <li>Every team must declare <span className="text-orange-300 font-medium">at least one player</span> as a free agent</li>
+                <li>Declarations must be submitted <span className="text-orange-300 font-medium">BEFORE the World Series starts</span></li>
+                <li>No declarations = no ability to claim other players</li>
+                <li>All declarations are visible to the entire league</li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tab Navigation */}
+      <div className="flex gap-2 border-b border-slate-700 pb-2">
+        <button
+          onClick={() => setActiveView('your')}
+          className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
+            activeView === 'your' 
+              ? 'bg-orange-500/20 text-orange-400 border-b-2 border-orange-400' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          Your Declarations ({declarations.length})
+        </button>
+        <button
+          onClick={() => setActiveView('all')}
+          className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
+            activeView === 'all' 
+              ? 'bg-cyan-500/20 text-cyan-400 border-b-2 border-cyan-400' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          All Declared Free Agents ({masterList.length})
+        </button>
+      </div>
+
+      {/* Your Declarations View */}
+      {activeView === 'your' && (
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            {/* Declaration Form */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <UserMinus className="w-5 h-5 text-orange-400" />
+                    Declare a Free Agent
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowPlayerSearch(true)}
+                    >
+                      <Search className="w-4 h-4 mr-2" />
+                      Search Database
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setShowForm(!showForm)}
+                      className="bg-orange-500 hover:bg-orange-400"
+                    >
+                      <UserMinus className="w-4 h-4 mr-2" />
+                      {showForm ? 'Cancel' : 'Manual Entry'}
+                    </Button>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {submitError && (
+                  <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                    {submitError}
+                  </div>
+                )}
+                
+                {showForm && (
+                  <div className="p-4 rounded-xl bg-slate-700/50 border border-slate-600 mb-4 space-y-4">
+                    <p className="text-sm text-slate-400 mb-2">
+                      Use "Search Database" above to find players from the Live Series database, or manually enter below:
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                          Player Name
+                        </label>
+                        <input
+                          type="text"
+                          value={playerName}
+                          onChange={(e) => setPlayerName(e.target.value)}
+                          placeholder="e.g., Aaron Judge"
+                          className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                          Position
+                        </label>
+                        <select
+                          value={position}
+                          onChange={(e) => setPosition(e.target.value)}
+                          className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
+                        >
+                          <option value="">Select position...</option>
+                          <option value="SP">SP - Starting Pitcher</option>
+                          <option value="RP">RP - Relief Pitcher</option>
+                          <option value="CP">CP - Closer</option>
+                          <option value="C">C - Catcher</option>
+                          <option value="1B">1B - First Base</option>
+                          <option value="2B">2B - Second Base</option>
+                          <option value="3B">3B - Third Base</option>
+                          <option value="SS">SS - Shortstop</option>
+                          <option value="LF">LF - Left Field</option>
+                          <option value="CF">CF - Center Field</option>
+                          <option value="RF">RF - Right Field</option>
+                          <option value="DH">DH - Designated Hitter</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                          Classification
+                        </label>
+                        <select
+                          value={classification}
+                          onChange={(e) => setClassification(e.target.value as PlayerClassification)}
+                          className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
+                        >
+                          {CLASSIFICATION_ORDER.slice().reverse().map((c) => (
+                            <option key={c} value={c}>
+                              {c.charAt(0).toUpperCase() + c.slice(1)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                          Overall Rating
+                        </label>
+                        <input
+                          type="number"
+                          value={overallRating}
+                          onChange={(e) => setOverallRating(parseInt(e.target.value))}
+                          min={40}
+                          max={99}
+                          className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      variant="primary"
+                      onClick={handleManualSubmit}
+                      disabled={!playerName || !position}
+                      className="bg-orange-500 hover:bg-orange-400"
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      Submit Declaration
+                    </Button>
+                  </div>
+                )}
+
+                {/* Your Declarations List */}
+                {declarations.length > 0 ? (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-slate-400 flex items-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      Your Submitted Declarations
+                    </h4>
+                    {declarations.map((dec) => (
+                      <div key={dec.id} className="relative">
+                        <div
+                          className={`p-4 rounded-xl border ${CLASSIFICATION_COLORS[dec.classification].bg} ${CLASSIFICATION_COLORS[dec.classification].border}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              {dec.card_img && (
+                                <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-700/50">
+                                  <img src={dec.card_img} alt={dec.player_name} className="w-full h-full object-cover" />
+                                </div>
+                              )}
+                              {!dec.card_img && (
+                                <div className="w-12 h-12 rounded-lg bg-slate-700/50 flex items-center justify-center">
+                                  <span className="text-xs font-mono text-slate-300">{dec.position}</span>
+                                </div>
+                              )}
+                              <div>
+                                <PlayerStatsPopover playerName={dec.player_name} playerUUID={dec.player_uuid} position={dec.position}>
+                                  <span className="font-medium text-white hover:text-cyan-400 cursor-pointer underline decoration-dotted underline-offset-2">
+                                    {dec.player_name}
+                                  </span>
+                                </PlayerStatsPopover>
+                                <p className={`text-sm capitalize ${CLASSIFICATION_COLORS[dec.classification].text}`}>
+                                  {dec.classification} - {dec.overall_rating} OVR
+                                </p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  Declared: {formatDateTime(dec.declared_at)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                                Locked
+                              </Badge>
+                              {dec.is_claimed && (
+                                <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">
+                                  Claimed
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-slate-400">
+                    <UserMinus className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                    <p>No players declared yet</p>
+                    <p className="text-sm mt-1">Click "Search Database" to add your first free agent</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-4">
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white text-sm flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400" />
+                  Locking Notice
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-slate-400 space-y-2">
+                <p className="text-red-300">All declarations are permanent and cannot be removed once submitted.</p>
+                <p>Date and time of each declaration is recorded.</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white text-sm">Declaration Tips</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-slate-400">
+                <div className="flex items-start gap-2">
+                  <Target className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
+                  <span>Higher rated players attract better offers in return</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Target className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
+                  <span>Declare surplus players you're willing to move</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Target className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
+                  <span>You can declare more than the minimum 1 player</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Master Free Agent List View */}
+      {activeView === 'all' && (
         <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-white flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <UserMinus className="w-5 h-5 text-orange-400" />
-                Your Declarations ({declarations.length})
-              </span>
-              <div className="flex gap-2">
-                {onSearchPlayer && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={onSearchPlayer}
-                  >
-                    <Search className="w-4 h-4 mr-2" />
-                    Search Database
-                  </Button>
-                )}
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setShowForm(!showForm)}
-                  className="bg-orange-500 hover:bg-orange-400"
-                >
-                  <UserMinus className="w-4 h-4 mr-2" />
-                  {showForm ? 'Cancel' : 'Manual Entry'}
-                </Button>
-              </div>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Users className="w-5 h-5 text-cyan-400" />
+              Master Free Agent List
+              <Badge variant="outline" className="ml-2">{masterList.length} players</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {showForm && (
-              <div className="p-4 rounded-xl bg-slate-700/50 border border-slate-600 mb-4 space-y-4">
-                <p className="text-sm text-slate-400 mb-2">
-                  Use "Search Database" above to find players from the Live Series database, or manually enter below:
-                </p>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Player Name
-                    </label>
-                    <input
-                      type="text"
-                      value={playerName}
-                      onChange={(e) => setPlayerName(e.target.value)}
-                      placeholder="e.g., Aaron Judge"
-                      className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Position
-                    </label>
-                    <select
-                      value={position}
-                      onChange={(e) => setPosition(e.target.value)}
-                      className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
-                    >
-                      <option value="">Select position...</option>
-                      <option value="SP">SP - Starting Pitcher</option>
-                      <option value="RP">RP - Relief Pitcher</option>
-                      <option value="CP">CP - Closer</option>
-                      <option value="C">C - Catcher</option>
-                      <option value="1B">1B - First Base</option>
-                      <option value="2B">2B - Second Base</option>
-                      <option value="3B">3B - Third Base</option>
-                      <option value="SS">SS - Shortstop</option>
-                      <option value="LF">LF - Left Field</option>
-                      <option value="CF">CF - Center Field</option>
-                      <option value="RF">RF - Right Field</option>
-                      <option value="DH">DH - Designated Hitter</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Classification
-                    </label>
-                    <select
-                      value={classification}
-                      onChange={(e) => setClassification(e.target.value as PlayerClassification)}
-                      className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
-                    >
-                      {CLASSIFICATION_ORDER.slice().reverse().map((c) => (
-                        <option key={c} value={c}>
-                          {c.charAt(0).toUpperCase() + c.slice(1)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Overall Rating
-                    </label>
-                    <input
-                      type="number"
-                      value={overallRating}
-                      onChange={(e) => setOverallRating(parseInt(e.target.value))}
-                      min={40}
-                      max={99}
-                      className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
-                    />
-                  </div>
-                </div>
-                <Button
-                  variant="primary"
-                  onClick={handleSubmit}
-                  disabled={!playerName || !position}
-                  className="bg-orange-500 hover:bg-orange-400"
-                >
-                  <Send className="w-4 h-4 mr-2" />
-                  Submit Declaration
-                </Button>
+            {loadingMasterList ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
               </div>
-            )}
-
-            {/* Declarations List */}
-            {declarations.length > 0 ? (
+            ) : masterList.length > 0 ? (
               <div className="space-y-3">
-                {declarations.map((dec) => (
-                  <div key={dec.id} className="relative">
-                    {dec.player_uuid ? (
-                      <PlayerStatsCard
-                        playerUUID={dec.player_uuid}
-                        playerName={dec.player_name}
-                        position={dec.position}
-                        team={dec.team_short_name}
-                        ovr={dec.overall_rating}
-                        rarity={dec.classification.charAt(0).toUpperCase() + dec.classification.slice(1)}
-                        cardImg={dec.card_img}
-                        compact
-                      />
-                    ) : (
-                      <div
-                        className={`p-4 rounded-xl border ${CLASSIFICATION_COLORS[dec.classification].bg} ${CLASSIFICATION_COLORS[dec.classification].border}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-lg bg-slate-700/50 flex items-center justify-center">
-                              <span className="text-xs font-mono text-slate-300">{dec.position}</span>
-                            </div>
-                            <div>
-                              <PlayerStatsPopover playerName={dec.player_name} position={dec.position}>
-                                <span className="font-medium text-white hover:text-cyan-400 cursor-pointer underline decoration-dotted underline-offset-2">
-                                  {dec.player_name}
-                                </span>
-                              </PlayerStatsPopover>
-                              <p className={`text-sm capitalize ${CLASSIFICATION_COLORS[dec.classification].text}`}>
-                                {dec.classification} - {dec.overall_rating} OVR
-                              </p>
-                            </div>
+                {masterList.map((dec) => (
+                  <div
+                    key={dec.id}
+                    className={`p-4 rounded-xl border ${CLASSIFICATION_COLORS[dec.classification].bg} ${CLASSIFICATION_COLORS[dec.classification].border}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {dec.card_img && (
+                          <div className="w-14 h-14 rounded-lg overflow-hidden bg-slate-700/50">
+                            <img src={dec.card_img} alt={dec.player_name} className="w-full h-full object-cover" />
                           </div>
-                          <Badge className={`${CLASSIFICATION_COLORS[dec.classification].bg} ${CLASSIFICATION_COLORS[dec.classification].text} ${CLASSIFICATION_COLORS[dec.classification].border}`}>
-                            {dec.is_claimed ? 'Claimed' : 'Available'}
-                          </Badge>
+                        )}
+                        {!dec.card_img && (
+                          <div className="w-14 h-14 rounded-lg bg-slate-700/50 flex flex-col items-center justify-center">
+                            <span className="text-xs font-mono text-slate-300">{dec.position}</span>
+                            <span className={`text-lg font-bold ${CLASSIFICATION_COLORS[dec.classification].text}`}>
+                              {dec.overall_rating}
+                            </span>
+                          </div>
+                        )}
+                        <div>
+                          <PlayerStatsPopover playerName={dec.player_name} playerUUID={dec.player_uuid} position={dec.position}>
+                            <span className="font-medium text-white text-lg hover:text-cyan-400 cursor-pointer underline decoration-dotted underline-offset-2">
+                              {dec.player_name}
+                            </span>
+                          </PlayerStatsPopover>
+                          <p className={`text-sm capitalize ${CLASSIFICATION_COLORS[dec.classification].text}`}>
+                            {dec.position} · {dec.classification} · {dec.overall_rating} OVR
+                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-slate-400">
+                              Declared by: <span className="text-slate-300">{dec.declaring_team_name || dec.declaring_team_id}</span>
+                            </span>
+                            <span className="text-xs text-slate-500">•</span>
+                            <span className="text-xs text-slate-500">
+                              {formatDateTime(dec.declared_at)}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    )}
-                    {/* Status badge overlay */}
-                    <div className="absolute top-2 right-2">
-                      <Badge className={`${CLASSIFICATION_COLORS[dec.classification].bg} ${CLASSIFICATION_COLORS[dec.classification].text} ${CLASSIFICATION_COLORS[dec.classification].border}`}>
+                      <Badge className={dec.is_claimed 
+                        ? 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+                        : 'bg-green-500/20 text-green-400 border-green-500/30'
+                      }>
                         {dec.is_claimed ? 'Claimed' : 'Available'}
                       </Badge>
                     </div>
@@ -1207,51 +1449,107 @@ function FreeAgentSection({ declarations, onDeclare, onSearchPlayer }: FreeAgent
               </div>
             ) : (
               <div className="text-center py-12 text-slate-400">
-                <UserMinus className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                <p>No players declared yet</p>
-                <p className="text-sm mt-1">Click "Search Database" to add your first free agent</p>
+                <Users className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                <p>No free agents declared yet</p>
+                <p className="text-sm mt-1">Be the first to declare!</p>
               </div>
             )}
           </CardContent>
         </Card>
-      </div>
+      )}
 
-      {/* Sidebar */}
-      <div className="space-y-4">
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader>
-            <CardTitle className="text-white text-sm">Example Declaration</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="p-3 rounded-lg bg-slate-700/50 border border-slate-600 font-mono text-sm text-slate-300">
-              RF - Aaron Judge - Diamond - 92
-            </div>
-            <p className="text-xs text-slate-500 mt-2">
-              Format: Position - Name - Classification - Rating
-            </p>
-          </CardContent>
-        </Card>
+      {/* Confirmation Modal */}
+      {showConfirmation && pendingDeclaration && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <Card className="bg-slate-800 border-slate-700 w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+                Confirm Declaration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
+                <p className="text-red-400 text-sm">
+                  <strong>Warning:</strong> Once submitted, this declaration is <strong>permanently locked</strong> and cannot be removed or changed.
+                </p>
+              </div>
+              
+              <div className={`p-4 rounded-xl border ${CLASSIFICATION_COLORS[pendingDeclaration.classification as PlayerClassification].bg} ${CLASSIFICATION_COLORS[pendingDeclaration.classification as PlayerClassification].border}`}>
+                <div className="flex items-center gap-3">
+                  {pendingDeclaration.card_img && (
+                    <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-700/50">
+                      <img src={pendingDeclaration.card_img} alt={pendingDeclaration.player_name} className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-medium text-white text-lg">{pendingDeclaration.player_name}</p>
+                    <p className={`text-sm capitalize ${CLASSIFICATION_COLORS[pendingDeclaration.classification as PlayerClassification].text}`}>
+                      {pendingDeclaration.position} · {pendingDeclaration.classification} · {pendingDeclaration.overall_rating} OVR
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader>
-            <CardTitle className="text-white text-sm">Declaration Tips</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-slate-400">
-            <div className="flex items-start gap-2">
-              <Target className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
-              <span>Higher rated players attract better offers in return</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <Target className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
-              <span>Declare surplus players you're willing to move</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <Target className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
-              <span>You can declare more than the minimum 1 player</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+              <p className="text-slate-400 text-sm">
+                Are you sure you want to declare <strong className="text-white">{pendingDeclaration.player_name}</strong> as a free agent?
+              </p>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => {
+                    setShowConfirmation(false);
+                    setPendingDeclaration(null);
+                  }}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  className="flex-1 bg-orange-500 hover:bg-orange-400"
+                  onClick={handleConfirmSubmit}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      Confirm Declaration
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Player Search Modal */}
+      <PlayerSearchModal
+        isOpen={showPlayerSearch}
+        onClose={() => setShowPlayerSearch(false)}
+        onSelectPlayer={(player) => {
+          // Trigger confirmation flow instead of direct submission
+          handleSubmitRequest({
+            player_name: player.player_name,
+            position: player.position,
+            classification: player.classification,
+            overall_rating: player.overall_rating,
+            player_uuid: player.player_uuid,
+            card_img: player.card_img,
+            team_short_name: player.team_short_name,
+          });
+          setShowPlayerSearch(false);
+        }}
+        title="Search Player to Declare as Free Agent"
+      />
     </div>
   );
 }

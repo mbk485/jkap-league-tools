@@ -126,6 +126,8 @@ export interface FreeAgentDeclaration {
   season_number: number;
   declaring_team_id: string;
   declaring_user_id: string;
+  declaring_team_name?: string;   // Display name of the declaring team
+  declaring_user_name?: string;   // Display name of the user who declared
   // Player info
   player_name: string;
   position: string;
@@ -134,7 +136,10 @@ export interface FreeAgentDeclaration {
   // MLB The Show integration
   player_uuid?: string;        // UUID from MLB The Show API for fetching full stats
   card_img?: string;           // Card image URL
-  team_short_name?: string;    // Team abbreviation
+  team_short_name?: string;    // MLB team abbreviation (e.g., NYY, LAD)
+  // Locking - once declared, cannot be removed or changed
+  is_locked: boolean;          // Always true once submitted
+  locked_at?: string;          // Timestamp when locked
   // Status
   declared_at: string;
   is_claimed: boolean;

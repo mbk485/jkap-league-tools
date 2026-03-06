@@ -4506,10 +4506,20 @@ export interface DBFreeAgentDeclaration {
   season_number: number;
   declaring_team_id: string;
   declaring_user_id: string;
+  declaring_team_name?: string;
+  declaring_user_name?: string;
   player_name: string;
   position: string;
   classification: PlayerClassification;
   overall_rating: number;
+  // MLB The Show integration
+  player_uuid?: string;
+  card_img?: string;
+  team_short_name?: string;
+  // Locking
+  is_locked: boolean;
+  locked_at?: string;
+  // Status
   declared_at: string;
   is_claimed: boolean;
   claimed_by_team_id?: string;
@@ -4676,27 +4686,97 @@ export async function submitFreeAgentDeclaration(declaration: {
   season_number: number;
   declaring_team_id: string;
   declaring_user_id: string;
+  declaring_team_name?: string;
+  declaring_user_name?: string;
   player_name: string;
   position: string;
   classification: PlayerClassification;
   overall_rating: number;
+  player_uuid?: string;
+  card_img?: string;
+  team_short_name?: string;
 }): Promise<{ success: boolean; declaration?: DBFreeAgentDeclaration; error?: string }> {
   try {
+    const now = new Date().toISOString();
+    
     const { data, error } = await supabase
       .from('free_agent_declarations')
       .insert({
         ...declaration,
-        declared_at: new Date().toISOString(),
+        declared_at: now,
+        is_locked: true,       // Immediately locked - cannot be removed or changed
+        locked_at: now,        // Record when it was locked
         is_claimed: false,
       })
       .select()
       .single();
 
     if (error) throw error;
+    
+    // Log the declaration activity
+    try {
+      await supabase.from('declaration_activity_log').insert({
+        declaration_id: data.id,
+        user_id: declaration.declaring_user_id,
+        user_name: declaration.declaring_user_name,
+        team_name: declaration.declaring_team_name,
+        action_type: 'submitted',
+        player_name: declaration.player_name,
+        position: declaration.position,
+        classification: declaration.classification,
+        overall_rating: declaration.overall_rating,
+        player_uuid: declaration.player_uuid,
+        season_number: declaration.season_number,
+        activity_at: now,
+      });
+    } catch (logErr) {
+      console.warn('Failed to log declaration activity:', logErr);
+    }
+    
     return { success: true, declaration: data };
   } catch (err: any) {
     console.error('Error submitting free agent declaration:', err);
     return { success: false, error: err.message };
+  }
+}
+
+// Check if a player has already been declared by this user
+export async function checkDuplicateDeclaration(
+  userId: string, 
+  playerName: string, 
+  seasonNumber: number
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('free_agent_declarations')
+      .select('id')
+      .eq('declaring_user_id', userId)
+      .eq('player_name', playerName)
+      .eq('season_number', seasonNumber)
+      .limit(1);
+    
+    if (error) throw error;
+    return data && data.length > 0;
+  } catch (err) {
+    console.error('Error checking duplicate declaration:', err);
+    return false;
+  }
+}
+
+// Get all declarations for the master free agent list (with team/user info)
+export async function getMasterFreeAgentList(seasonNumber: number): Promise<DBFreeAgentDeclaration[]> {
+  try {
+    const { data, error } = await supabase
+      .from('free_agent_declarations')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .order('declared_at', { ascending: true }); // Show in order declared
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching master free agent list:', err);
+    return [];
   }
 }
 
