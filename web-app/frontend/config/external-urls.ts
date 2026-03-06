@@ -275,7 +275,7 @@ export const offSeasonItems: OffSeasonItem[] = [
     description: 'Browse and sign available free agents',
     deadline: '2025-01-20',
     status: 'upcoming',
-    actionUrl: '/free-agents',
+    actionUrl: '/offseason?tab=free-agents',
     actionLabel: 'View Free Agents',
   },
   {

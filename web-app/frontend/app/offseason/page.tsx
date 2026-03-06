@@ -266,7 +266,7 @@ function OffSeasonContent() {
               <Link href="/standings" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
                 <BarChart3 className="w-3 h-3" /> Standings
               </Link>
-              <Link href="/free-agents" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+              <Link href="/offseason?tab=free-agents" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
                 <Users className="w-3 h-3" /> Free Agents
               </Link>
             </div>

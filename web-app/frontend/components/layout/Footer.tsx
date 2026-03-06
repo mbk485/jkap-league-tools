@@ -10,7 +10,7 @@ const footerLinks = {
     { label: 'About', href: '/about' },
     { label: 'Rules', href: '/documents' },
     { label: 'Standings', href: '/standings' },
-    { label: 'Free Agents', href: '/free-agents' },
+    { label: 'Free Agents', href: '/offseason?tab=free-agents' },
     { label: 'Documents', href: '/documents' },
   ],
   owners: [

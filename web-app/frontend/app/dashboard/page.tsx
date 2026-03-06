@@ -710,7 +710,7 @@ function DashboardContent() {
             <div className="flex gap-3">
               <Button 
                 as="link" 
-                href="/free-agents" 
+                href="/offseason?tab=free-agents" 
                 variant="outline"
                 icon={<Users className="w-4 h-4" />}
               >
