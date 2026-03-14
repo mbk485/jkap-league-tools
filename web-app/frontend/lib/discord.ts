@@ -26,6 +26,7 @@ export const DISCORD_COLORS = {
   red: 0xDC2626,      // JKAP Red
   emerald: 0x10B981,  // Success green
   amber: 0xF59E0B,    // Warning yellow
+  orange: 0xEA580C,   // Orange for FA
   blue: 0x3B82F6,     // Info blue
   purple: 0x8B5CF6,   // Purple accent
   slate: 0x475569,    // Neutral
