@@ -2028,28 +2028,83 @@ export default function OffSeasonAdminPage() {
                 <CardHeader>
                   <CardTitle className="text-white flex items-center gap-2">
                     <Play className="w-5 h-5 text-emerald-400" />
-                    Phase Actions
+                    Phase Transition
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button fullWidth variant="secondary" className="justify-start">
-                    <Play className="w-4 h-4 mr-2" />
-                    Advance to Next Phase
-                  </Button>
-                  <Button fullWidth variant="secondary" className="justify-start">
-                    <Clock className="w-4 h-4 mr-2" />
-                    Set Phase Deadline
-                  </Button>
-                  <Button fullWidth variant="secondary" className="justify-start">
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    Send Phase Reminder (SMS)
-                  </Button>
-                  <Button fullWidth variant="secondary" className="justify-start">
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Reset Phase Progress
-                  </Button>
+                <CardContent className="space-y-4">
+                  {/* Transition Approval */}
+                  <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-emerald-400 font-medium">Ready to Advance?</span>
+                      <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
+                        {getPhaseLabel(currentPhase)}
+                      </Badge>
+                    </div>
+                    
+                    {/* Completion Status */}
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-slate-400">Questionnaire</span>
+                        <span className={progressSummary.questionnaireCompleted === progressSummary.totalMembers ? 'text-emerald-400' : 'text-amber-400'}>
+                          {progressSummary.questionnaireCompleted}/{progressSummary.totalMembers}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-slate-400">FA Declarations</span>
+                        <span className={progressSummary.declarationsSubmitted > 0 ? 'text-emerald-400' : 'text-amber-400'}>
+                          {progressSummary.declarationsSubmitted} submitted
+                        </span>
+                      </div>
+                    </div>
 
-                  <div className="pt-4 border-t border-slate-700">
+                    <button
+                      onClick={async () => {
+                        const nextPhases: Record<string, SeasonPhase> = {
+                          'questionnaire': 'free_agent_declaration',
+                          'free_agent_declaration': 'claiming_period',
+                          'claiming_period': 'claim_resolution',
+                          'claim_resolution': 'roster_finalization',
+                          'roster_finalization': 'draft_prep',
+                          'draft_prep': 'draft',
+                          'draft': 'pre_season',
+                        };
+                        const nextPhase = nextPhases[currentPhase];
+                        if (nextPhase && confirm(`Advance to "${getPhaseLabel(nextPhase)}"?\n\nThis will:\n• Update the phase for all members\n• Post announcement to Discord (if configured)\n\nContinue?`)) {
+                          setCurrentPhase(nextPhase);
+                          // Post to Discord if webhook is set
+                          if (discordWebhookUrl) {
+                            const announcements: Record<string, { title: string; msg: string }> = {
+                              'free_agent_declaration': { title: 'Free Agent Declaration Period', msg: '🔄 **Declare your free agents!**\n\nYou must declare at least **1 player** as a free agent before the deadline.' },
+                              'claiming_period': { title: '48-Hour Claiming Window Open!', msg: '🎯 **The claiming period has begun!**\n\nYou have **48 hours** to submit claims on declared free agents.' },
+                              'draft_prep': { title: 'Draft Order Announced!', msg: '🎯 **The draft order has been set!**\n\nReview the draft board and prepare your strategy.' },
+                              'draft': { title: 'DRAFT DAY!', msg: '🏈 **IT\'S DRAFT DAY!**\n\nHead to the Draft Tool to participate. Good luck!' },
+                            };
+                            const ann = announcements[nextPhase];
+                            if (ann) {
+                              await postCustomAnnouncement(discordWebhookUrl, ann.title, ann.msg);
+                            }
+                          }
+                          setDiscordStatus({ type: 'success', text: `✓ Advanced to ${getPhaseLabel(nextPhase)}` });
+                          setTimeout(() => setDiscordStatus(null), 5000);
+                        }
+                      }}
+                      className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                      Advance to Next Phase
+                    </button>
+                  </div>
+
+                  {/* Manual Phase Override */}
+                  <div className="pt-3 border-t border-slate-700">
+                    <p className="text-slate-400 text-sm mb-2">Manual Override</p>
+                    <p className="text-xs text-slate-500 mb-3">
+                      Use the phase list above to manually set any phase. Click a phase to switch.
+                    </p>
+                  </div>
+
+                  {/* Quick Links */}
+                  <div className="pt-3 border-t border-slate-700">
                     <p className="text-slate-400 text-sm mb-3">Quick Links</p>
                     <div className="space-y-2">
                       <a
@@ -2067,6 +2122,13 @@ export default function OffSeasonAdminPage() {
                       >
                         <ExternalLink className="w-4 h-4" />
                         Member Off-Season Hub
+                      </Link>
+                      <Link
+                        href="/draft"
+                        className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 text-sm"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Draft Tool
                       </Link>
                     </div>
                   </div>
