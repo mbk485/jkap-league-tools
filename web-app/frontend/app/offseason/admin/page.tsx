@@ -66,6 +66,7 @@ import {
   Lock,
   UserCog,
   Eye,
+  Gamepad2,
 } from 'lucide-react';
 import {
   getLeagueStandings,
@@ -176,6 +177,26 @@ export default function OffSeasonAdminPage() {
     submittedAt: string;
     displayDate: string;
   }[]>([]);
+
+  // Detailed questionnaire responses with all fields
+  interface QuestionnaireDetail {
+    email: string;
+    name: string;
+    gamertag: string;
+    currentTeam: string;
+    returningNextSeason: boolean;
+    wantsToSwitchTeams: boolean;
+    wantsToHelp: boolean;
+    submittedAt: string;
+    matchedMember?: MemberData;
+  }
+  const [questionnaireDetails, setQuestionnaireDetails] = useState<QuestionnaireDetail[]>([]);
+  const [questionnaireStats, setQuestionnaireStats] = useState({
+    returning: 0,
+    notReturning: 0,
+    wantToSwitch: 0,
+    wantToHelp: 0,
+  });
 
   // Discord announcement state
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
@@ -318,6 +339,62 @@ export default function OffSeasonAdminPage() {
       // Also fetch ALL Typeform completions (to show who actually completed regardless of email match)
       const allTypeformResponses = await getAllQuestionnaireCompletions(45);
       setTypeformCompletions(allTypeformResponses);
+
+      // Fetch detailed questionnaire data with all fields
+      try {
+        const detailedResponse = await fetch('/api/typeform/responses?days=45&full=true');
+        const detailedData = await detailedResponse.json();
+        if (detailedData.completions && detailedData.completions.length > 0) {
+          // Map to our detail structure
+          const details: QuestionnaireDetail[] = detailedData.completions.map((c: any) => {
+            // Try to match with a member
+            const matchedMember = jkapMembers.find(m => 
+              m.email?.toLowerCase() === c.email?.toLowerCase()
+            );
+            
+            // Parse returning/switching from allAnswers positions if needed
+            const answers = c.allAnswers || [];
+            const returningAnswer = answers[5]?.answer || '';
+            const switchAnswer = answers[6]?.answer || '';
+            const helpAnswer = answers[7]?.answer || '';
+            
+            return {
+              email: c.email,
+              name: c.name,
+              gamertag: c.gamertag || answers[1]?.answer || '',
+              currentTeam: c.currentTeam || answers[3]?.answer || '',
+              returningNextSeason: returningAnswer.toLowerCase().includes('yes'),
+              wantsToSwitchTeams: switchAnswer.toLowerCase().includes('yes'),
+              wantsToHelp: helpAnswer.toLowerCase().includes('yes'),
+              submittedAt: c.submittedAt,
+              matchedMember: matchedMember ? {
+                id: matchedMember.id,
+                username: matchedMember.username,
+                displayName: matchedMember.display_name,
+                teamId: matchedMember.team_id || '',
+                teamName: MLB_TEAMS.find(t => t.abbreviation === matchedMember.team_id)?.name || '',
+                email: matchedMember.email || '',
+                phone: matchedMember.phone || '',
+                isActive: true,
+                lastActive: matchedMember.created_at,
+                questionnaireCompleted: true,
+                freeAgentsDeclared: false,
+              } : undefined,
+            };
+          });
+          setQuestionnaireDetails(details);
+          
+          // Calculate stats
+          setQuestionnaireStats({
+            returning: details.filter(d => d.returningNextSeason).length,
+            notReturning: details.filter(d => !d.returningNextSeason).length,
+            wantToSwitch: details.filter(d => d.wantsToSwitchTeams).length,
+            wantToHelp: details.filter(d => d.wantsToHelp).length,
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching detailed questionnaire data:', err);
+      }
       
       // Build questionnaire completion map by user ID
       const questionnaireCompletedMap = new Map<string, boolean>();
@@ -927,29 +1004,97 @@ export default function OffSeasonAdminPage() {
                     </div>
                   </div>
 
-                  {/* Typeform Responses - Show who actually completed */}
+                  {/* Detailed Questionnaire Responses */}
                   <div className="p-4 rounded-xl bg-emerald-900/20 border border-emerald-500/30">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-white font-medium flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-emerald-400" />
-                        Typeform Submissions ({typeformCompletions.length})
+                        <ClipboardList className="w-4 h-4 text-emerald-400" />
+                        Questionnaire Responses ({questionnaireDetails.length})
                       </span>
                       <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
                         Last 45 Days
                       </Badge>
                     </div>
-                    {typeformCompletions.length > 0 ? (
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {typeformCompletions.map((completion, idx) => (
+                    
+                    {/* Stats Summary */}
+                    {questionnaireDetails.length > 0 && (
+                      <div className="grid grid-cols-4 gap-2 mb-4">
+                        <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-center">
+                          <p className="text-lg font-bold text-emerald-400">{questionnaireStats.returning}</p>
+                          <p className="text-xs text-slate-400">Returning</p>
+                        </div>
+                        <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-center">
+                          <p className="text-lg font-bold text-red-400">{questionnaireStats.notReturning}</p>
+                          <p className="text-xs text-slate-400">Not Returning</p>
+                        </div>
+                        <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-center">
+                          <p className="text-lg font-bold text-amber-400">{questionnaireStats.wantToSwitch}</p>
+                          <p className="text-xs text-slate-400">Want Switch</p>
+                        </div>
+                        <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-center">
+                          <p className="text-lg font-bold text-purple-400">{questionnaireStats.wantToHelp}</p>
+                          <p className="text-xs text-slate-400">Want to Help</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Team Switchers Alert */}
+                    {questionnaireStats.wantToSwitch > 0 && (
+                      <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Shuffle className="w-4 h-4 text-amber-400" />
+                          <span className="text-amber-400 font-medium text-sm">Team Switch Pool</span>
+                        </div>
+                        <div className="space-y-1">
+                          {questionnaireDetails
+                            .filter(d => d.wantsToSwitchTeams)
+                            .map((d, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-sm">
+                                <span className="text-white">{d.name}</span>
+                                <span className="text-amber-400">{d.currentTeam}</span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Detailed List */}
+                    {questionnaireDetails.length > 0 ? (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {questionnaireDetails.map((detail, idx) => (
                           <div 
                             key={idx}
-                            className="flex items-center justify-between p-2 rounded-lg bg-slate-800/50 border border-slate-700"
+                            className={`p-3 rounded-lg border ${
+                              detail.wantsToSwitchTeams 
+                                ? 'bg-amber-500/10 border-amber-500/30' 
+                                : !detail.returningNextSeason
+                                ? 'bg-red-500/10 border-red-500/30'
+                                : 'bg-slate-800/50 border-slate-700'
+                            }`}
                           >
-                            <div className="flex items-center gap-2">
-                              <CheckCircle className="w-4 h-4 text-emerald-400" />
-                              <span className="text-sm text-white">{completion.email}</span>
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                {detail.returningNextSeason ? (
+                                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                                ) : (
+                                  <XCircle className="w-4 h-4 text-red-400" />
+                                )}
+                                <span className="text-white font-medium">{detail.name}</span>
+                                {detail.wantsToSwitchTeams && (
+                                  <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                                    WANTS SWITCH
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className="text-xs text-slate-400">{detail.currentTeam}</span>
                             </div>
-                            <span className="text-xs text-slate-400">{completion.displayDate}</span>
+                            <div className="flex items-center gap-4 text-xs text-slate-400">
+                              <span className="flex items-center gap-1">
+                                <Gamepad2 className="w-3 h-3" />
+                                {detail.gamertag || 'No PSN'}
+                              </span>
+                              <span>{detail.email}</span>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -960,26 +1105,49 @@ export default function OffSeasonAdminPage() {
                         <p className="text-xs text-slate-500">Check Typeform credentials in Vercel</p>
                       </div>
                     )}
-                    {typeformCompletions.length > 0 && (
-                      <button
-                        onClick={() => {
-                          const emails = typeformCompletions.map(c => c.email).join('\n');
-                          copyToClipboard(emails, 'typeform-emails');
-                        }}
-                        className="mt-3 w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-colors text-sm"
-                      >
-                        {copiedField === 'typeform-emails' ? (
-                          <>
-                            <Check className="w-4 h-4" />
-                            Copied!
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-4 h-4" />
-                            Copy All Emails
-                          </>
-                        )}
-                      </button>
+                    
+                    {/* Copy Actions */}
+                    {questionnaireDetails.length > 0 && (
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          onClick={() => {
+                            const emails = questionnaireDetails.map(c => c.email).join('\n');
+                            copyToClipboard(emails, 'typeform-emails');
+                          }}
+                          className="flex-1 flex items-center justify-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-colors text-sm"
+                        >
+                          {copiedField === 'typeform-emails' ? (
+                            <>
+                              <Check className="w-4 h-4" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-4 h-4" />
+                              Copy Emails
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => {
+                            const gamertags = questionnaireDetails.map(c => c.gamertag).filter(Boolean).join('\n');
+                            copyToClipboard(gamertags, 'gamertags');
+                          }}
+                          className="flex-1 flex items-center justify-center gap-2 p-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 hover:bg-purple-500/20 transition-colors text-sm"
+                        >
+                          {copiedField === 'gamertags' ? (
+                            <>
+                              <Check className="w-4 h-4" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Gamepad2 className="w-4 h-4" />
+                              Copy Gamertags
+                            </>
+                          )}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </CardContent>

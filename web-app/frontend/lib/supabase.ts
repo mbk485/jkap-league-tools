@@ -293,6 +293,8 @@ export interface DBUser {
   phone?: string | null;
   league_name?: string | null;
   user_type?: 'jkap_member' | 'external_commissioner' | null;
+  // Gaming profile
+  gamertag?: string | null;
 }
 
 export interface DBTeam {
@@ -517,6 +519,48 @@ export async function bulkUpdateMemberEmails(
       updated++;
     } else {
       errors.push(`${teamAbbr}: ${result.error}`);
+    }
+  }
+
+  return { success: errors.length === 0, updated, errors };
+}
+
+/**
+ * Update a member's gamertag by their email
+ */
+export async function updateMemberGamertagByEmail(
+  email: string,
+  gamertag: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('users')
+    .update({ gamertag })
+    .eq('email', email.toLowerCase());
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+}
+
+/**
+ * Bulk update gamertags from questionnaire data
+ */
+export async function bulkUpdateGamertagsFromQuestionnaire(
+  data: { email: string; gamertag: string }[]
+): Promise<{ success: boolean; updated: number; errors: string[] }> {
+  const errors: string[] = [];
+  let updated = 0;
+
+  for (const { email, gamertag } of data) {
+    if (!gamertag) continue;
+    
+    const result = await updateMemberGamertagByEmail(email, gamertag);
+    if (result.success) {
+      updated++;
+    } else {
+      errors.push(`${email}: ${result.error}`);
     }
   }
 
