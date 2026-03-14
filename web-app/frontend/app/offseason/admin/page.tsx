@@ -212,9 +212,9 @@ export default function OffSeasonAdminPage() {
         getLeagueSettings(),
       ]);
 
-      // Load Discord webhook URL from settings
-      if (leagueSettings.discord_webhook_url) {
-        setDiscordWebhookUrl(leagueSettings.discord_webhook_url);
+      // Load Discord webhook URL for announcements (separate from IL Manager webhook)
+      if (leagueSettings.discord_webhook_url_announcements) {
+        setDiscordWebhookUrl(leagueSettings.discord_webhook_url_announcements);
       }
 
       // Set season info
@@ -1069,7 +1069,7 @@ export default function OffSeasonAdminPage() {
                       onBlur={async (e) => {
                         const url = e.target.value.trim();
                         if (url && url.startsWith('https://discord.com/api/webhooks/')) {
-                          await saveLeagueSettings({ discord_webhook_url: url });
+                          await saveLeagueSettings({ discord_webhook_url_announcements: url });
                           setDiscordStatus({ type: 'success', text: '✓ Webhook URL saved!' });
                           setTimeout(() => setDiscordStatus(null), 3000);
                         }

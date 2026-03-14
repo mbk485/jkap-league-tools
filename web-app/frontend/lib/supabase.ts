@@ -529,7 +529,8 @@ export async function bulkUpdateMemberEmails(
 
 export interface LeagueSettings {
   id?: string;
-  discord_webhook_url: string | null;
+  discord_webhook_url: string | null;  // For IL Manager transactions
+  discord_webhook_url_announcements: string | null;  // For Commissioner announcements (main chat)
   auto_post_discord: boolean;
   announcement_style: 'espn' | 'simple';
   openai_api_key: string | null;  // Centralized API key for whole league
@@ -538,6 +539,7 @@ export interface LeagueSettings {
 
 const DEFAULT_SETTINGS: LeagueSettings = {
   discord_webhook_url: null,
+  discord_webhook_url_announcements: null,
   auto_post_discord: false,
   announcement_style: 'espn',
   openai_api_key: null,
@@ -558,6 +560,7 @@ export async function getLeagueSettings(): Promise<LeagueSettings> {
     return {
       id: data.id,
       discord_webhook_url: data.discord_webhook_url,
+      discord_webhook_url_announcements: data.discord_webhook_url_announcements ?? null,
       auto_post_discord: data.auto_post_discord ?? false,
       announcement_style: data.announcement_style ?? 'espn',
       openai_api_key: data.openai_api_key ?? null,
@@ -649,6 +652,7 @@ export async function saveLeagueSettings(
         updated_at: new Date().toISOString(),
       };
       if (settings.discord_webhook_url !== undefined) updateData.discord_webhook_url = settings.discord_webhook_url;
+      if (settings.discord_webhook_url_announcements !== undefined) updateData.discord_webhook_url_announcements = settings.discord_webhook_url_announcements;
       if (settings.auto_post_discord !== undefined) updateData.auto_post_discord = settings.auto_post_discord;
       if (settings.announcement_style !== undefined) updateData.announcement_style = settings.announcement_style;
       if (settings.openai_api_key !== undefined) updateData.openai_api_key = settings.openai_api_key;
@@ -667,6 +671,7 @@ export async function saveLeagueSettings(
         .from('league_settings')
         .insert({
           discord_webhook_url: settings.discord_webhook_url ?? null,
+          discord_webhook_url_announcements: settings.discord_webhook_url_announcements ?? null,
           auto_post_discord: settings.auto_post_discord ?? false,
           announcement_style: settings.announcement_style ?? 'espn',
           openai_api_key: settings.openai_api_key ?? null,
