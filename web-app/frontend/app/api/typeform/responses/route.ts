@@ -82,17 +82,22 @@ export async function GET(request: Request) {
 
     const data: TypeformResponsesResult = await response.json();
 
-    // Process responses and extract email
-    const completions: { email: string; submittedAt: string }[] = [];
+    // Process responses and extract email + name
+    const completions: { email: string; name: string; submittedAt: string }[] = [];
 
     for (const item of data.items) {
       // Find the email answer
       const emailAnswer = item.answers?.find(a => a.type === 'email');
       const email = emailAnswer?.email || item.hidden?.email || '';
 
+      // Find the name/text answers (usually first text field is the name)
+      const textAnswers = item.answers?.filter(a => a.type === 'text') || [];
+      const name = textAnswers[0]?.text || '';
+
       if (email) {
         completions.push({
           email: email.toLowerCase(),
+          name: name,
           submittedAt: item.submitted_at,
         });
       }
