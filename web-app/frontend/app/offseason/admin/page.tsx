@@ -79,6 +79,8 @@ import {
   TeamStats,
   DBUser,
   DBFinalStanding,
+  getLeagueSettings,
+  saveLeagueSettings,
 } from '@/lib/supabase';
 import { MLB_TEAMS } from '@/types/league';
 import { checkQuestionnaireCompletions, getAllQuestionnaireCompletions } from '@/lib/typeform-api';
@@ -198,6 +200,7 @@ export default function OffSeasonAdminPage() {
         cyYoungData,
         finalStandingsData,
         draftOrderData,
+        leagueSettings,
       ] = await Promise.all([
         getLeagueStandings(),
         getAllUsers(),
@@ -206,7 +209,13 @@ export default function OffSeasonAdminPage() {
         getAwardCandidates(currentSeasonNum, 'cy_young'),
         getFinalStandings(currentSeasonNum),
         getDraftOrder(currentSeasonNum),
+        getLeagueSettings(),
       ]);
+
+      // Load Discord webhook URL from settings
+      if (leagueSettings.discord_webhook_url) {
+        setDiscordWebhookUrl(leagueSettings.discord_webhook_url);
+      }
 
       // Set season info
       setSeasonNumber(currentSeasonNum);
@@ -1057,11 +1066,19 @@ export default function OffSeasonAdminPage() {
                       type="text"
                       value={discordWebhookUrl}
                       onChange={(e) => setDiscordWebhookUrl(e.target.value)}
+                      onBlur={async (e) => {
+                        const url = e.target.value.trim();
+                        if (url && url.startsWith('https://discord.com/api/webhooks/')) {
+                          await saveLeagueSettings({ discord_webhook_url: url });
+                          setDiscordStatus({ type: 'success', text: '✓ Webhook URL saved!' });
+                          setTimeout(() => setDiscordStatus(null), 3000);
+                        }
+                      }}
                       placeholder="https://discord.com/api/webhooks/..."
                       className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none text-sm"
                     />
                     <p className="text-xs text-slate-500 mt-1">
-                      Get this from Discord: Server Settings → Integrations → Webhooks → New Webhook
+                      {discordWebhookUrl ? '✓ Webhook configured - auto-saves when changed' : 'Get this from Discord: Server Settings → Integrations → Webhooks → New Webhook'}
                     </p>
                   </div>
 
