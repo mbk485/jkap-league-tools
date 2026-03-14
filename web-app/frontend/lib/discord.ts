@@ -127,6 +127,40 @@ export async function postQuestionnaireReminder(
 }
 
 /**
+ * Post FA declaration reminder
+ */
+export async function postFADeclarationReminder(
+  webhookUrl: string,
+  teamsNotDeclared: string[],
+  totalTeams: number,
+  declaredCount: number
+): Promise<{ success: boolean; error?: string }> {
+  const embed: DiscordEmbed = {
+    title: '⚾ Free Agent Declaration Reminder',
+    description: `**${declaredCount}/${totalTeams}** teams have declared their free agents.\n\n⚠️ **You must declare at least 1 player before the World Series to participate in claiming!**`,
+    color: teamsNotDeclared.length > 10 ? DISCORD_COLORS.red : DISCORD_COLORS.orange,
+    fields: [
+      {
+        name: `⏳ Still Need to Declare (${teamsNotDeclared.length})`,
+        value: teamsNotDeclared.length > 0 
+          ? teamsNotDeclared.map(t => `\`${t}\``).join(' ')
+          : 'All teams have declared! ✅',
+        inline: false,
+      },
+    ],
+    footer: {
+      text: 'JKAP Memorial League • No declaration = No claiming!',
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  return postToDiscord(webhookUrl, {
+    username: 'JKAP Commissioner',
+    embeds: [embed],
+  });
+}
+
+/**
  * Post standings update
  */
 export async function postStandingsUpdate(

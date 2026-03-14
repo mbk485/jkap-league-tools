@@ -67,6 +67,7 @@ import {
   UserCog,
   Eye,
   Gamepad2,
+  UserMinus,
 } from 'lucide-react';
 import {
   getLeagueStandings,
@@ -1302,6 +1303,44 @@ export default function OffSeasonAdminPage() {
                       </div>
                       <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
                         {members.filter(m => !m.questionnaireCompleted).length} pending
+                      </Badge>
+                    </button>
+
+                    {/* FA Declaration Reminder */}
+                    <button
+                      onClick={async () => {
+                        if (!discordWebhookUrl) {
+                          setDiscordStatus({ type: 'error', text: 'Please enter a Discord webhook URL first' });
+                          return;
+                        }
+                        setDiscordStatus({ type: 'sending', text: 'Sending FA declaration reminder...' });
+                        const teamsNotDeclared = members
+                          .filter(m => !m.freeAgentsDeclared)
+                          .map(m => m.teamId);
+                        const declaredCount = members.filter(m => m.freeAgentsDeclared).length;
+                        const { postFADeclarationReminder } = await import('@/lib/discord');
+                        const result = await postFADeclarationReminder(
+                          discordWebhookUrl,
+                          teamsNotDeclared,
+                          members.length,
+                          declaredCount
+                        );
+                        if (result.success) {
+                          setDiscordStatus({ type: 'success', text: '✓ FA declaration reminder sent to Discord!' });
+                        } else {
+                          setDiscordStatus({ type: 'error', text: result.error || 'Failed to send' });
+                        }
+                        setTimeout(() => setDiscordStatus(null), 5000);
+                      }}
+                      disabled={!discordWebhookUrl}
+                      className="w-full flex items-center justify-between p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <div className="flex items-center gap-2">
+                        <UserMinus className="w-4 h-4 text-orange-400" />
+                        <span className="text-white text-sm">Send FA Declaration Reminder</span>
+                      </div>
+                      <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">
+                        {members.filter(m => !m.freeAgentsDeclared).length} pending
                       </Badge>
                     </button>
 
