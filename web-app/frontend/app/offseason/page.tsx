@@ -577,7 +577,7 @@ function OffSeasonContent() {
                           <div>
                             <h4 className="font-medium text-white mb-1">3. Free Agent Declaration</h4>
                             <p className="text-sm text-slate-400">
-                              Declare at least 1 player as a free agent before the World Series begins.
+                              Declare at least 1 player as a free agent before the claiming period begins.
                               No declarations = no ability to claim players.
                             </p>
                           </div>
@@ -602,7 +602,7 @@ function OffSeasonContent() {
                           <div>
                             <h4 className="font-medium text-white mb-1">4. Claiming Period</h4>
                             <p className="text-sm text-slate-400">
-                              48-hour window after World Series ends. To claim a player, 
+                              48-hour claiming window. To claim a player, 
                               offer one of equal or higher value. Max 2 successful claims.
                             </p>
                           </div>
@@ -1134,7 +1134,7 @@ function FreeAgentSection({
               <h4 className="font-medium text-orange-400 mb-1">Free Agent Declaration Rules</h4>
               <ul className="text-sm text-slate-400 space-y-1 list-disc list-inside">
                 <li>Every team must declare <span className="text-orange-300 font-medium">at least one player</span> as a free agent</li>
-                <li>Declarations must be submitted <span className="text-orange-300 font-medium">BEFORE the World Series starts</span></li>
+                <li>Declarations must be submitted <span className="text-orange-300 font-medium">BEFORE the claiming period starts</span></li>
                 <li>No declarations = no ability to claim other players</li>
                 <li>All declarations are visible to the entire league</li>
               </ul>

@@ -138,7 +138,7 @@ export async function postFADeclarationReminder(
 ): Promise<{ success: boolean; error?: string }> {
   const embed: DiscordEmbed = {
     title: '⚾ Free Agent Declaration Reminder',
-    description: `**${declaredCount}/${totalTeams}** teams have declared their free agents.\n\n⚠️ **You must declare at least 1 player before the World Series to participate in claiming!**`,
+    description: `**${declaredCount}/${totalTeams}** teams have declared their free agents.\n\n⚠️ **You must declare at least 1 player before the claiming period to participate!**`,
     color: teamsNotDeclared.length > 10 ? DISCORD_COLORS.red : DISCORD_COLORS.orange,
     fields: [
       {
