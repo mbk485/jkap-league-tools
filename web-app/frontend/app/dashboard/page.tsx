@@ -48,6 +48,7 @@ import {
   Target,
   Star,
 } from 'lucide-react';
+import { FreeAgentTicker } from '@/components/FreeAgentTicker';
 
 // Format relative time
 function formatRelativeTime(timestamp: string): string {
@@ -191,6 +192,15 @@ function DashboardContent() {
               </Button>
             </div>
           </div>
+        </div>
+
+        {/* Free Agent Ticker */}
+        <div
+          className={`transition-all duration-500 delay-75 ${
+            isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+          }`}
+        >
+          <FreeAgentTicker />
         </div>
 
         {/* Primary Action Cards - Game Logger & Tools */}
