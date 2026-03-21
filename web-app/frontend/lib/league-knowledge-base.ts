@@ -275,14 +275,23 @@ to avoid a loss are not allowed and will result in automatic loss + warning.`,
   {
     category: "Offseason",
     title: "Draft Rules",
-    content: `The amateur draft follows these rules:
-- Draft order based on previous season standings (worst team picks first)
+    content: `The amateur draft is the final step of the off-season!
+
+SEASON 4 DRAFT: This year we are drafting from the ANGELS ROSTER. The commissioner will provide the full list of draft-eligible players.
+
+Draft Order:
+- Based on previous season standings (worst team picks first)
+- Top 5 picks locked to worst 5 teams
+- Remaining picks determined by weighted lottery (worse teams = better odds)
+
+Draft Rules:
 - All picks must be made within the time limit
 - Draft pick trading is allowed (with commissioner approval)
-- Compensatory picks for free agent losses
+- Snake draft format (1st round: 1-30, 2nd round: 30-1, etc.)
+- Commissioner can omit/contract teams from draft if needed
 
-Draft dates are announced well in advance on Discord.`,
-    keywords: ["draft", "picks", "order", "amateur", "prospect", "rookie"],
+The draft tool is available in the app. Draft dates are announced on Discord.`,
+    keywords: ["draft", "picks", "order", "amateur", "prospect", "rookie", "angels", "lottery"],
   },
   {
     category: "Offseason",
