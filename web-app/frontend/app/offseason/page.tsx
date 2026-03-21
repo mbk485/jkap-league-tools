@@ -320,174 +320,213 @@ function OffSeasonContent() {
           </div>
         )}
 
-        {/* Hero Header */}
+        {/* SIMPLIFIED HERO - What do I need to do RIGHT NOW? */}
         <div
-          className={`mb-8 transition-all duration-500 ${
+          className={`mb-6 transition-all duration-500 ${
             isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}
         >
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500/20 via-orange-500/10 to-red-500/20 border border-amber-500/30 p-8">
-            {/* Background decoration */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
+          {/* Big Action Card - THE MAIN THING */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-orange-600/30 via-orange-500/20 to-amber-500/30 border-2 border-orange-500/50 p-6 sm:p-8">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/20 rounded-full blur-3xl" />
             
             <div className="relative z-10">
+              {/* Status Badge */}
               <div className="flex items-center gap-3 mb-4">
-                <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/30">
-                  <Scroll className="w-8 h-8 text-amber-400" />
-                </div>
-                <div>
-                  <Badge variant="outline" className="border-amber-500/50 text-amber-400 mb-1">
-                    Season {seasonState.season_number} Off-Season
+                <Badge className="bg-orange-500 text-white text-sm px-3 py-1">
+                  🔥 ACTION REQUIRED
+                </Badge>
+                {seasonState.phase_deadline && (
+                  <Badge className="bg-slate-800/80 text-amber-400 border-amber-500/50">
+                    <Clock className="w-3 h-3 mr-1" />
+                    {getTimeRemaining()}
                   </Badge>
-                  <h1 className="text-3xl sm:text-4xl font-display text-white tracking-wide">
-                    JKAP League Official Off-Season Plan
-                  </h1>
-                </div>
+                )}
               </div>
-              <p className="text-lg text-slate-300 max-w-2xl">
-                Your guide to managing the offseason like a big-league GM. Complete all required tasks to secure your spot for next season.
+              
+              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                Declare Your Free Agents
+              </h1>
+              <p className="text-slate-200 text-lg mb-6 max-w-2xl">
+                Pick the players you're letting go. You MUST declare at least 1 player to participate in free agent claiming.
               </p>
+              
+              {/* Big Action Button */}
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button
+                  onClick={() => setActiveTab('free-agents')}
+                  className="flex items-center justify-center gap-3 px-8 py-4 bg-orange-500 hover:bg-orange-400 text-white text-xl font-bold rounded-xl transition-all shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-105"
+                >
+                  <UserMinus className="w-6 h-6" />
+                  DECLARE FREE AGENTS
+                  <ArrowRight className="w-6 h-6" />
+                </button>
+                
+                {freeAgentsDeclared.length > 0 && (
+                  <div className="flex items-center gap-2 px-4 py-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl">
+                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                    <span className="text-emerald-400 font-medium">
+                      {freeAgentsDeclared.length} player{freeAgentsDeclared.length !== 1 ? 's' : ''} declared
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Current Phase Status */}
+        {/* YOUR PROGRESS - Simple Checklist */}
         <div
-          className={`mb-8 transition-all duration-500 delay-100 ${
+          className={`mb-6 transition-all duration-500 delay-100 ${
             isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}
         >
-          <Card className="bg-slate-800/50 border-slate-700 overflow-hidden">
-            <div className="flex flex-col lg:flex-row">
-              {/* Phase Info */}
-              <div className="flex-1 p-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className={`p-2 rounded-lg bg-${PHASE_COLORS[seasonState.phase]}-500/20`}>
-                    {PHASE_ICONS[seasonState.phase]}
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-400">Current Phase</p>
-                    <h2 className="text-xl font-bold text-white">{getPhaseLabel(seasonState.phase)}</h2>
-                  </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Step 1: Questionnaire */}
+            <div 
+              className={`p-4 rounded-xl border-2 cursor-pointer transition-all hover:scale-102 ${
+                questionnaireCompleted 
+                  ? 'bg-emerald-500/10 border-emerald-500/50' 
+                  : 'bg-slate-800/50 border-slate-600 hover:border-purple-500/50'
+              }`}
+              onClick={() => setActiveTab('questionnaire')}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold ${
+                  questionnaireCompleted ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300'
+                }`}>
+                  {questionnaireCompleted ? '✓' : '1'}
                 </div>
-                <p className="text-slate-300 mb-4">{getPhaseDescription(seasonState.phase)}</p>
-                
-                {/* Deadline countdown */}
-                {seasonState.phase_deadline && (
-                  <div className="flex items-center gap-2 text-amber-400">
-                    <Clock className="w-4 h-4" />
-                    <span className="font-medium">{getTimeRemaining()}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Phase Progress */}
-              <div className="lg:w-80 p-6 bg-slate-700/30 border-t lg:border-t-0 lg:border-l border-slate-600">
-                <h3 className="text-sm font-medium text-slate-400 mb-3">Your Progress</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-300">Questionnaire</span>
-                    {questionnaireCompleted ? (
-                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Complete
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
-                        <Clock className="w-3 h-3 mr-1" />
-                        Pending
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-300">Free Agents Declared</span>
-                    <span className="text-white font-medium">{freeAgentsDeclared.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-300">Claims Submitted</span>
-                    <span className="text-white font-medium">{claimsSubmitted.length}</span>
-                  </div>
+                <div>
+                  <p className="text-sm text-slate-400">Step 1</p>
+                  <p className="font-bold text-white">Questionnaire</p>
                 </div>
               </div>
+              {questionnaireCompleted ? (
+                <p className="text-sm text-emerald-400">Done! ✅</p>
+              ) : (
+                <p className="text-sm text-slate-400">Confirm you're returning</p>
+              )}
             </div>
-          </Card>
+
+            {/* Step 2: Declare */}
+            <div 
+              className={`p-4 rounded-xl border-2 cursor-pointer transition-all hover:scale-102 ${
+                freeAgentsDeclared.length > 0 
+                  ? 'bg-emerald-500/10 border-emerald-500/50' 
+                  : 'bg-orange-500/10 border-orange-500/50 animate-pulse'
+              }`}
+              onClick={() => setActiveTab('free-agents')}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold ${
+                  freeAgentsDeclared.length > 0 ? 'bg-emerald-500 text-white' : 'bg-orange-500 text-white'
+                }`}>
+                  {freeAgentsDeclared.length > 0 ? '✓' : '2'}
+                </div>
+                <div>
+                  <p className="text-sm text-slate-400">Step 2</p>
+                  <p className="font-bold text-white">Declare Players</p>
+                </div>
+              </div>
+              {freeAgentsDeclared.length > 0 ? (
+                <p className="text-sm text-emerald-400">{freeAgentsDeclared.length} declared ✅</p>
+              ) : (
+                <p className="text-sm text-orange-400 font-medium">⚠️ DO THIS NOW</p>
+              )}
+            </div>
+
+            {/* Step 3: Claim (Coming Soon) */}
+            <div 
+              className="p-4 rounded-xl border-2 bg-slate-800/30 border-slate-700 opacity-60 cursor-not-allowed"
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold bg-slate-700 text-slate-400">
+                  3
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Step 3</p>
+                  <p className="font-bold text-slate-400">Claim Players</p>
+                </div>
+              </div>
+              <p className="text-sm text-slate-500">🔒 Opens after declarations close</p>
+            </div>
+          </div>
         </div>
 
-        {/* Tab Navigation */}
+        {/* Tab Navigation - Simplified */}
         <div
-          className={`flex flex-wrap gap-2 mb-6 transition-all duration-500 delay-150 ${
+          className={`flex flex-wrap gap-2 mb-6 p-2 bg-slate-800/50 rounded-xl border border-slate-700 transition-all duration-500 delay-150 ${
             isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}
         >
           <button
             onClick={() => setActiveTab('overview')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'overview'
-                ? 'bg-amber-500 text-white'
-                : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                ? 'bg-slate-700 text-white'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
             }`}
           >
-            <ListChecks className="w-4 h-4" />
-            Overview
+            <Home className="w-4 h-4" />
+            Home
+          </button>
+          <button
+            onClick={() => setActiveTab('free-agents')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'free-agents'
+                ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30'
+                : freeAgentsDeclared.length === 0
+                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50 animate-pulse'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            <UserMinus className="w-4 h-4" />
+            Declare Free Agents
+            {freeAgentsDeclared.length === 0 && (
+              <span className="ml-1 px-2 py-0.5 text-xs bg-orange-500 text-white rounded-full">!</span>
+            )}
+            {freeAgentsDeclared.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 text-xs bg-emerald-500 text-white rounded-full">{freeAgentsDeclared.length}</span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('claims')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'claims'
+                ? 'bg-cyan-500 text-white'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            <UserPlus className="w-4 h-4" />
+            Claim Players
           </button>
           <button
             onClick={() => setActiveTab('questionnaire')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'questionnaire'
                 ? 'bg-purple-500 text-white'
-                : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
             }`}
           >
             <ClipboardList className="w-4 h-4" />
             Questionnaire
-            {!questionnaireCompleted && (
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-red-500 rounded-full">!</span>
+            {questionnaireCompleted ? (
+              <CheckCircle className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <span className="ml-1 px-2 py-0.5 text-xs bg-red-500 text-white rounded-full">!</span>
             )}
           </button>
           <button
-            onClick={() => setActiveTab('free-agents')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'free-agents'
-                ? 'bg-orange-500 text-white'
-                : 'text-slate-400 hover:text-white hover:bg-slate-700'
-            }`}
-          >
-            <UserMinus className="w-4 h-4" />
-            Free Agents
-          </button>
-          <button
-            onClick={() => setActiveTab('claims')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'claims'
-                ? 'bg-cyan-500 text-white'
-                : 'text-slate-400 hover:text-white hover:bg-slate-700'
-            }`}
-          >
-            <UserPlus className="w-4 h-4" />
-            Claims
-          </button>
-          <button
             onClick={() => setActiveTab('standings')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'standings'
                 ? 'bg-emerald-500 text-white'
-                : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
             }`}
           >
             <BarChart3 className="w-4 h-4" />
             Standings
-          </button>
-          <button
-            onClick={() => setActiveTab('winter-league')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'winter-league'
-                ? 'bg-blue-500 text-white'
-                : 'text-slate-400 hover:text-white hover:bg-slate-700'
-            }`}
-          >
-            <Snowflake className="w-4 h-4" />
-            Winter League
           </button>
         </div>
 
@@ -497,245 +536,196 @@ function OffSeasonContent() {
             isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}
         >
-          {/* Overview Tab */}
+          {/* Overview Tab - Simplified */}
           {activeTab === 'overview' && (
-            <div className="grid lg:grid-cols-3 gap-6">
-              {/* Off-Season Checklist */}
-              <div className="lg:col-span-2 space-y-4">
-                <Card className="bg-slate-800/50 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center gap-2">
-                      <ListChecks className="w-5 h-5 text-amber-400" />
-                      Off-Season Checklist
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Awards Voting */}
-                    <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          <div className="p-2 rounded-lg bg-amber-500/20">
-                            <Trophy className="w-5 h-5 text-amber-400" />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-white mb-1">1. MVP & Cy Young Voting</h4>
-                            <p className="text-sm text-slate-400">
-                              Vote for the league's Most Valuable Player and best pitcher.
-                              Each team votes for 1 Hitter & 1 Pitcher.
-                            </p>
-                          </div>
+            <div className="space-y-6">
+              {/* MAIN ACTION CARD - What to do RIGHT NOW */}
+              <Card className="bg-gradient-to-br from-orange-500/20 to-amber-500/10 border-2 border-orange-500/40">
+                <CardContent className="p-6">
+                  <div className="flex flex-col lg:flex-row items-start lg:items-center gap-6">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-3xl">⚾</span>
+                        <h2 className="text-2xl font-bold text-white">Free Agent Declarations</h2>
+                      </div>
+                      <p className="text-slate-300 text-lg mb-4">
+                        Choose which players you're releasing from your team. Other owners can then claim them.
+                      </p>
+                      <div className="flex items-center gap-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${freeAgentsDeclared.length > 0 ? 'bg-emerald-500' : 'bg-orange-500 animate-pulse'}`} />
+                          <span className="text-slate-400">
+                            {freeAgentsDeclared.length > 0 
+                              ? `You've declared ${freeAgentsDeclared.length} player${freeAgentsDeclared.length !== 1 ? 's' : ''}`
+                              : 'You need to declare at least 1 player'
+                            }
+                          </span>
                         </div>
-                        <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
-                          <Clock className="w-3 h-3 mr-1" />
-                          Upcoming
-                        </Badge>
                       </div>
                     </div>
+                    <button
+                      onClick={() => setActiveTab('free-agents')}
+                      className="flex items-center gap-3 px-6 py-4 bg-orange-500 hover:bg-orange-400 text-white text-lg font-bold rounded-xl transition-all shadow-lg hover:shadow-orange-500/30"
+                    >
+                      <UserMinus className="w-5 h-5" />
+                      {freeAgentsDeclared.length > 0 ? 'Declare More Players' : 'Start Declaring'}
+                      <ArrowRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
 
-                    {/* Questionnaire */}
-                    <div className={`p-4 rounded-xl ${questionnaireCompleted ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'} border`}>
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          <div className={`p-2 rounded-lg ${questionnaireCompleted ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}>
-                            <ClipboardList className={`w-5 h-5 ${questionnaireCompleted ? 'text-emerald-400' : 'text-red-400'}`} />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-white mb-1">2. Off-Season Questionnaire</h4>
-                            <p className="text-sm text-slate-400">
-                              Complete within 24 hours of season ending. Confirms participation,
-                              team preference, and feedback.
-                            </p>
-                            <p className="text-xs text-red-400 mt-2 font-medium">
-                              <AlertTriangle className="w-3 h-3 inline mr-1" />
-                              Failure to submit = loss of franchise spot!
-                            </p>
-                          </div>
-                        </div>
-                        {questionnaireCompleted ? (
-                          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Complete
-                          </Badge>
-                        ) : (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => setActiveTab('questionnaire')}
-                            className="bg-red-500 hover:bg-red-400"
-                          >
-                            Complete Now
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Free Agent Declaration */}
+              {/* HOW IT WORKS - Super Simple Explainer */}
+              <Card className="bg-slate-800/50 border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <HelpCircle className="w-5 h-5 text-blue-400" />
+                    How Free Agents Work (Simple Version)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid md:grid-cols-3 gap-4">
+                    {/* Step 1 */}
                     <div className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          <div className="p-2 rounded-lg bg-orange-500/20">
-                            <UserMinus className="w-5 h-5 text-orange-400" />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-white mb-1">3. Free Agent Declaration</h4>
-                            <p className="text-sm text-slate-400">
-                              Declare at least 1 player as a free agent before the claiming period begins.
-                              No declarations = no ability to claim players.
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setActiveTab('free-agents')}
-                        >
-                          Declare
-                        </Button>
+                      <div className="w-12 h-12 rounded-full bg-orange-500 text-white text-xl font-bold flex items-center justify-center mb-3">
+                        1
                       </div>
+                      <h3 className="font-bold text-orange-400 mb-2">You Declare</h3>
+                      <p className="text-sm text-slate-400">
+                        Pick players from YOUR team that you're willing to let go. They become "free agents."
+                      </p>
                     </div>
-
-                    {/* Claiming Period */}
+                    
+                    {/* Step 2 */}
                     <div className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          <div className="p-2 rounded-lg bg-cyan-500/20">
-                            <UserPlus className="w-5 h-5 text-cyan-400" />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-white mb-1">4. Claiming Period</h4>
-                            <p className="text-sm text-slate-400">
-                              48-hour claiming window. To claim a player, 
-                              offer one of equal or higher value. Max 2 successful claims.
-                            </p>
-                          </div>
-                        </div>
-                        <Badge className="bg-slate-500/20 text-slate-400 border-slate-500/30">
-                          <Clock className="w-3 h-3 mr-1" />
-                          Not Yet
-                        </Badge>
+                      <div className="w-12 h-12 rounded-full bg-cyan-500 text-white text-xl font-bold flex items-center justify-center mb-3">
+                        2
+                      </div>
+                      <h3 className="font-bold text-cyan-400 mb-2">Others Claim</h3>
+                      <p className="text-sm text-slate-400">
+                        Other teams can try to claim your players by offering one of their players in exchange.
+                      </p>
+                    </div>
+                    
+                    {/* Step 3 */}
+                    <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                      <div className="w-12 h-12 rounded-full bg-emerald-500 text-white text-xl font-bold flex items-center justify-center mb-3">
+                        3
+                      </div>
+                      <h3 className="font-bold text-emerald-400 mb-2">Swaps Happen</h3>
+                      <p className="text-sm text-slate-400">
+                        If someone claims your player, you get their offered player. Win-win roster building!
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Important Rule */}
+                  <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0" />
+                      <div>
+                        <p className="font-bold text-red-400">Important Rule:</p>
+                        <p className="text-sm text-slate-300">
+                          You MUST declare at least 1 player to participate in claiming. No declarations = you can't claim anyone!
+                        </p>
                       </div>
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-                    {/* Draft Prep */}
-                    <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          <div className="p-2 rounded-lg bg-purple-500/20">
-                            <FileText className="w-5 h-5 text-purple-400" />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-white mb-1">5. Draft Preparation</h4>
-                            <p className="text-sm text-slate-400">
-                              Prepare for the upcoming season draft. Draft order based on 
-                              previous season standings (worst team picks first).
-                            </p>
-                          </div>
-                        </div>
-                        <Link href="/draft">
-                          <Button variant="secondary" size="sm">
-                            Draft Board
-                          </Button>
-                        </Link>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+              {/* Quick Actions Grid */}
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <button
+                  onClick={() => setActiveTab('free-agents')}
+                  className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20 transition-all text-left"
+                >
+                  <UserMinus className="w-8 h-8 text-orange-400 mb-2" />
+                  <p className="font-bold text-white">Declare Players</p>
+                  <p className="text-sm text-slate-400">Release players from your team</p>
+                </button>
+                
+                <button
+                  onClick={() => setActiveTab('claims')}
+                  className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 transition-all text-left"
+                >
+                  <UserPlus className="w-8 h-8 text-cyan-400 mb-2" />
+                  <p className="font-bold text-white">Claim Players</p>
+                  <p className="text-sm text-slate-400">Pick up free agents</p>
+                </button>
+                
+                <button
+                  onClick={() => setActiveTab('questionnaire')}
+                  className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 transition-all text-left"
+                >
+                  <ClipboardList className="w-8 h-8 text-purple-400 mb-2" />
+                  <p className="font-bold text-white">Questionnaire</p>
+                  <p className="text-sm text-slate-400">
+                    {questionnaireCompleted ? '✅ Completed' : 'Confirm participation'}
+                  </p>
+                </button>
+                
+                <button
+                  onClick={() => setActiveTab('standings')}
+                  className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all text-left"
+                >
+                  <BarChart3 className="w-8 h-8 text-emerald-400 mb-2" />
+                  <p className="font-bold text-white">Standings</p>
+                  <p className="text-sm text-slate-400">View league rankings</p>
+                </button>
               </div>
 
-              {/* Sidebar */}
-              <div className="space-y-4">
-                {/* Classification Guide */}
-                <Card className="bg-slate-800/50 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-white text-sm flex items-center gap-2">
-                      <Info className="w-4 h-4 text-blue-400" />
-                      Player Classifications
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {CLASSIFICATION_ORDER.slice().reverse().map((classification) => (
-                      <div
-                        key={classification}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg ${CLASSIFICATION_COLORS[classification].bg} border ${CLASSIFICATION_COLORS[classification].border}`}
-                      >
-                        <div className={`w-3 h-3 rounded-full ${CLASSIFICATION_COLORS[classification].bg}`} />
-                        <span className={`capitalize ${CLASSIFICATION_COLORS[classification].text} font-medium`}>
-                          {classification}
-                        </span>
+              {/* Player Classification Guide - Collapsed by default */}
+              <details className="group">
+                <summary className="flex items-center justify-between p-4 bg-slate-800/50 border border-slate-700 rounded-xl cursor-pointer hover:bg-slate-800 transition-all">
+                  <div className="flex items-center gap-3">
+                    <Info className="w-5 h-5 text-blue-400" />
+                    <span className="font-medium text-white">Player Classifications & Rules</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-slate-400 group-open:rotate-90 transition-transform" />
+                </summary>
+                <div className="mt-2 p-4 bg-slate-800/30 border border-slate-700 rounded-xl">
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="font-medium text-white mb-3">Player Tiers (Best to Lowest)</h4>
+                      <div className="space-y-2">
+                        {CLASSIFICATION_ORDER.slice().reverse().map((classification) => (
+                          <div
+                            key={classification}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg ${CLASSIFICATION_COLORS[classification].bg} border ${CLASSIFICATION_COLORS[classification].border}`}
+                          >
+                            <div className={`w-3 h-3 rounded-full ${CLASSIFICATION_COLORS[classification].bg}`} />
+                            <span className={`capitalize ${CLASSIFICATION_COLORS[classification].text} font-medium`}>
+                              {classification}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    <p className="text-xs text-slate-500 mt-3">
-                      To claim a player, you must offer one of equal or higher classification.
-                    </p>
-                  </CardContent>
-                </Card>
-
-                {/* Claim Rules */}
-                <Card className="bg-slate-800/50 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-white text-sm flex items-center gap-2">
-                      <HelpCircle className="w-4 h-4 text-amber-400" />
-                      Claiming Rules
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm text-slate-400">
-                    <div className="flex items-start gap-2">
-                      <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                      <span>Equal or higher value required to claim</span>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                      <span>Worst record gets priority on ties</span>
+                    <div>
+                      <h4 className="font-medium text-white mb-3">Claiming Rules</h4>
+                      <div className="space-y-2 text-sm text-slate-400">
+                        <div className="flex items-start gap-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                          <span>To claim a player, offer one of equal or higher tier</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                          <span>Teams with worse records get priority</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                          <span>Maximum 2 successful claims per team</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                          <span>48-hour window to make claims</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                      <span>Max 2 successful claims per team</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                      <span>48-hour claiming window</span>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Quick Links */}
-                <Card className="bg-slate-800/50 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-white text-sm flex items-center gap-2">
-                      <ExternalLink className="w-4 h-4 text-purple-400" />
-                      Quick Links
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <a
-                      href={OFFSEASON_QUESTIONNAIRE_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 hover:bg-purple-500/20 transition-colors"
-                    >
-                      <ClipboardList className="w-4 h-4" />
-                      <span className="flex-1 text-sm">Questionnaire</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                    <Link
-                      href="/draft"
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 hover:bg-blue-500/20 transition-colors"
-                    >
-                      <Users className="w-4 h-4" />
-                      <span className="flex-1 text-sm">Draft Board</span>
-                      <ChevronRight className="w-3 h-3" />
-                    </Link>
-                    <Link
-                      href="/leaderboard"
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 transition-colors"
-                    >
-                      <Trophy className="w-4 h-4" />
-                      <span className="flex-1 text-sm">Leaderboard</span>
-                      <ChevronRight className="w-3 h-3" />
-                    </Link>
-                  </CardContent>
-                </Card>
-              </div>
+                  </div>
+                </div>
+              </details>
             </div>
           )}
 
