@@ -958,7 +958,169 @@ export default function OffSeasonAdminPage() {
         >
           {/* Overview Tab */}
           {activeTab === 'overview' && (
-            <div className="grid lg:grid-cols-2 gap-6">
+            <div className="space-y-6">
+              {/* FA DECLARATION STATUS - PROMINENT TOP SECTION */}
+              <Card className="bg-gradient-to-br from-orange-900/30 to-slate-800/50 border-orange-500/30 border-2">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-white flex items-center gap-2 text-xl">
+                      <UserMinus className="w-6 h-6 text-orange-400" />
+                      Free Agent Declaration Status
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-3xl font-bold ${
+                        members.filter(m => m.freeAgentsDeclared).length === members.length
+                          ? 'text-emerald-400'
+                          : members.filter(m => m.freeAgentsDeclared).length >= members.length * 0.7
+                          ? 'text-amber-400'
+                          : 'text-red-400'
+                      }`}>
+                        {members.filter(m => m.freeAgentsDeclared).length}
+                      </span>
+                      <span className="text-slate-400 text-xl">/ {members.length}</span>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Visual Team Grid - At a Glance */}
+                  <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-10 gap-2">
+                    {members.map(member => (
+                      <div
+                        key={member.id}
+                        className={`relative p-2 rounded-lg border-2 text-center transition-all ${
+                          member.freeAgentsDeclared
+                            ? 'bg-emerald-500/20 border-emerald-500/50'
+                            : 'bg-red-500/20 border-red-500/50 animate-pulse'
+                        }`}
+                        title={`${member.teamName}: ${member.freeAgentsDeclared ? 'DECLARED' : 'NOT DECLARED'}`}
+                      >
+                        <span className={`font-bold text-sm ${
+                          member.freeAgentsDeclared ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
+                          {member.teamId}
+                        </span>
+                        {member.freeAgentsDeclared ? (
+                          <CheckCircle className="w-3 h-3 text-emerald-400 absolute -top-1 -right-1" />
+                        ) : (
+                          <XCircle className="w-3 h-3 text-red-400 absolute -top-1 -right-1" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Teams Not Declared - Clear List */}
+                  {members.filter(m => !m.freeAgentsDeclared).length > 0 && (
+                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+                      <div className="flex items-center gap-2 mb-3">
+                        <AlertTriangle className="w-5 h-5 text-red-400" />
+                        <span className="text-red-400 font-bold">
+                          {members.filter(m => !m.freeAgentsDeclared).length} Teams Have NOT Declared:
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {members.filter(m => !m.freeAgentsDeclared).map(member => (
+                          <span
+                            key={member.id}
+                            className="px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-300 font-medium"
+                          >
+                            {member.teamId} - {member.displayName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Quick Actions */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    {/* Discord Push Button */}
+                    <button
+                      onClick={async () => {
+                        if (!discordWebhookUrl) {
+                          alert('Please enter a Discord webhook URL in the Discord Announcements section first');
+                          return;
+                        }
+                        const teamsNotDeclared = members.filter(m => !m.freeAgentsDeclared).map(m => m.teamId);
+                        if (teamsNotDeclared.length === 0) {
+                          alert('All teams have declared! No reminder needed.');
+                          return;
+                        }
+                        const declaredCount = members.filter(m => m.freeAgentsDeclared).length;
+                        const { postFADeclarationReminder } = await import('@/lib/discord');
+                        const result = await postFADeclarationReminder(
+                          discordWebhookUrl,
+                          teamsNotDeclared,
+                          members.length,
+                          declaredCount
+                        );
+                        if (result.success) {
+                          alert('✅ FA Declaration reminder sent to Discord!');
+                        } else {
+                          alert('❌ Failed to send: ' + (result.error || 'Unknown error'));
+                        }
+                      }}
+                      className="flex items-center justify-between p-4 rounded-xl bg-indigo-500/20 border border-indigo-500/30 hover:bg-indigo-500/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-indigo-500/30 flex items-center justify-center">
+                          <MessageSquare className="w-5 h-5 text-indigo-400" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-white font-medium">Push to Discord</p>
+                          <p className="text-xs text-slate-400">Send FA reminder to Discord</p>
+                        </div>
+                      </div>
+                      <Send className="w-5 h-5 text-indigo-400" />
+                    </button>
+
+                    {/* Copy for Facebook Button */}
+                    <button
+                      onClick={() => {
+                        const teamsNotDeclared = members.filter(m => !m.freeAgentsDeclared);
+                        if (teamsNotDeclared.length === 0) {
+                          copyToClipboard('✅ All teams have declared their free agents!', 'fb-fa-message');
+                          return;
+                        }
+                        const teamsList = teamsNotDeclared.map(m => `• ${m.teamId} (${m.displayName})`).join('\n');
+                        const message = `⚾ FREE AGENT DECLARATION REMINDER ⚾
+
+${members.filter(m => m.freeAgentsDeclared).length}/${members.length} teams have declared.
+
+🚨 The following teams STILL NEED TO DECLARE their free agents:
+
+${teamsList}
+
+⚠️ REMINDER: You MUST declare at least 1 player to participate in free agent claiming. No declaration = No claims!
+
+Go to the league app → Off-Season → Declare Free Agents
+
+Let's get this done! 💪`;
+                        copyToClipboard(message, 'fb-fa-message');
+                      }}
+                      className="flex items-center justify-between p-4 rounded-xl bg-blue-500/20 border border-blue-500/30 hover:bg-blue-500/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-500/30 flex items-center justify-center">
+                          <Copy className="w-5 h-5 text-blue-400" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-white font-medium">
+                            {copiedField === 'fb-fa-message' ? '✓ Copied!' : 'Copy for Facebook'}
+                          </p>
+                          <p className="text-xs text-slate-400">Copy FA reminder message</p>
+                        </div>
+                      </div>
+                      {copiedField === 'fb-fa-message' ? (
+                        <Check className="w-5 h-5 text-emerald-400" />
+                      ) : (
+                        <ExternalLink className="w-5 h-5 text-blue-400" />
+                      )}
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Original Two-Column Layout */}
+              <div className="grid lg:grid-cols-2 gap-6">
               {/* Completion Tracker */}
               <Card className="bg-slate-800/50 border-slate-700">
                 <CardHeader>
@@ -1489,6 +1651,7 @@ export default function OffSeasonAdminPage() {
                   </div>
                 </CardContent>
               </Card>
+            </div>
             </div>
           )}
 
