@@ -54,6 +54,9 @@ import {
   Award,
   Ticket,
   Inbox,
+  Bell,
+  Megaphone,
+  Plus,
 } from 'lucide-react';
 import { setZapierWebhookUrl, getZapierWebhookUrl } from '@/contexts/AuthContext';
 import { 
@@ -125,6 +128,14 @@ import {
   addTicketComment,
   DBSupportTicket,
   DBTicketComment,
+  // Notifications
+  getNotifications,
+  createNotification,
+  updateNotification,
+  deleteNotification,
+  DBNotification,
+  NotificationCategory,
+  NotificationPriority,
 } from '@/lib/supabase';
 
 export default function AdminPage() {
@@ -192,7 +203,21 @@ export default function AdminPage() {
   });
   
   // Active admin tab
-  const [adminTab, setAdminTab] = useState<'members' | 'queue' | 'teams' | 'banlist' | 'welcome' | 'activity' | 'rewards' | 'standings' | 'intel' | 'promotions' | 'support' | 'settings'>('members');
+  const [adminTab, setAdminTab] = useState<'members' | 'queue' | 'teams' | 'banlist' | 'welcome' | 'activity' | 'rewards' | 'standings' | 'intel' | 'promotions' | 'support' | 'notifications' | 'settings'>('members');
+  
+  // Notifications state
+  const [notifications, setNotifications] = useState<DBNotification[]>([]);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const [showNewNotificationForm, setShowNewNotificationForm] = useState(false);
+  const [newNotification, setNewNotification] = useState({
+    title: '',
+    content: '',
+    category: 'announcement' as NotificationCategory,
+    priority: 'normal' as NotificationPriority,
+    action_url: '',
+    action_label: '',
+    icon: '',
+  });
   
   // Support tickets state
   const [supportTickets, setSupportTickets] = useState<DBSupportTicket[]>([]);
@@ -1277,6 +1302,24 @@ export default function AdminPage() {
             {ticketStats && ticketStats.open > 0 && (
               <Badge variant="active" className="text-xs">{ticketStats.open}</Badge>
             )}
+          </button>
+          <button
+            onClick={() => {
+              setAdminTab('notifications');
+              if (notifications.length === 0) {
+                setIsLoadingNotifications(true);
+                getNotifications().then(n => {
+                  setNotifications(n);
+                  setIsLoadingNotifications(false);
+                });
+              }
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              adminTab === 'notifications' ? 'bg-blue-500 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            Notifications
           </button>
           <button
             onClick={() => setAdminTab('settings')}
@@ -2567,6 +2610,241 @@ export default function AdminPage() {
                 </CardContent>
               </Card>
             )}
+          </>
+        )}
+
+        {/* ======================= NOTIFICATIONS TAB ======================= */}
+        {adminTab === 'notifications' && (
+          <>
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-blue-400" />
+                  Notification Management
+                </CardTitle>
+                <Button
+                  onClick={() => setShowNewNotificationForm(!showNewNotificationForm)}
+                  variant={showNewNotificationForm ? 'secondary' : 'primary'}
+                  size="sm"
+                  icon={showNewNotificationForm ? <XCircle className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                >
+                  {showNewNotificationForm ? 'Cancel' : 'New Notification'}
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* New Notification Form */}
+                {showNewNotificationForm && (
+                  <div className="p-4 bg-slate-700/50 rounded-xl space-y-4 border border-blue-500/30">
+                    <h3 className="font-semibold text-white flex items-center gap-2">
+                      <Megaphone className="w-4 h-4 text-blue-400" />
+                      Create New Notification
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Title *</label>
+                        <input
+                          type="text"
+                          value={newNotification.title}
+                          onChange={(e) => setNewNotification(prev => ({ ...prev, title: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                          placeholder="Notification title"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Icon (emoji)</label>
+                        <input
+                          type="text"
+                          value={newNotification.icon}
+                          onChange={(e) => setNewNotification(prev => ({ ...prev, icon: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                          placeholder="📢"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Content *</label>
+                      <textarea
+                        value={newNotification.content}
+                        onChange={(e) => setNewNotification(prev => ({ ...prev, content: e.target.value }))}
+                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white min-h-[100px]"
+                        placeholder="Notification message..."
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Category</label>
+                        <select
+                          value={newNotification.category}
+                          onChange={(e) => setNewNotification(prev => ({ ...prev, category: e.target.value as NotificationCategory }))}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                        >
+                          <option value="announcement">Announcement</option>
+                          <option value="system">System</option>
+                          <option value="update">Update</option>
+                          <option value="reminder">Reminder</option>
+                          <option value="welcome">Welcome</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Priority</label>
+                        <select
+                          value={newNotification.priority}
+                          onChange={(e) => setNewNotification(prev => ({ ...prev, priority: e.target.value as NotificationPriority }))}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                        >
+                          <option value="low">Low</option>
+                          <option value="normal">Normal</option>
+                          <option value="high">High</option>
+                          <option value="urgent">Urgent</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Action URL (optional)</label>
+                        <input
+                          type="url"
+                          value={newNotification.action_url}
+                          onChange={(e) => setNewNotification(prev => ({ ...prev, action_url: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                          placeholder="https://..."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Action Label</label>
+                        <input
+                          type="text"
+                          value={newNotification.action_label}
+                          onChange={(e) => setNewNotification(prev => ({ ...prev, action_label: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                          placeholder="e.g., View Details, Join Now"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={async () => {
+                          if (!newNotification.title || !newNotification.content) {
+                            alert('Please fill in title and content');
+                            return;
+                          }
+                          const result = await createNotification({
+                            ...newNotification,
+                            is_active: true,
+                            created_by: user?.id,
+                          });
+                          if (result.success && result.notification) {
+                            setNotifications(prev => [result.notification!, ...prev]);
+                            setShowNewNotificationForm(false);
+                            setNewNotification({
+                              title: '',
+                              content: '',
+                              category: 'announcement',
+                              priority: 'normal',
+                              action_url: '',
+                              action_label: '',
+                              icon: '',
+                            });
+                          } else {
+                            alert('Failed to create notification: ' + (result.error || 'Unknown error'));
+                          }
+                        }}
+                        variant="primary"
+                        icon={<Send className="w-4 h-4" />}
+                      >
+                        Send Notification
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Notifications List */}
+                <div>
+                  <h3 className="font-semibold text-white mb-4">Active Notifications ({notifications.length})</h3>
+                  
+                  {isLoadingNotifications ? (
+                    <div className="flex items-center justify-center py-8 text-slate-400">
+                      <RefreshCw className="w-5 h-5 animate-spin mr-2" />
+                      Loading notifications...
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400">
+                      <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p>No notifications yet</p>
+                      <p className="text-sm mt-1">Create your first notification above</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {notifications.map((notification) => (
+                        <div
+                          key={notification.id}
+                          className="p-4 bg-slate-700/50 rounded-xl border border-slate-600"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex gap-3">
+                              <span className="text-2xl">{notification.icon || '📢'}</span>
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="font-medium text-white">{notification.title}</h4>
+                                  <Badge 
+                                    variant={
+                                      notification.priority === 'urgent' ? 'delinquent' :
+                                      notification.priority === 'high' ? 'pending' :
+                                      'outline'
+                                    }
+                                    className="text-xs"
+                                  >
+                                    {notification.priority}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {notification.category}
+                                  </Badge>
+                                </div>
+                                <p className="text-sm text-slate-400 mt-1">{notification.content}</p>
+                                {notification.action_url && (
+                                  <a 
+                                    href={notification.action_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-sm text-blue-400 hover:underline mt-2"
+                                  >
+                                    {notification.action_label || 'View'} <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                )}
+                                <p className="text-xs text-slate-500 mt-2">
+                                  Created: {new Date(notification.created_at).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  if (confirm('Delete this notification?')) {
+                                    const result = await deleteNotification(notification.id);
+                                    if (result.success) {
+                                      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+                                    }
+                                  }
+                                }}
+                                className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                                title="Delete notification"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </>
         )}
 

@@ -13,11 +13,15 @@ import { getFeatureFlags, FeatureFlags } from '@/lib/feature-flags';
 import { needsOnboarding, completeOnboarding } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  Notification,
-  mockNotifications,
   offSeasonItems,
   leagueDocuments,
 } from '@/types/league';
+import {
+  getNotifications,
+  getUserNotificationReads,
+  markNotificationRead,
+  DBNotification,
+} from '@/lib/supabase';
 import { MEMBERS_SMS_SIGNUP_URL } from '@/config/external-urls';
 import {
   getPlayerRewards,
@@ -75,7 +79,8 @@ function getGreeting(): string {
 function DashboardContent() {
   const { user } = useAuth();
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const [notifications, setNotifications] = useState<DBNotification[]>([]);
+  const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags | null>(null);
   const [rewards, setRewards] = useState<DBPlayerRewards | null>(null);
@@ -111,14 +116,18 @@ function DashboardContent() {
       }
       // Load feature flags
       setFeatureFlags(getFeatureFlags());
-      // Load rewards data
+      // Load rewards data and notifications
       if (user?.id) {
-        const [rewardsData, walletData] = await Promise.all([
+        const [rewardsData, walletData, notifs, reads] = await Promise.all([
           getPlayerRewards(user.id),
           getUserWallet(user.id),
+          getNotifications(),
+          getUserNotificationReads(user.id),
         ]);
         setRewards(rewardsData);
         setWallet(walletData);
+        setNotifications(notifs);
+        setReadNotificationIds(reads);
       }
       // Simulate data loading animation
       setIsLoaded(true);
@@ -127,12 +136,12 @@ function DashboardContent() {
     checkOnboarding();
   }, [user, router, searchParams]);
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadCount = notifications.filter((n) => !readNotificationIds.has(n.id)).length;
 
-  const markAsRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-    );
+  const markAsRead = async (id: string) => {
+    if (!user?.id) return;
+    setReadNotificationIds(prev => new Set([...prev, id]));
+    await markNotificationRead(user.id, id);
   };
 
   // Use actual user team data, not mock data
@@ -446,30 +455,36 @@ function DashboardContent() {
                   </CardHeader>
                   <CardContent className="p-0">
                     <div className="divide-y divide-border">
-                      {notifications.slice(0, 3).map((notification, index) => (
-                        <div
-                          key={notification.id}
-                          className={`inbox-item ${!notification.isRead ? 'unread' : ''}`}
-                          onClick={() => markAsRead(notification.id)}
-                          style={{ animationDelay: `${index * 50}ms` }}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <NotificationBadge type={notification.type} />
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {formatRelativeTime(notification.timestamp)}
-                              </span>
+                      {notifications.slice(0, 3).map((notification, index) => {
+                        const isUnread = !readNotificationIds.has(notification.id);
+                        return (
+                          <div
+                            key={notification.id}
+                            className={`inbox-item ${isUnread ? 'unread' : ''}`}
+                            onClick={() => markAsRead(notification.id)}
+                            style={{ animationDelay: `${index * 50}ms` }}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-lg">{notification.icon || '📢'}</span>
+                                <Badge variant={notification.priority === 'high' || notification.priority === 'urgent' ? 'delinquent' : 'outline'} className="text-xs">
+                                  {notification.category}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {formatRelativeTime(notification.created_at)}
+                                </span>
+                              </div>
+                              <h4 className={`font-medium truncate ${isUnread ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                {notification.title}
+                              </h4>
+                              <p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">
+                                {notification.content}
+                              </p>
                             </div>
-                            <h4 className={`font-medium truncate ${!notification.isRead ? 'text-foreground' : 'text-muted-foreground'}`}>
-                              {notification.title}
-                            </h4>
-                            <p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">
-                              {notification.content}
-                            </p>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </CardContent>
                 </Card>

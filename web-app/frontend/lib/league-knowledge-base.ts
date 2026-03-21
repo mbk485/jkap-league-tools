@@ -28,7 +28,7 @@ export const KNOWLEDGE_BASE: LeagueRule[] = [
   {
     category: "General",
     title: "About the League",
-    content: `The JKAP Memorial League is a competitive MLB The Show online franchise league. 
+    content: `The JKAP Memorial League is a competitive MLB The Show Custom League. 
 We play full 162-game seasons with 30 teams. The league was founded in memory of JKAP and 
 focuses on fair, competitive gameplay with an active community. We use Discord for communication 
 and coordination, and this app for league management tools.`,
@@ -39,7 +39,7 @@ and coordination, and this app for league management tools.`,
     title: "How to Join the League In-Game",
     content: `To join the JKAP Memorial League in MLB The Show:
 1. Open MLB The Show on PlayStation or Xbox
-2. Go to Franchise → Online Franchise
+2. Go to Custom League
 3. Select "Search" or "Find League"
 4. Search for: Jkapmemorial (one word, no spaces)
 5. Join the league and select your assigned team

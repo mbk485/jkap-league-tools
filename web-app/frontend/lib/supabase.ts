@@ -1274,6 +1274,8 @@ export async function addRegistrationRequest(
       }
     }
 
+    console.log('[Registration] Attempting to submit registration for:', request.username);
+    
     const { data, error } = await supabase
       .from('registration_queue')
       .insert({
@@ -1285,13 +1287,31 @@ export async function addRegistrationRequest(
       .single();
 
     if (error) {
-      console.error('Error adding registration request:', error);
+      console.error('[Registration] Supabase error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
+      
+      // Provide more specific error messages based on error codes
+      if (error.code === '23505') {
+        return { success: false, error: 'An account with this username or email already exists.' };
+      }
+      if (error.code === '42501' || error.message?.includes('RLS')) {
+        return { success: false, error: 'Registration is temporarily unavailable. Please contact the commissioner.' };
+      }
+      if (error.code === '42P01') {
+        return { success: false, error: 'Registration system is being set up. Please try again later or contact the commissioner.' };
+      }
+      
       return { success: false, error: error.message };
     }
 
+    console.log('[Registration] Successfully submitted registration for:', request.username);
     return { success: true, request: data };
   } catch (err: any) {
-    console.error('Error adding registration request:', err);
+    console.error('[Registration] Exception:', err);
     return { success: false, error: err.message || 'Failed to submit request' };
   }
 }
@@ -5707,6 +5727,304 @@ export async function updateTeamStanding(
     return { success: true };
   } catch (err: any) {
     console.error('Error updating team standing:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// =============================================================================
+// NOTIFICATION SYSTEM
+// System-wide notifications for all users
+// =============================================================================
+
+export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type NotificationCategory = 'announcement' | 'system' | 'update' | 'reminder' | 'welcome';
+
+export interface DBNotification {
+  id: string;
+  title: string;
+  content: string;
+  category: NotificationCategory;
+  priority: NotificationPriority;
+  action_url?: string;
+  action_label?: string;
+  icon?: string;
+  is_active: boolean;
+  expires_at?: string;
+  created_at: string;
+  created_by?: string;
+}
+
+export interface DBUserNotificationRead {
+  id: string;
+  user_id: string;
+  notification_id: string;
+  read_at: string;
+  dismissed: boolean;
+}
+
+const NOTIFICATIONS_STORAGE_KEY = 'jkap_notifications';
+const NOTIFICATIONS_READ_KEY = 'jkap_notifications_read';
+
+// Default system notifications (used as fallback if DB is not available)
+const DEFAULT_NOTIFICATIONS: DBNotification[] = [
+  {
+    id: 'discord-link-update-2024',
+    title: '📢 New Discord Server Link',
+    content: 'Our Discord invite link has been updated! Click below to join or rejoin the server with the new link. Make sure you\'re connected to stay up to date with league announcements, matchup coordination, and community chat.',
+    category: 'announcement',
+    priority: 'high',
+    action_url: 'https://discord.gg/AMDGBuP5',
+    action_label: 'Join Discord',
+    icon: '💬',
+    is_active: true,
+    created_at: new Date().toISOString(),
+  },
+];
+
+// Get all active notifications
+export async function getNotifications(): Promise<DBNotification[]> {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('is_active', true)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+      .order('priority', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[Notifications] Supabase error, using defaults:', error);
+      return getLocalNotifications();
+    }
+
+    // Merge with any local-only notifications
+    const localNotifications = getLocalNotifications();
+    const dbIds = new Set(data?.map(n => n.id) || []);
+    const uniqueLocalNotifications = localNotifications.filter(n => !dbIds.has(n.id));
+
+    return [...(data || []), ...uniqueLocalNotifications];
+  } catch (err) {
+    console.error('[Notifications] Error fetching notifications:', err);
+    return getLocalNotifications();
+  }
+}
+
+// Get notifications from localStorage (fallback/offline support)
+function getLocalNotifications(): DBNotification[] {
+  if (typeof window === 'undefined') return DEFAULT_NOTIFICATIONS;
+  
+  try {
+    const stored = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return [...DEFAULT_NOTIFICATIONS, ...parsed];
+    }
+  } catch (e) {
+    console.error('Error reading local notifications:', e);
+  }
+  
+  return DEFAULT_NOTIFICATIONS;
+}
+
+// Get user's read status for notifications
+export async function getUserNotificationReads(userId: string): Promise<Set<string>> {
+  try {
+    const { data, error } = await supabase
+      .from('user_notification_reads')
+      .select('notification_id')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('[Notifications] Error fetching read status:', error);
+      return getLocalReadStatus(userId);
+    }
+
+    const readIds = new Set(data?.map(r => r.notification_id) || []);
+    
+    // Merge with local read status
+    const localReads = getLocalReadStatus(userId);
+    localReads.forEach(id => readIds.add(id));
+    
+    return readIds;
+  } catch (err) {
+    console.error('[Notifications] Error fetching read status:', err);
+    return getLocalReadStatus(userId);
+  }
+}
+
+// Get local read status (fallback)
+function getLocalReadStatus(userId: string): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  
+  try {
+    const stored = localStorage.getItem(NOTIFICATIONS_READ_KEY);
+    if (stored) {
+      const allReads = JSON.parse(stored);
+      return new Set(allReads[userId] || []);
+    }
+  } catch (e) {
+    console.error('Error reading local notification reads:', e);
+  }
+  
+  return new Set();
+}
+
+// Mark a notification as read
+export async function markNotificationRead(
+  userId: string,
+  notificationId: string
+): Promise<{ success: boolean; error?: string }> {
+  // Always save locally first for immediate UI feedback
+  saveLocalReadStatus(userId, notificationId);
+  
+  try {
+    const { error } = await supabase
+      .from('user_notification_reads')
+      .upsert({
+        user_id: userId,
+        notification_id: notificationId,
+        read_at: new Date().toISOString(),
+        dismissed: false,
+      }, {
+        onConflict: 'user_id,notification_id',
+      });
+
+    if (error) {
+      console.error('[Notifications] Error marking as read:', error);
+      return { success: true }; // Still return success since we saved locally
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[Notifications] Error marking as read:', err);
+    return { success: true }; // Still return success since we saved locally
+  }
+}
+
+// Save read status locally
+function saveLocalReadStatus(userId: string, notificationId: string): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const stored = localStorage.getItem(NOTIFICATIONS_READ_KEY);
+    const allReads = stored ? JSON.parse(stored) : {};
+    
+    if (!allReads[userId]) {
+      allReads[userId] = [];
+    }
+    
+    if (!allReads[userId].includes(notificationId)) {
+      allReads[userId].push(notificationId);
+    }
+    
+    localStorage.setItem(NOTIFICATIONS_READ_KEY, JSON.stringify(allReads));
+  } catch (e) {
+    console.error('Error saving local read status:', e);
+  }
+}
+
+// Mark all notifications as read
+export async function markAllNotificationsRead(userId: string): Promise<{ success: boolean }> {
+  try {
+    const notifications = await getNotifications();
+    
+    for (const notification of notifications) {
+      await markNotificationRead(userId, notification.id);
+    }
+    
+    return { success: true };
+  } catch (err) {
+    console.error('[Notifications] Error marking all as read:', err);
+    return { success: false };
+  }
+}
+
+// Create a new notification (admin only)
+export async function createNotification(
+  notification: Omit<DBNotification, 'id' | 'created_at'>
+): Promise<{ success: boolean; notification?: DBNotification; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert({
+        ...notification,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Notifications] Error creating notification:', error);
+      // Fall back to local storage
+      const localNotification: DBNotification = {
+        ...notification,
+        id: `local-${Date.now()}`,
+        created_at: new Date().toISOString(),
+      };
+      saveLocalNotification(localNotification);
+      return { success: true, notification: localNotification };
+    }
+
+    return { success: true, notification: data };
+  } catch (err: any) {
+    console.error('[Notifications] Error creating notification:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Save notification locally
+function saveLocalNotification(notification: DBNotification): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const stored = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    const notifications = stored ? JSON.parse(stored) : [];
+    notifications.unshift(notification);
+    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifications));
+  } catch (e) {
+    console.error('Error saving local notification:', e);
+  }
+}
+
+// Delete a notification (admin only)
+export async function deleteNotification(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('[Notifications] Error deleting notification:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[Notifications] Error deleting notification:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Update a notification (admin only)
+export async function updateNotification(
+  id: string,
+  updates: Partial<DBNotification>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update(updates)
+      .eq('id', id);
+
+    if (error) {
+      console.error('[Notifications] Error updating notification:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[Notifications] Error updating notification:', err);
     return { success: false, error: err.message };
   }
 }

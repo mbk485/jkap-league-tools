@@ -7,6 +7,7 @@ import { Button } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogIn, LogOut, User, ChevronDown, Shield, Wrench, Globe, HelpCircle } from 'lucide-react';
 import { getFeatureFlags, FeatureFlags } from '@/lib/feature-flags';
+import { NotificationInbox } from '@/components/NotificationInbox';
 
 interface NavLink {
   label: string;
@@ -158,7 +159,12 @@ export function Navbar() {
           </div>
 
           {/* Right side - Auth status */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Notification Bell - Only show when authenticated */}
+            {isAuthenticated && user && (
+              <NotificationInbox className="hidden sm:block" />
+            )}
+            
             {isAuthenticated && user ? (
               <div className="relative hidden sm:block">
                 <button
@@ -308,6 +314,13 @@ export function Navbar() {
               >
                 Sign In
               </Button>
+            )}
+
+            {/* Notification Bell - Mobile */}
+            {isAuthenticated && user && (
+              <div className="sm:hidden">
+                <NotificationInbox />
+              </div>
             )}
 
             {/* Mobile menu button */}

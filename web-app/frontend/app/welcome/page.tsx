@@ -35,8 +35,9 @@ import {
   DBWelcomePacket,
 } from '@/lib/supabase';
 
-// Discord invite link
-const DISCORD_INVITE_LINK = 'https://discord.gg/WHgAXsvue';
+// Discord invite link - use the welcome packet discord_link when available
+// This is a fallback that should be updated if the invite expires
+const DEFAULT_DISCORD_INVITE_LINK = 'https://discord.gg/AMDGBuP5';
 
 // League rules - Trading rules and key league info
 const LEAGUE_RULES = {
@@ -565,7 +566,7 @@ export default function WelcomePage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-white">Join the League In-Game</h2>
-                  <p className="text-sm text-slate-400">Connect to our online franchise</p>
+                  <p className="text-sm text-slate-400">Connect to our Custom League</p>
                 </div>
               </div>
             </div>
@@ -612,9 +613,9 @@ export default function WelcomePage() {
                         <span className="text-white font-bold text-sm">2</span>
                       </div>
                       <div>
-                        <p className="font-medium text-white">Go to Online Franchise</p>
+                        <p className="font-medium text-white">Go to Custom League</p>
                         <p className="text-sm text-slate-400">
-                          Select "Franchise" → "Online Franchise" from the main menu
+                          Select "Custom League" from the main menu
                         </p>
                       </div>
                     </div>
@@ -798,7 +799,7 @@ export default function WelcomePage() {
                       <p className={`font-medium ${checklist.joinedInGameLeague ? 'text-emerald-400' : 'text-white'}`}>
                         Join League In-Game (Jkapmemorial)
                       </p>
-                      <p className="text-xs text-slate-400">Required - Search "Jkapmemorial" in Online Franchise</p>
+                      <p className="text-xs text-slate-400">Required - Search "Jkapmemorial" in Custom League</p>
                     </div>
                     {checklist.joinedInGameLeague && (
                       <Badge variant="active">Complete</Badge>
@@ -830,7 +831,7 @@ export default function WelcomePage() {
                       <p className="text-xs text-slate-400">Required</p>
                     </div>
                     <a 
-                      href={DISCORD_INVITE_LINK}
+                      href={welcomePacket?.discord_link || DEFAULT_DISCORD_INVITE_LINK}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 text-sm text-blue-400 hover:underline"

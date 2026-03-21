@@ -100,31 +100,44 @@ export default function JoinPage() {
       return;
     }
 
-    // Check if banned
-    const banCheck = await checkIfBanned(formData.username, formData.email, formData.phone, formData.psnId);
-    if (banCheck.isBanned) {
-      setError(`Registration blocked: ${banCheck.banInfo?.ban_reason || 'You are not eligible to join this league.'}`);
-      setIsLoading(false);
-      return;
-    }
+    try {
+      // Check if banned
+      const banCheck = await checkIfBanned(formData.username, formData.email, formData.phone, formData.psnId);
+      if (banCheck.isBanned) {
+        setError(`Registration blocked: ${banCheck.banInfo?.ban_reason || 'You are not eligible to join this league.'}`);
+        setIsLoading(false);
+        return;
+      }
 
-    // Submit registration request
-    const result = await addRegistrationRequest({
-      username: formData.username.toLowerCase().trim(),
-      display_name: formData.displayName.trim(),
-      email: formData.email.toLowerCase().trim(),
-      phone: formData.phone.trim(),
-      psn_id: formData.psnId.trim() || undefined,
-      discord_username: formData.discordUsername.trim() || undefined,
-      requested_team_id: formData.requestedTeamId,
-      approval_code: formData.approvalCode.trim() || undefined,
-      password: formData.password, // Store their chosen password
-    });
+      // Submit registration request
+      const result = await addRegistrationRequest({
+        username: formData.username.toLowerCase().trim(),
+        display_name: formData.displayName.trim(),
+        email: formData.email.toLowerCase().trim(),
+        phone: formData.phone.trim(),
+        psn_id: formData.psnId.trim() || undefined,
+        discord_username: formData.discordUsername.trim() || undefined,
+        requested_team_id: formData.requestedTeamId,
+        approval_code: formData.approvalCode.trim() || undefined,
+        password: formData.password,
+      });
 
-    if (result.success) {
-      setIsSubmitted(true);
-    } else {
-      setError(result.error || 'Failed to submit registration. Please try again.');
+      if (result.success) {
+        setIsSubmitted(true);
+      } else {
+        console.error('Registration failed:', result.error);
+        // Provide more user-friendly error messages
+        if (result.error?.includes('duplicate') || result.error?.includes('unique')) {
+          setError('An account with this username or email already exists. Please try different credentials or contact the commissioner.');
+        } else if (result.error?.includes('permission') || result.error?.includes('RLS') || result.error?.includes('policy')) {
+          setError('Unable to submit registration at this time. Please contact the commissioner directly.');
+        } else {
+          setError(result.error || 'Failed to submit registration. Please try again or contact the commissioner.');
+        }
+      }
+    } catch (err: any) {
+      console.error('Registration error:', err);
+      setError('An unexpected error occurred. Please try again or contact the commissioner.');
     }
 
     setIsLoading(false);
