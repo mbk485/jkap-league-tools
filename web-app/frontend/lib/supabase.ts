@@ -614,6 +614,9 @@ export async function getLeagueSettings(): Promise<LeagueSettings> {
       auto_post_discord: data.auto_post_discord ?? false,
       announcement_style: data.announcement_style ?? 'espn',
       openai_api_key: data.openai_api_key ?? null,
+      claiming_open: data.claiming_open ?? false,
+      claiming_opened_at: data.claiming_opened_at ?? null,
+      claiming_closes_at: data.claiming_closes_at ?? null,
       updated_at: data.updated_at,
     };
   } catch (err) {

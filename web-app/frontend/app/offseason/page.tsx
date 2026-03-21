@@ -765,7 +765,7 @@ function OffSeasonContent() {
             <ClaimsSection
               claims={claimsSubmitted}
               onClaim={(claim) => setClaimsSubmitted([...claimsSubmitted, claim])}
-              currentUser={user ? { id: user.id, team_id: user.team_id, display_name: user.display_name || user.team_name } : null}
+              currentUser={user && user.teamId ? { id: user.id, team_id: user.teamId, display_name: user.displayName || user.teamName || '' } : null}
             />
           )}
 
@@ -1598,6 +1598,8 @@ interface ClaimsSectionProps {
   onClaim: (claim: FreeAgentClaim) => void;
   currentUser: { id: string; team_id: string; display_name: string } | null;
 }
+
+type CurrentUserProp = { id: string; team_id: string; display_name: string } | null;
 
 function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
   const [availableFreeAgents, setAvailableFreeAgents] = useState<FreeAgentDeclaration[]>([]);
