@@ -578,6 +578,9 @@ export interface LeagueSettings {
   auto_post_discord: boolean;
   announcement_style: 'espn' | 'simple';
   openai_api_key: string | null;  // Centralized API key for whole league
+  claiming_open: boolean;  // Whether claiming period is open
+  claiming_opened_at: string | null;  // When claiming was opened
+  claiming_closes_at: string | null;  // When claiming will close
   updated_at?: string;
 }
 
@@ -587,6 +590,9 @@ const DEFAULT_SETTINGS: LeagueSettings = {
   auto_post_discord: false,
   announcement_style: 'espn',
   openai_api_key: null,
+  claiming_open: false,
+  claiming_opened_at: null,
+  claiming_closes_at: null,
 };
 
 export async function getLeagueSettings(): Promise<LeagueSettings> {
@@ -4915,6 +4921,112 @@ export async function submitFreeAgentClaim(claim: {
   } catch (err: any) {
     console.error('Error submitting free agent claim:', err);
     return { success: false, error: err.message };
+  }
+}
+
+// New: Submit claims with 3 choices (private, locked once submitted)
+export interface ClaimSubmission {
+  season_number: number;
+  claiming_team_id: string;
+  claiming_team_name: string;
+  claiming_user_id: string;
+  // 3 choices - player names from the free agent pool
+  choice_1_player: string;
+  choice_1_classification: string;
+  choice_2_player: string | null;
+  choice_2_classification: string | null;
+  choice_3_player: string | null;
+  choice_3_classification: string | null;
+  // What they're offering in return
+  offered_player_name: string;
+  offered_classification: string;
+  offered_overall: number;
+}
+
+export interface DBClaimSubmission {
+  id: string;
+  season_number: number;
+  claiming_team_id: string;
+  claiming_team_name: string;
+  claiming_user_id: string;
+  choice_1_player: string;
+  choice_1_classification: string;
+  choice_2_player: string | null;
+  choice_2_classification: string | null;
+  choice_3_player: string | null;
+  choice_3_classification: string | null;
+  offered_player_name: string;
+  offered_classification: string;
+  offered_overall: number;
+  submitted_at: string;
+  is_locked: boolean;
+  status: 'pending' | 'processed';
+  created_at: string;
+}
+
+export async function submitClaimChoices(claim: ClaimSubmission): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Check if user already submitted a claim this season (claims are locked)
+    const { data: existing } = await supabase
+      .from('claim_submissions')
+      .select('id')
+      .eq('claiming_user_id', claim.claiming_user_id)
+      .eq('season_number', claim.season_number)
+      .limit(1);
+    
+    if (existing && existing.length > 0) {
+      return { success: false, error: 'You have already submitted a claim this season. Claims are locked and cannot be changed.' };
+    }
+
+    const { error } = await supabase
+      .from('claim_submissions')
+      .insert({
+        ...claim,
+        submitted_at: new Date().toISOString(),
+        is_locked: true,
+        status: 'pending',
+      });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error submitting claim choices:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Get user's claim submission (they can only see their own)
+export async function getUserClaimSubmission(userId: string, seasonNumber: number): Promise<DBClaimSubmission | null> {
+  try {
+    const { data, error } = await supabase
+      .from('claim_submissions')
+      .select('*')
+      .eq('claiming_user_id', userId)
+      .eq('season_number', seasonNumber)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+    return data || null;
+  } catch (err) {
+    console.error('Error fetching user claim:', err);
+    return null;
+  }
+}
+
+// Commissioner only: Get all claim submissions
+export async function getAllClaimSubmissions(seasonNumber: number): Promise<DBClaimSubmission[]> {
+  try {
+    const { data, error } = await supabase
+      .from('claim_submissions')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .order('submitted_at', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching all claims:', err);
+    return [];
   }
 }
 

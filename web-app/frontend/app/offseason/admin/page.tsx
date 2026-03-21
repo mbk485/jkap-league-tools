@@ -64,10 +64,12 @@ import {
   Shuffle,
   Dices,
   Lock,
+  Unlock,
   UserCog,
   Eye,
   Gamepad2,
   UserMinus,
+  UserPlus,
 } from 'lucide-react';
 import {
   getLeagueStandings,
@@ -205,6 +207,12 @@ export default function OffSeasonAdminPage() {
   const [customAnnouncementMessage, setCustomAnnouncementMessage] = useState('');
   const [discordStatus, setDiscordStatus] = useState<{ type: 'success' | 'error' | 'sending'; text: string } | null>(null);
 
+  // Claiming period state
+  const [claimingOpen, setClaimingOpen] = useState(false);
+  const [claimingDuration, setClaimingDuration] = useState('48'); // hours
+  const [allClaims, setAllClaims] = useState<any[]>([]);
+  const [claimingClosesAt, setClaimingClosesAt] = useState<string | null>(null);
+
   // Load real data from database
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -238,6 +246,15 @@ export default function OffSeasonAdminPage() {
       if (leagueSettings.discord_webhook_url_announcements) {
         setDiscordWebhookUrl(leagueSettings.discord_webhook_url_announcements);
       }
+
+      // Load claiming period status
+      setClaimingOpen(leagueSettings.claiming_open || false);
+      setClaimingClosesAt(leagueSettings.claiming_closes_at || null);
+
+      // Load all claim submissions (commissioner view)
+      const { getAllClaimSubmissions } = await import('@/lib/supabase');
+      const claimsData = await getAllClaimSubmissions(currentSeasonNum);
+      setAllClaims(claimsData || []);
 
       // Set season info
       setSeasonNumber(currentSeasonNum);
@@ -2355,6 +2372,184 @@ export default function OffSeasonAdminPage() {
                         Draft Tool
                       </Link>
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Claiming Period Control */}
+              <Card className="bg-slate-800/50 border-cyan-500/30 lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <UserPlus className="w-5 h-5 text-cyan-400" />
+                    Claiming Period Control
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Status Banner */}
+                  <div className={`p-4 rounded-xl border ${claimingOpen ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${claimingOpen ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}>
+                          {claimingOpen ? (
+                            <Unlock className="w-6 h-6 text-emerald-400" />
+                          ) : (
+                            <Lock className="w-6 h-6 text-red-400" />
+                          )}
+                        </div>
+                        <div>
+                          <p className={`font-bold text-lg ${claimingOpen ? 'text-emerald-400' : 'text-red-400'}`}>
+                            Claiming Period: {claimingOpen ? 'OPEN' : 'CLOSED'}
+                          </p>
+                          {claimingClosesAt && claimingOpen && (
+                            <p className="text-sm text-slate-400">
+                              Closes: {new Date(claimingClosesAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge className={claimingOpen ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}>
+                        {claimingOpen ? 'ACCEPTING CLAIMS' : 'NOT ACCEPTING CLAIMS'}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Open/Close Controls */}
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-400 mb-2">Duration (hours)</label>
+                      <input
+                        type="number"
+                        value={claimingDuration}
+                        onChange={(e) => setClaimingDuration(e.target.value)}
+                        min="1"
+                        max="168"
+                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                        disabled={claimingOpen}
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Standard is 48 hours</p>
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        onClick={async () => {
+                          if (claimingOpen) {
+                            // Close claiming
+                            if (confirm('Close claiming period? Members will no longer be able to submit claims.')) {
+                              await saveLeagueSettings({
+                                claiming_open: false,
+                                claiming_closes_at: null,
+                              });
+                              setClaimingOpen(false);
+                              setClaimingClosesAt(null);
+                              if (discordWebhookUrl) {
+                                await postCustomAnnouncement(discordWebhookUrl, '⏰ Claiming Period CLOSED', 'The claiming window has closed! The commissioner will now process all claims.');
+                              }
+                            }
+                          } else {
+                            // Open claiming
+                            const hours = parseInt(claimingDuration) || 48;
+                            const closesAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+                            await saveLeagueSettings({
+                              claiming_open: true,
+                              claiming_opened_at: new Date().toISOString(),
+                              claiming_closes_at: closesAt,
+                            });
+                            setClaimingOpen(true);
+                            setClaimingClosesAt(closesAt);
+                            if (discordWebhookUrl) {
+                              await postCustomAnnouncement(
+                                discordWebhookUrl, 
+                                '🎯 Claiming Period OPEN!', 
+                                `The **${hours}-hour claiming window** is now OPEN!\n\nHead to the Off-Season Hub → Claims tab to submit your choices.\n\n⚠️ **WARNING**: Once you submit, your claim is LOCKED and cannot be changed!`
+                              );
+                            }
+                          }
+                        }}
+                        className={`w-full px-4 py-3 rounded-lg font-medium transition-colors ${
+                          claimingOpen
+                            ? 'bg-red-600 hover:bg-red-500 text-white'
+                            : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                        }`}
+                      >
+                        {claimingOpen ? (
+                          <>
+                            <Lock className="w-4 h-4 inline mr-2" />
+                            Close Claiming Period
+                          </>
+                        ) : (
+                          <>
+                            <Unlock className="w-4 h-4 inline mr-2" />
+                            Open Claiming Period
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Claims Submitted */}
+                  <div className="pt-4 border-t border-slate-700">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-medium text-white flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-cyan-400" />
+                        Claims Submitted ({allClaims.length})
+                      </h4>
+                      <Badge className="bg-slate-700 text-slate-300">
+                        Only you can see these
+                      </Badge>
+                    </div>
+
+                    {allClaims.length > 0 ? (
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {allClaims.map((claim, idx) => (
+                          <div key={claim.id || idx} className="p-4 rounded-lg bg-slate-700/50 border border-slate-600">
+                            <div className="flex items-start justify-between mb-3">
+                              <div>
+                                <p className="font-medium text-white">{claim.claiming_team_name}</p>
+                                <p className="text-xs text-slate-400">
+                                  Submitted: {new Date(claim.submitted_at).toLocaleString()}
+                                </p>
+                              </div>
+                              <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
+                                #{idx + 1}
+                              </Badge>
+                            </div>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="text-cyan-400 font-medium w-8">1st:</span>
+                                <span className="text-white">{claim.choice_1_player}</span>
+                                <span className="text-slate-400 text-xs capitalize">({claim.choice_1_classification})</span>
+                              </div>
+                              {claim.choice_2_player && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-slate-400 font-medium w-8">2nd:</span>
+                                  <span className="text-white">{claim.choice_2_player}</span>
+                                  <span className="text-slate-400 text-xs capitalize">({claim.choice_2_classification})</span>
+                                </div>
+                              )}
+                              {claim.choice_3_player && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-slate-400 font-medium w-8">3rd:</span>
+                                  <span className="text-white">{claim.choice_3_player}</span>
+                                  <span className="text-slate-400 text-xs capitalize">({claim.choice_3_classification})</span>
+                                </div>
+                              )}
+                              <div className="pt-2 mt-2 border-t border-slate-600">
+                                <span className="text-amber-400">Offering:</span>
+                                <span className="text-white ml-2">{claim.offered_player_name}</span>
+                                <span className="text-slate-400 text-xs ml-1 capitalize">
+                                  ({claim.offered_classification} · {claim.offered_overall} OVR)
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-slate-400">
+                        <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                        <p>No claims submitted yet</p>
+                        <p className="text-sm">Claims will appear here once members submit them</p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

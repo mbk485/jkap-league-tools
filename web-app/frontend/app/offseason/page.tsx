@@ -63,6 +63,8 @@ import {
   Gamepad2,
   Home,
   Eye,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
 import { PlayerStatsCard, PlayerStatsPopover } from '@/components/players';
@@ -763,6 +765,7 @@ function OffSeasonContent() {
             <ClaimsSection
               claims={claimsSubmitted}
               onClaim={(claim) => setClaimsSubmitted([...claimsSubmitted, claim])}
+              currentUser={user ? { id: user.id, team_id: user.team_id, display_name: user.display_name || user.team_name } : null}
             />
           )}
 
@@ -1593,262 +1596,469 @@ function FreeAgentSection({
 interface ClaimsSectionProps {
   claims: FreeAgentClaim[];
   onClaim: (claim: FreeAgentClaim) => void;
+  currentUser: { id: string; team_id: string; display_name: string } | null;
 }
 
-function ClaimsSection({ claims, onClaim }: ClaimsSectionProps) {
+function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
   const [availableFreeAgents, setAvailableFreeAgents] = useState<FreeAgentDeclaration[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [claimingOpen, setClaimingOpen] = useState(false);
+  const [claimingClosesAt, setClaimingClosesAt] = useState<string | null>(null);
+  const [existingClaim, setExistingClaim] = useState<any>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Load available free agents from Supabase
+  // Form state for 3 choices
+  const [choice1, setChoice1] = useState('');
+  const [choice2, setChoice2] = useState('');
+  const [choice3, setChoice3] = useState('');
+  const [offeredPlayer, setOfferedPlayer] = useState('');
+  const [offeredClassification, setOfferedClassification] = useState('');
+  const [offeredOverall, setOfferedOverall] = useState('');
+
+  // Load claiming status and free agents
   useEffect(() => {
-    const loadFreeAgents = async () => {
+    const loadData = async () => {
       setLoading(true);
       try {
-        const { getAvailableFreeAgents } = await import('@/lib/supabase');
-        const agents = await getAvailableFreeAgents(4); // Season 4
+        const { getAvailableFreeAgents, getLeagueSettings, getUserClaimSubmission } = await import('@/lib/supabase');
+        
+        const [agents, settings] = await Promise.all([
+          getAvailableFreeAgents(4),
+          getLeagueSettings(),
+        ]);
+        
         setAvailableFreeAgents(agents || []);
+        setClaimingOpen(settings?.claiming_open || false);
+        setClaimingClosesAt(settings?.claiming_closes_at || null);
+
+        // Check if user already submitted a claim
+        if (currentUser?.id) {
+          const userClaim = await getUserClaimSubmission(currentUser.id, 4);
+          setExistingClaim(userClaim);
+        }
       } catch (err) {
-        console.error('Failed to load free agents:', err);
+        console.error('Failed to load data:', err);
       } finally {
         setLoading(false);
       }
     };
-    loadFreeAgents();
-  }, []);
+    loadData();
+  }, [currentUser?.id]);
 
-  // Filter free agents by search query
-  const filteredAgents = searchQuery
-    ? availableFreeAgents.filter(fa => 
-        fa.player_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        fa.position.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : availableFreeAgents;
+  // Handle claim submission
+  const handleSubmitClaim = async () => {
+    if (!currentUser || !choice1 || !offeredPlayer || !offeredClassification || !offeredOverall) {
+      setSubmitMessage({ type: 'error', text: 'Please fill in all required fields' });
+      return;
+    }
 
-  return (
-    <div className="grid lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-6">
-        {/* Info Card */}
-        <Card className="bg-cyan-500/10 border-cyan-500/30">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <UserPlus className="w-6 h-6 text-cyan-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-medium text-cyan-400 mb-1">Claiming Period</h4>
-                <p className="text-sm text-slate-400">
-                  Browse available free agents and submit claims. Remember: to claim a player, 
-                  you must offer one of <span className="text-cyan-300 font-medium">equal or higher</span> classification.
-                  Click on any player to view their full stats.
-                </p>
-                <p className="text-sm text-cyan-300 mt-2 font-medium">
-                  Max 2 successful claims per team!
-                </p>
-              </div>
+    setSubmitting(true);
+    setSubmitMessage(null);
+
+    try {
+      const { submitClaimChoices } = await import('@/lib/supabase');
+      
+      const fa1 = availableFreeAgents.find(fa => fa.player_name === choice1);
+      const fa2 = choice2 ? availableFreeAgents.find(fa => fa.player_name === choice2) : null;
+      const fa3 = choice3 ? availableFreeAgents.find(fa => fa.player_name === choice3) : null;
+
+      const result = await submitClaimChoices({
+        season_number: 4,
+        claiming_team_id: currentUser.team_id,
+        claiming_team_name: currentUser.display_name,
+        claiming_user_id: currentUser.id,
+        choice_1_player: choice1,
+        choice_1_classification: fa1?.classification || 'unknown',
+        choice_2_player: choice2 || null,
+        choice_2_classification: fa2?.classification || null,
+        choice_3_player: choice3 || null,
+        choice_3_classification: fa3?.classification || null,
+        offered_player_name: offeredPlayer,
+        offered_classification: offeredClassification.toLowerCase(),
+        offered_overall: parseInt(offeredOverall),
+      });
+
+      if (result.success) {
+        setSubmitMessage({ type: 'success', text: 'Claim submitted and LOCKED! The commissioner will process all claims after the deadline.' });
+        // Reload to show locked state
+        const { getUserClaimSubmission } = await import('@/lib/supabase');
+        const userClaim = await getUserClaimSubmission(currentUser.id, 4);
+        setExistingClaim(userClaim);
+      } else {
+        setSubmitMessage({ type: 'error', text: result.error || 'Failed to submit claim' });
+      }
+    } catch (err: any) {
+      setSubmitMessage({ type: 'error', text: err.message });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Time remaining display
+  const getTimeRemaining = () => {
+    if (!claimingClosesAt) return null;
+    const now = new Date();
+    const closes = new Date(claimingClosesAt);
+    const diff = closes.getTime() - now.getTime();
+    if (diff <= 0) return 'Expired';
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours >= 24) {
+      const days = Math.floor(hours / 24);
+      return `${days} day${days > 1 ? 's' : ''} remaining`;
+    }
+    return `${hours}h ${minutes}m remaining`;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // CLOSED STATE
+  if (!claimingOpen) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Card className="bg-slate-800/50 border-red-500/30">
+          <CardContent className="py-12 text-center">
+            <div className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-6">
+              <Lock className="w-10 h-10 text-red-400" />
             </div>
+            <h3 className="text-2xl font-bold text-white mb-2">Claiming Period CLOSED</h3>
+            <p className="text-slate-400 mb-4">
+              The claiming window is not currently open. Check back when the commissioner opens it.
+            </p>
+            <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-lg px-4 py-2">
+              CLOSED
+            </Badge>
           </CardContent>
         </Card>
 
-        {/* Available Free Agents */}
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <CardTitle className="text-white flex items-center gap-2">
-                <Users className="w-5 h-5 text-cyan-400" />
-                Available Free Agents ({availableFreeAgents.length})
-              </CardTitle>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search players..."
-                  className="pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 focus:outline-none focus:border-cyan-500"
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : filteredAgents.length > 0 ? (
-              <div className="space-y-3">
-                {filteredAgents.map((fa) => (
-                  <div key={fa.id} className="relative">
-                    {fa.player_uuid ? (
-                      <PlayerStatsCard
-                        playerUUID={fa.player_uuid}
-                        playerName={fa.player_name}
-                        position={fa.position}
-                        team={fa.team_short_name}
-                        ovr={fa.overall_rating}
-                        rarity={fa.classification.charAt(0).toUpperCase() + fa.classification.slice(1)}
-                        cardImg={fa.card_img}
-                        compact
-                      />
-                    ) : (
-                      <div
-                        className={`p-4 rounded-xl border ${CLASSIFICATION_COLORS[fa.classification].bg} ${CLASSIFICATION_COLORS[fa.classification].border}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-14 h-14 rounded-lg bg-slate-700/50 flex flex-col items-center justify-center">
-                              <span className="text-xs font-mono text-slate-300">{fa.position}</span>
-                              <span className={`text-lg font-bold ${CLASSIFICATION_COLORS[fa.classification].text}`}>
-                                {fa.overall_rating}
-                              </span>
-                            </div>
-                            <div>
-                              <PlayerStatsPopover playerName={fa.player_name} position={fa.position}>
-                                <span className="font-medium text-white text-lg hover:text-cyan-400 cursor-pointer underline decoration-dotted underline-offset-2">
-                                  {fa.player_name}
-                                </span>
-                              </PlayerStatsPopover>
-                              <p className={`text-sm capitalize ${CLASSIFICATION_COLORS[fa.classification].text}`}>
-                                {fa.classification}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {/* Claim button */}
-                    <div className="absolute top-3 right-3">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        className="bg-cyan-500 hover:bg-cyan-400"
-                      >
-                        <UserPlus className="w-4 h-4 mr-1" />
-                        Claim
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-slate-400">
-                <Users className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                <p>{searchQuery ? 'No matching players found' : 'No free agents declared yet'}</p>
-                <p className="text-sm mt-1">
-                  {searchQuery ? 'Try a different search term' : 'Check back after the declaration period'}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Your Claims */}
-        <Card className="bg-slate-800/50 border-slate-700">
+        {/* Still show available free agents for reference */}
+        <Card className="bg-slate-800/50 border-slate-700 mt-6">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-cyan-400" />
-              Your Claims ({claims.length}/2)
+              <Users className="w-5 h-5 text-cyan-400" />
+              Available Free Agents ({availableFreeAgents.length})
             </CardTitle>
+            <p className="text-sm text-slate-400">Preview - claiming not yet open</p>
           </CardHeader>
           <CardContent>
-            {claims.length > 0 ? (
-              <div className="space-y-3">
-                {claims.map((claim) => (
-                  <div
-                    key={claim.id}
-                    className="p-4 rounded-xl bg-slate-700/30 border border-slate-600"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <Badge
-                        className={
-                          claim.status === 'approved'
-                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                            : claim.status === 'denied'
-                            ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                            : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                        }
-                      >
-                        {claim.status}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
+            {availableFreeAgents.length > 0 ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
+                {availableFreeAgents.map((fa) => (
+                  <div key={fa.id} className={`p-3 rounded-lg border ${CLASSIFICATION_COLORS[fa.classification].bg} ${CLASSIFICATION_COLORS[fa.classification].border}`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-lg font-bold ${CLASSIFICATION_COLORS[fa.classification].text}`}>{fa.overall_rating}</span>
                       <div>
-                        <p className="text-xs text-slate-500 mb-1">Claiming</p>
-                        <PlayerStatsPopover 
-                          playerName={claim.target_player_name}
-                          playerUUID={claim.target_player_uuid}
-                        >
-                          <span className="font-medium text-white hover:text-cyan-400 cursor-pointer">
-                            {claim.target_player_name}
-                          </span>
-                        </PlayerStatsPopover>
-                        <p className={`text-xs capitalize ${CLASSIFICATION_COLORS[claim.target_classification].text}`}>
-                          {claim.target_classification}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 mb-1">Offering</p>
-                        <PlayerStatsPopover 
-                          playerName={claim.offered_player_name}
-                          playerUUID={claim.offered_player_uuid}
-                          position={claim.offered_position}
-                        >
-                          <span className="font-medium text-white hover:text-cyan-400 cursor-pointer">
-                            {claim.offered_player_name}
-                          </span>
-                        </PlayerStatsPopover>
-                        <p className={`text-xs capitalize ${CLASSIFICATION_COLORS[claim.offered_classification].text}`}>
-                          {claim.offered_classification} · {claim.offered_overall_rating} OVR
-                        </p>
+                        <p className="font-medium text-white text-sm">{fa.player_name}</p>
+                        <p className={`text-xs capitalize ${CLASSIFICATION_COLORS[fa.classification].text}`}>{fa.classification}</p>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12 text-slate-400">
-                <UserPlus className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                <p>No claims submitted yet</p>
-                <p className="text-sm mt-1">Browse available free agents above to submit claims</p>
-              </div>
+              <p className="text-center py-8 text-slate-400">No free agents declared yet</p>
             )}
           </CardContent>
         </Card>
       </div>
+    );
+  }
 
-      {/* Sidebar with claiming rules */}
+  // USER ALREADY SUBMITTED (LOCKED)
+  if (existingClaim) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Card className="bg-emerald-500/10 border-emerald-500/30">
+          <CardContent className="py-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                <Lock className="w-6 h-6 text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">Claim Submitted & Locked</h3>
+                <p className="text-emerald-400 text-sm">
+                  Submitted {new Date(existingClaim.submitted_at).toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+                <h4 className="font-medium text-white mb-3">Your Claim Choices</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">1st</Badge>
+                    <span className="text-white">{existingClaim.choice_1_player}</span>
+                    <span className="text-slate-400 text-sm capitalize">({existingClaim.choice_1_classification})</span>
+                  </div>
+                  {existingClaim.choice_2_player && (
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-slate-500/20 text-slate-400 border-slate-500/30">2nd</Badge>
+                      <span className="text-white">{existingClaim.choice_2_player}</span>
+                      <span className="text-slate-400 text-sm capitalize">({existingClaim.choice_2_classification})</span>
+                    </div>
+                  )}
+                  {existingClaim.choice_3_player && (
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-slate-500/20 text-slate-400 border-slate-500/30">3rd</Badge>
+                      <span className="text-white">{existingClaim.choice_3_player}</span>
+                      <span className="text-slate-400 text-sm capitalize">({existingClaim.choice_3_classification})</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+                <h4 className="font-medium text-white mb-2">Player You're Offering</h4>
+                <p className="text-white">
+                  {existingClaim.offered_player_name}
+                  <span className="text-slate-400 ml-2 capitalize">
+                    ({existingClaim.offered_classification} · {existingClaim.offered_overall} OVR)
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+              <p className="text-amber-400 text-sm">
+                <Lock className="w-4 h-4 inline mr-1" />
+                Your claim is locked and cannot be changed. The commissioner will process all claims after the deadline.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // OPEN - SHOW CLAIM FORM
+  return (
+    <div className="grid lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 space-y-6">
+        {/* Status Banner */}
+        <Card className="bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border-emerald-500/30">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-500/30 flex items-center justify-center">
+                  <Unlock className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-emerald-400 text-lg">Claiming Period OPEN</h4>
+                  <p className="text-sm text-slate-300">Submit your claim now - once submitted, it's locked!</p>
+                </div>
+              </div>
+              {claimingClosesAt && (
+                <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-sm px-3 py-1">
+                  <Clock className="w-4 h-4 mr-1 inline" />
+                  {getTimeRemaining()}
+                </Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Claim Form */}
+        <Card className="bg-slate-800/50 border-cyan-500/30">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-cyan-400" />
+              Submit Your Claim
+            </CardTitle>
+            <p className="text-sm text-slate-400">Select up to 3 players in order of preference</p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {submitMessage && (
+              <div className={`p-4 rounded-lg border ${submitMessage.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
+                {submitMessage.text}
+              </div>
+            )}
+
+            {/* Choice selections */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  1st Choice (Required) <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={choice1}
+                  onChange={(e) => setChoice1(e.target.value)}
+                  className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="">Select a player...</option>
+                  {availableFreeAgents.map((fa) => (
+                    <option key={fa.id} value={fa.player_name}>
+                      {fa.player_name} ({fa.classification} - {fa.overall_rating} OVR)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  2nd Choice (Optional)
+                </label>
+                <select
+                  value={choice2}
+                  onChange={(e) => setChoice2(e.target.value)}
+                  className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="">Select a backup...</option>
+                  {availableFreeAgents.filter(fa => fa.player_name !== choice1).map((fa) => (
+                    <option key={fa.id} value={fa.player_name}>
+                      {fa.player_name} ({fa.classification} - {fa.overall_rating} OVR)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  3rd Choice (Optional)
+                </label>
+                <select
+                  value={choice3}
+                  onChange={(e) => setChoice3(e.target.value)}
+                  className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="">Select another backup...</option>
+                  {availableFreeAgents.filter(fa => fa.player_name !== choice1 && fa.player_name !== choice2).map((fa) => (
+                    <option key={fa.id} value={fa.player_name}>
+                      {fa.player_name} ({fa.classification} - {fa.overall_rating} OVR)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Offered player */}
+            <div className="pt-4 border-t border-slate-700">
+              <h4 className="font-medium text-white mb-4">Player You're Offering in Return</h4>
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Player Name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={offeredPlayer}
+                    onChange={(e) => setOfferedPlayer(e.target.value)}
+                    placeholder="e.g., Aaron Judge"
+                    className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Classification <span className="text-red-400">*</span>
+                  </label>
+                  <select
+                    value={offeredClassification}
+                    onChange={(e) => setOfferedClassification(e.target.value)}
+                    className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="">Select...</option>
+                    <option value="Diamond">Diamond</option>
+                    <option value="Gold">Gold</option>
+                    <option value="Silver">Silver</option>
+                    <option value="Bronze">Bronze</option>
+                    <option value="Common">Common</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Overall <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={offeredOverall}
+                    onChange={(e) => setOfferedOverall(e.target.value)}
+                    placeholder="e.g., 92"
+                    min="1"
+                    max="99"
+                    className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Warning */}
+            <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
+              <p className="text-red-400 text-sm font-medium">
+                <AlertTriangle className="w-4 h-4 inline mr-1" />
+                WARNING: Once you submit, your claim is LOCKED and cannot be changed!
+              </p>
+            </div>
+
+            {/* Submit button */}
+            <Button
+              onClick={handleSubmitClaim}
+              disabled={submitting || !choice1 || !offeredPlayer || !offeredClassification || !offeredOverall}
+              className="w-full bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50"
+            >
+              {submitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Lock className="w-4 h-4 mr-2" />
+                  Submit & Lock Claim
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Sidebar with rules & available players */}
       <div className="space-y-4">
+        {/* Claiming Rules */}
         <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-white text-sm">Claiming Examples</CardTitle>
+            <CardTitle className="text-white text-sm">Claiming Rules</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
             <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-              <p className="text-emerald-400 font-medium mb-1">Valid Claim</p>
+              <p className="text-emerald-400 font-medium mb-1">Valid Claims</p>
               <p className="text-slate-400">
-                Offer Diamond → Claim Diamond, Gold, Silver, Bronze, or Common
+                Offer Diamond → Can claim any tier<br />
+                Offer Gold → Can claim Gold or lower
               </p>
             </div>
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-              <p className="text-red-400 font-medium mb-1">Invalid Claim</p>
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+              <p className="text-amber-400 font-medium mb-1">Priority</p>
               <p className="text-slate-400">
-                Offer Silver → Cannot claim Gold or Diamond
+                Worst record gets first pick if multiple teams claim the same player
               </p>
             </div>
           </CardContent>
         </Card>
 
+        {/* Available FA quick list */}
         <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-white text-sm">Priority Rules</CardTitle>
+            <CardTitle className="text-white text-sm flex items-center gap-2">
+              <Users className="w-4 h-4 text-cyan-400" />
+              Available ({availableFreeAgents.length})
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm text-slate-400">
-            <p>If multiple teams claim the same player:</p>
-            <div className="flex items-start gap-2">
-              <Trophy className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-              <span>Team with <span className="text-amber-400">worst regular season record</span> gets priority</span>
+          <CardContent>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {availableFreeAgents.map((fa) => (
+                <div key={fa.id} className={`p-2 rounded-lg border text-xs ${CLASSIFICATION_COLORS[fa.classification].bg} ${CLASSIFICATION_COLORS[fa.classification].border}`}>
+                  <span className={`font-bold ${CLASSIFICATION_COLORS[fa.classification].text}`}>{fa.overall_rating}</span>
+                  <span className="text-white ml-2">{fa.player_name}</span>
+                </div>
+              ))}
             </div>
-            <p className="text-xs text-slate-500 mt-3">
-              This helps maintain competitive balance in the league.
-            </p>
           </CardContent>
         </Card>
       </div>
