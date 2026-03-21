@@ -284,6 +284,95 @@ to avoid a loss are not allowed and will result in automatic loss + warning.`,
 Draft dates are announced well in advance on Discord.`,
     keywords: ["draft", "picks", "order", "amateur", "prospect", "rookie"],
   },
+  {
+    category: "Offseason",
+    title: "Free Agent Declaration",
+    content: `Step 1 of the off-season: Free Agent Declaration
+
+Every team MUST declare at least one player as a free agent. You can declare more if you choose, but one is the minimum.
+
+Think of this like setting your guys loose into the market. You're making them available for other teams to claim.
+
+Example declaration format:
+RF - Aaron Judge - Diamond - 92
+
+How to declare:
+1. Go to Off-Season Hub → Free Agents tab
+2. Search for the player you want to declare
+3. Confirm your declaration (this is PERMANENT and cannot be undone!)
+
+IMPORTANT: No declarations = No ability to claim players. If you don't declare anyone, you can't participate in claiming.`,
+    keywords: ["free agent", "declaration", "declare", "fa", "release", "offseason", "step 1"],
+  },
+  {
+    category: "Offseason",
+    title: "Free Agent Classifications",
+    content: `Players are ranked based on their in-game overall rating:
+
+• Diamond - Highest tier (90+ OVR)
+• Gold - High tier (80-89 OVR)
+• Silver - Mid tier (70-79 OVR)
+• Bronze - Lower tier (65-69 OVR)
+• Common - Base tier (64 and below)
+
+This classification decides what kind of return you're eligible to get when claiming. The better the player you offer, the more players you're eligible to claim.`,
+    keywords: ["classification", "diamond", "gold", "silver", "bronze", "common", "rating", "tier", "overall"],
+  },
+  {
+    category: "Offseason",
+    title: "Free Agent Claiming Rules",
+    content: `Step 3: Claiming Period (48 hours)
+
+This is open season - time to go shopping for new talent!
+
+THE BIG RULE: To claim a free agent, you must offer a player of EQUAL OR HIGHER classification.
+
+Examples:
+• Want a Diamond FA? → Must offer a Diamond
+• Want a Gold FA? → Can offer Gold or Diamond
+• Want a Silver FA? → Can offer Silver, Gold, or Diamond
+
+If you offer a Diamond player, you can claim ANY classification (Diamond, Gold, Silver, Bronze, or Common).
+If you offer a Silver player, you can only claim Silver, Bronze, or Common - NOT Gold or Diamond.
+
+GM Strategy Tip: Sometimes it's worth "overpaying" with a better-classified player to grab the guy you really want. But once your offer is in, it's locked - submit wisely!`,
+    keywords: ["claim", "claiming", "offer", "equal value", "classification", "how to claim", "rules"],
+  },
+  {
+    category: "Offseason",
+    title: "Claim Resolution and Priority",
+    content: `How claims are resolved:
+
+If YOUR player gets claimed:
+You get priority to take the claiming team's offered player in return. It's like a trade!
+
+If MULTIPLE teams claim the same free agent:
+The team with the WORST regular season record gets priority. This helps keep the league competitive.
+
+Claim Limits:
+Each team is limited to 2 successful claims total. This keeps things balanced and prevents talent hoarding.
+
+After the 48-hour claiming window closes:
+• All approved claims are processed
+• Unclaimed free agents stay with their original team`,
+    keywords: ["resolution", "priority", "multiple claims", "worst record", "limit", "2 claims", "process"],
+  },
+  {
+    category: "Offseason",
+    title: "Off-Season Order",
+    content: `The off-season follows this order:
+
+1. QUESTIONNAIRE - Fill out the off-season questionnaire (are you returning? want to switch teams?)
+2. FREE AGENT DECLARATION - Declare at least 1 player as a free agent
+3. CLAIMING PERIOD - 48 hours to submit claims on declared free agents
+4. CLAIM RESOLUTION - Claims processed by worst-record priority
+5. ROSTER FINALIZATION - Final roster updates
+6. DRAFT - Amateur draft (worst record picks first)
+7. PRE-SEASON - Get ready for the new season!
+
+Each phase has a deadline. Check Discord and the app for announcements.`,
+    keywords: ["order", "phases", "steps", "offseason order", "what's next", "timeline", "schedule"],
+  },
 
   // =============================================================================
   // TOOLS & FEATURES

@@ -1125,20 +1125,37 @@ function FreeAgentSection({
         </CardContent>
       </Card>
 
-      {/* Info Card */}
-      <Card className="bg-orange-500/10 border-orange-500/30">
-        <CardContent className="py-4">
-          <div className="flex items-start gap-3">
-            <UserMinus className="w-6 h-6 text-orange-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-medium text-orange-400 mb-1">Free Agent Declaration Rules</h4>
-              <ul className="text-sm text-slate-400 space-y-1 list-disc list-inside">
-                <li>Every team must declare <span className="text-orange-300 font-medium">at least one player</span> as a free agent</li>
-                <li>Declarations must be submitted <span className="text-orange-300 font-medium">BEFORE the claiming period starts</span></li>
-                <li>No declarations = no ability to claim other players</li>
-                <li>All declarations are visible to the entire league</li>
-              </ul>
+      {/* How It Works - Step by Step */}
+      <Card className="bg-gradient-to-r from-orange-500/10 to-amber-500/10 border-orange-500/30">
+        <CardContent className="py-5">
+          <h4 className="font-bold text-orange-400 text-lg mb-4 flex items-center gap-2">
+            <UserMinus className="w-5 h-5" />
+            How Free Agent Declaration Works
+          </h4>
+          
+          <div className="grid md:grid-cols-3 gap-4 mb-4">
+            <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700">
+              <div className="text-2xl mb-1">1️⃣</div>
+              <h5 className="font-medium text-white mb-1">Declare a Player</h5>
+              <p className="text-xs text-slate-400">Search for the player you want to release and submit them as a free agent.</p>
             </div>
+            <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700">
+              <div className="text-2xl mb-1">2️⃣</div>
+              <h5 className="font-medium text-white mb-1">They Hit the Market</h5>
+              <p className="text-xs text-slate-400">Your declared player becomes available for other teams to claim.</p>
+            </div>
+            <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700">
+              <div className="text-2xl mb-1">3️⃣</div>
+              <h5 className="font-medium text-white mb-1">Claiming Opens</h5>
+              <p className="text-xs text-slate-400">Once everyone declares, the 48-hour claiming window begins!</p>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-orange-500/20 border border-orange-500/30">
+            <p className="text-sm text-orange-300">
+              <span className="font-bold">⚠️ REQUIRED:</span> Every team must declare <span className="font-bold">at least 1 player</span>. 
+              No declaration = No claiming. If you don't declare anyone, you can't claim players from other teams!
+            </p>
           </div>
         </CardContent>
       </Card>
