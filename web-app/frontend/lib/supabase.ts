@@ -4854,6 +4854,40 @@ export async function getMasterFreeAgentList(seasonNumber: number): Promise<DBFr
   }
 }
 
+// Commissioner: Delete a free agent declaration
+export async function deleteFreeAgentDeclaration(declarationId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('free_agent_declarations')
+      .delete()
+      .eq('id', declarationId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting free agent declaration:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Commissioner: Delete all declarations by a specific user
+export async function deleteUserDeclarations(userId: string, seasonNumber: number): Promise<{ success: boolean; count: number; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('free_agent_declarations')
+      .delete()
+      .eq('declaring_user_id', userId)
+      .eq('season_number', seasonNumber)
+      .select();
+
+    if (error) throw error;
+    return { success: true, count: data?.length || 0 };
+  } catch (err: any) {
+    console.error('Error deleting user declarations:', err);
+    return { success: false, count: 0, error: err.message };
+  }
+}
+
 // =============================================================================
 // FREE AGENT CLAIMS
 // =============================================================================

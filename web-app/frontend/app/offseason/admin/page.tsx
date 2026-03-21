@@ -70,6 +70,7 @@ import {
   Gamepad2,
   UserMinus,
   UserPlus,
+  Trash2,
 } from 'lucide-react';
 import {
   getLeagueStandings,
@@ -213,6 +214,10 @@ export default function OffSeasonAdminPage() {
   const [allClaims, setAllClaims] = useState<any[]>([]);
   const [claimingClosesAt, setClaimingClosesAt] = useState<string | null>(null);
 
+  // Free agent declarations management
+  const [allDeclarations, setAllDeclarations] = useState<any[]>([]);
+  const [deletingDeclaration, setDeletingDeclaration] = useState<string | null>(null);
+
   // Load real data from database
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -252,9 +257,13 @@ export default function OffSeasonAdminPage() {
       setClaimingClosesAt(leagueSettings.claiming_closes_at || null);
 
       // Load all claim submissions (commissioner view)
-      const { getAllClaimSubmissions } = await import('@/lib/supabase');
+      const { getAllClaimSubmissions, getMasterFreeAgentList } = await import('@/lib/supabase');
       const claimsData = await getAllClaimSubmissions(currentSeasonNum);
       setAllClaims(claimsData || []);
+
+      // Load all free agent declarations (for management)
+      const allDeclarationsData = await getMasterFreeAgentList(currentSeasonNum);
+      setAllDeclarations(allDeclarationsData || []);
 
       // Set season info
       setSeasonNumber(currentSeasonNum);
@@ -2551,6 +2560,77 @@ export default function OffSeasonAdminPage() {
                       </div>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Free Agent Declarations Management */}
+              <Card className="bg-slate-800/50 border-orange-500/30 lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <UserMinus className="w-5 h-5 text-orange-400" />
+                    Manage Free Agent Declarations
+                  </CardTitle>
+                  <p className="text-sm text-slate-400">Remove declarations from users who left or made errors</p>
+                </CardHeader>
+                <CardContent>
+                  {allDeclarations.length > 0 ? (
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {allDeclarations.map((dec) => (
+                        <div key={dec.id} className="p-3 rounded-lg bg-slate-700/50 border border-slate-600 flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-white">{dec.player_name}</span>
+                              <Badge className={`text-xs ${
+                                dec.classification === 'diamond' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' :
+                                dec.classification === 'gold' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+                                dec.classification === 'silver' ? 'bg-slate-400/20 text-slate-300 border-slate-400/30' :
+                                'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                              }`}>
+                                {dec.classification} · {dec.overall_rating}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-1">
+                              Declared by: <span className="text-slate-300">{dec.declaring_team_name || dec.declaring_user_id}</span>
+                              {' · '}{new Date(dec.declared_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (confirm(`Remove ${dec.player_name} from the free agent pool?\n\nThis will delete this declaration permanently.`)) {
+                                setDeletingDeclaration(dec.id);
+                                try {
+                                  const { deleteFreeAgentDeclaration } = await import('@/lib/supabase');
+                                  const result = await deleteFreeAgentDeclaration(dec.id);
+                                  if (result.success) {
+                                    setAllDeclarations(prev => prev.filter(d => d.id !== dec.id));
+                                  } else {
+                                    alert('Failed to delete: ' + result.error);
+                                  }
+                                } catch (err) {
+                                  alert('Error deleting declaration');
+                                } finally {
+                                  setDeletingDeclaration(null);
+                                }
+                              }
+                            }}
+                            disabled={deletingDeclaration === dec.id}
+                            className="px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm font-medium transition-colors disabled:opacity-50"
+                          >
+                            {deletingDeclaration === dec.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-400">
+                      <UserMinus className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                      <p>No free agent declarations yet</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
