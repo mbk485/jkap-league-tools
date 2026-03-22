@@ -709,6 +709,10 @@ export async function saveLeagueSettings(
       if (settings.auto_post_discord !== undefined) updateData.auto_post_discord = settings.auto_post_discord;
       if (settings.announcement_style !== undefined) updateData.announcement_style = settings.announcement_style;
       if (settings.openai_api_key !== undefined) updateData.openai_api_key = settings.openai_api_key;
+      // Claiming period fields
+      if (settings.claiming_open !== undefined) updateData.claiming_open = settings.claiming_open;
+      if (settings.claiming_opened_at !== undefined) updateData.claiming_opened_at = settings.claiming_opened_at;
+      if (settings.claiming_closes_at !== undefined) updateData.claiming_closes_at = settings.claiming_closes_at;
 
       const { error } = await supabase
         .from('league_settings')
@@ -728,6 +732,9 @@ export async function saveLeagueSettings(
           auto_post_discord: settings.auto_post_discord ?? false,
           announcement_style: settings.announcement_style ?? 'espn',
           openai_api_key: settings.openai_api_key ?? null,
+          claiming_open: settings.claiming_open ?? false,
+          claiming_opened_at: settings.claiming_opened_at ?? null,
+          claiming_closes_at: settings.claiming_closes_at ?? null,
         });
 
       if (error) {
