@@ -140,7 +140,7 @@ function DashboardContent() {
 
   const markAsRead = async (id: string) => {
     if (!user?.id) return;
-    setReadNotificationIds(prev => new Set([...prev, id]));
+    setReadNotificationIds(prev => new Set([...Array.from(prev), id]));
     await markNotificationRead(user.id, id);
   };
 

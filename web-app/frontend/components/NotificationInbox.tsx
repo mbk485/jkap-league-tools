@@ -130,7 +130,7 @@ export function NotificationInbox({ className = '' }: NotificationInboxProps) {
     if (!user?.id) return;
     
     // Optimistic update
-    setReadIds(prev => new Set([...prev, notificationId]));
+    setReadIds(prev => new Set([...Array.from(prev), notificationId]));
     await markNotificationRead(user.id, notificationId);
   };
 

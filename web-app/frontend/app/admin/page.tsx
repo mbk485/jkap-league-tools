@@ -2794,7 +2794,7 @@ export default function AdminPage() {
                                   <Badge 
                                     variant={
                                       notification.priority === 'urgent' ? 'delinquent' :
-                                      notification.priority === 'high' ? 'pending' :
+                                      notification.priority === 'high' ? 'trade' :
                                       'outline'
                                     }
                                     className="text-xs"
