@@ -2835,7 +2835,7 @@ Let's get this done! 💪`;
                               </Badge>
                             </div>
                             <p className="text-xs text-slate-400 mt-1">
-                              Declared by: <span className="text-slate-300">{dec.declaring_team_name || dec.declaring_user_id}</span>
+                              Former Team: <span className="text-slate-300">{dec.declaring_team_name || dec.declaring_user_id}</span>
                               {' · '}{new Date(dec.declared_at).toLocaleDateString()}
                             </p>
                           </div>
@@ -3321,7 +3321,7 @@ function SigningsSection({
                       <div>
                         <p className="font-medium text-white">{playerName}</p>
                         <p className="text-xs text-slate-400">
-                          {declaration?.classification || 'Unknown'} · From {declaration?.declaring_team_name || 'Unknown'}
+                          {declaration?.classification || 'Unknown'} · Former Team: {declaration?.declaring_team_name || 'Unknown'}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -3366,7 +3366,7 @@ function SigningsSection({
                   <h4 className="font-bold text-cyan-400 text-lg mb-1">{selectedPlayer}</h4>
                   <p className="text-sm text-slate-300">
                     {declarations.find(d => d.player_name === selectedPlayer)?.classification || 'Unknown'} ·
-                    From {declarations.find(d => d.player_name === selectedPlayer)?.declaring_team_name || 'Unknown'}
+                    Former Team: {declarations.find(d => d.player_name === selectedPlayer)?.declaring_team_name || 'Unknown'}
                   </p>
                 </div>
 

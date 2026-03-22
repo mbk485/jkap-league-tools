@@ -1546,7 +1546,7 @@ function FreeAgentSection({
                           </p>
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-xs text-slate-400">
-                              Declared by: <span className="text-slate-300">{dec.declaring_team_name || dec.declaring_team_id}</span>
+                              Former Team: <span className="text-slate-300">{dec.declaring_team_name || dec.declaring_team_id}</span>
                             </span>
                             <span className="text-xs text-slate-500">•</span>
                             <span className="text-xs text-slate-500">

@@ -12,6 +12,7 @@ interface FreeAgent {
   classification: string;
   overall_rating: number;
   declaring_team_id: string;
+  declaring_team_name?: string;
   card_img?: string;
   team_short_name?: string;
 }
@@ -157,7 +158,7 @@ export function FreeAgentTicker() {
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50">
                 <span className="text-slate-400">Former Team</span>
-                <span className="text-white font-medium">{selectedPlayer.declaring_team_id}</span>
+                <span className="text-white font-medium">{selectedPlayer.declaring_team_name || selectedPlayer.declaring_team_id}</span>
               </div>
               {selectedPlayer.team_short_name && (
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50">
