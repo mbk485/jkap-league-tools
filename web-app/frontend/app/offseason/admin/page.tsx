@@ -215,7 +215,7 @@ export default function OffSeasonAdminPage() {
 
   // Claiming period state
   const [claimingOpen, setClaimingOpen] = useState(false);
-  const [claimingDuration, setClaimingDuration] = useState('48'); // hours
+  const [claimingDuration, setClaimingDuration] = useState('24'); // hours
   const [allClaims, setAllClaims] = useState<any[]>([]);
   const [claimingClosesAt, setClaimingClosesAt] = useState<string | null>(null);
 
@@ -2508,7 +2508,7 @@ Let's get this done! 💪`;
                         
                         // Special handling for claiming period
                         if (nextPhase === 'claiming_period') {
-                          const hours = parseInt(claimingDuration) || 48;
+                          const hours = parseInt(claimingDuration) || 24;
                           if (confirm(`Open Claiming Period for ${hours} hours?\n\nThis will:\n• Set phase to "Claiming Period"\n• OPEN claiming for ${hours} hours\n• Allow members to submit claims\n• Post announcement to Discord\n\nContinue?`)) {
                             setCurrentPhase(nextPhase);
                             
@@ -2667,7 +2667,7 @@ Let's get this done! 💪`;
                         className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
                         disabled={claimingOpen}
                       />
-                      <p className="text-xs text-slate-500 mt-1">Standard is 48 hours</p>
+                      <p className="text-xs text-slate-500 mt-1">Standard is 24 hours</p>
                     </div>
                     <div className="flex items-end">
                       <button
@@ -2687,7 +2687,7 @@ Let's get this done! 💪`;
                             }
                           } else {
                             // Open claiming
-                            const hours = parseInt(claimingDuration) || 48;
+                            const hours = parseInt(claimingDuration) || 24;
                             const closesAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
                             await saveLeagueSettings({
                               claiming_open: true,
@@ -2744,14 +2744,34 @@ Let's get this done! 💪`;
                           <div key={claim.id || idx} className="p-4 rounded-lg bg-slate-700/50 border border-slate-600">
                             <div className="flex items-start justify-between mb-3">
                               <div>
-                                <p className="font-medium text-white">{claim.claiming_team_name}</p>
+                                <p className="text-lg font-bold text-cyan-400">{claim.claiming_team_name}</p>
                                 <p className="text-xs text-slate-400">
                                   Submitted: {new Date(claim.submitted_at).toLocaleString()}
                                 </p>
                               </div>
-                              <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
-                                #{idx + 1}
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
+                                  #{idx + 1}
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/20"
+                                  onClick={async () => {
+                                    if (confirm(`Delete claim from ${claim.claiming_team_name}? This cannot be undone.`)) {
+                                      const { deleteClaimSubmission } = await import('@/lib/supabase');
+                                      const result = await deleteClaimSubmission(claim.id);
+                                      if (result.success) {
+                                        setAllClaims(allClaims.filter(c => c.id !== claim.id));
+                                      } else {
+                                        alert('Failed to delete claim: ' + result.error);
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                             </div>
                             <div className="space-y-2 text-sm">
                               <div className="flex items-center gap-2">
@@ -2773,13 +2793,6 @@ Let's get this done! 💪`;
                                   <span className="text-slate-400 text-xs capitalize">({claim.choice_3_classification})</span>
                                 </div>
                               )}
-                              <div className="pt-2 mt-2 border-t border-slate-600">
-                                <span className="text-amber-400">Offering:</span>
-                                <span className="text-white ml-2">{claim.offered_player_name}</span>
-                                <span className="text-slate-400 text-xs ml-1 capitalize">
-                                  ({claim.offered_classification} · {claim.offered_overall} OVR)
-                                </span>
-                              </div>
                             </div>
                           </div>
                         ))}
@@ -3122,9 +3135,7 @@ function SigningsSection({
     playerClassification: string,
     signingType: 'claim' | 'priority_claim' | 'direct',
     fromTeamId?: string,
-    fromTeamName?: string,
-    offeredPlayer?: string,
-    offeredClass?: string
+    fromTeamName?: string
   ) => {
     setProcessingSignings(true);
     try {
@@ -3142,8 +3153,6 @@ function SigningsSection({
         contract_display: contract.display,
         from_team_id: fromTeamId,
         from_team_name: fromTeamName,
-        offered_player_name: offeredPlayer,
-        offered_classification: offeredClass,
         signing_type: signingType,
         announcement_text: announcement,
         signed_at: new Date().toISOString(),
@@ -3404,9 +3413,6 @@ function SigningsSection({
                           </div>
                           <div className="text-sm text-slate-300">
                             <span className="text-slate-400">Choice #{claim.choiceRank}</span>
-                            <span className="mx-2">·</span>
-                            <span>Offering: <span className="text-amber-400">{claim.offered_player_name}</span></span>
-                            <span className="text-slate-500 ml-1">({claim.offered_classification})</span>
                           </div>
                           
                           {canClaim && (
@@ -3418,9 +3424,7 @@ function SigningsSection({
                                 declarations.find(d => d.player_name === selectedPlayer)?.classification || 'unknown',
                                 'claim',
                                 declarations.find(d => d.player_name === selectedPlayer)?.declaring_team_id,
-                                declarations.find(d => d.player_name === selectedPlayer)?.declaring_team_name,
-                                claim.offered_player_name,
-                                claim.offered_classification
+                                declarations.find(d => d.player_name === selectedPlayer)?.declaring_team_name
                               )}
                               disabled={processingSignings}
                               className="mt-3 w-full bg-emerald-600 hover:bg-emerald-500"

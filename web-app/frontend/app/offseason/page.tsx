@@ -66,9 +66,11 @@ import {
   Lock,
   Unlock,
   Trash2,
+  X,
 } from 'lucide-react';
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
 import { PlayerStatsCard, PlayerStatsPopover } from '@/components/players';
+import { FreeAgentTicker } from '@/components/FreeAgentTicker';
 import { MLB_TEAMS } from '@/types/league';
 
 // Default season state (will be replaced by API data)
@@ -1698,29 +1700,43 @@ interface ClaimsSectionProps {
 
 type CurrentUserProp = { id: string; team_id: string; display_name: string } | null;
 
+// Tier hierarchy for validation (higher index = higher tier)
+const TIER_HIERARCHY = ['common', 'bronze', 'silver', 'gold', 'diamond'];
+
+function getTierIndex(tier: string): number {
+  return TIER_HIERARCHY.indexOf(tier.toLowerCase());
+}
+
+function canClaimTier(userHighestTier: string, targetTier: string): boolean {
+  const userTierIndex = getTierIndex(userHighestTier);
+  const targetTierIndex = getTierIndex(targetTier);
+  // User can claim players at or below their highest declared tier
+  return targetTierIndex <= userTierIndex;
+}
+
 function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
   const [availableFreeAgents, setAvailableFreeAgents] = useState<FreeAgentDeclaration[]>([]);
+  const [userDeclarations, setUserDeclarations] = useState<FreeAgentDeclaration[]>([]);
+  const [userHighestTier, setUserHighestTier] = useState<string>('common');
   const [loading, setLoading] = useState(true);
   const [claimingOpen, setClaimingOpen] = useState(false);
   const [claimingClosesAt, setClaimingClosesAt] = useState<string | null>(null);
   const [existingClaim, setExistingClaim] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<FreeAgentDeclaration | null>(null);
 
   // Form state for 3 choices
   const [choice1, setChoice1] = useState('');
   const [choice2, setChoice2] = useState('');
   const [choice3, setChoice3] = useState('');
-  const [offeredPlayer, setOfferedPlayer] = useState('');
-  const [offeredClassification, setOfferedClassification] = useState('');
-  const [offeredOverall, setOfferedOverall] = useState('');
 
-  // Load claiming status and free agents
+  // Load claiming status, free agents, and user's declarations
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const { getAvailableFreeAgents, getLeagueSettings, getUserClaimSubmission } = await import('@/lib/supabase');
+        const { getAvailableFreeAgents, getLeagueSettings, getUserClaimSubmission, getUserDeclarations } = await import('@/lib/supabase');
         
         const [agents, settings] = await Promise.all([
           getAvailableFreeAgents(4),
@@ -1733,8 +1749,24 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
 
         // Check if user already submitted a claim
         if (currentUser?.id) {
-          const userClaim = await getUserClaimSubmission(currentUser.id, 4);
+          const [userClaim, declarations] = await Promise.all([
+            getUserClaimSubmission(currentUser.id, 4),
+            getUserDeclarations(currentUser.id, 4),
+          ]);
           setExistingClaim(userClaim);
+          setUserDeclarations(declarations || []);
+          
+          // Determine user's highest declared tier
+          if (declarations && declarations.length > 0) {
+            let highestIndex = -1;
+            declarations.forEach(d => {
+              const idx = getTierIndex(d.classification);
+              if (idx > highestIndex) highestIndex = idx;
+            });
+            if (highestIndex >= 0) {
+              setUserHighestTier(TIER_HIERARCHY[highestIndex]);
+            }
+          }
         }
       } catch (err) {
         console.error('Failed to load data:', err);
@@ -1744,11 +1776,22 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
     };
     loadData();
   }, [currentUser?.id]);
+  
+  // Filter available free agents to only show ones the user can claim
+  const claimableFreeAgents = availableFreeAgents.filter(fa => 
+    canClaimTier(userHighestTier, fa.classification)
+  );
 
   // Handle claim submission
   const handleSubmitClaim = async () => {
-    if (!currentUser || !choice1 || !offeredPlayer || !offeredClassification || !offeredOverall) {
-      setSubmitMessage({ type: 'error', text: 'Please fill in all required fields' });
+    if (!currentUser || !choice1) {
+      setSubmitMessage({ type: 'error', text: 'Please select at least your 1st choice player' });
+      return;
+    }
+
+    // Validate user has declared at least one player
+    if (userDeclarations.length === 0) {
+      setSubmitMessage({ type: 'error', text: 'You must declare at least one free agent before you can submit claims.' });
       return;
     }
 
@@ -1762,6 +1805,19 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
       const fa2 = choice2 ? availableFreeAgents.find(fa => fa.player_name === choice2) : null;
       const fa3 = choice3 ? availableFreeAgents.find(fa => fa.player_name === choice3) : null;
 
+      // Validate tier eligibility for each choice
+      const choices = [fa1, fa2, fa3].filter(Boolean);
+      for (const fa of choices) {
+        if (fa && !canClaimTier(userHighestTier, fa.classification)) {
+          setSubmitMessage({ 
+            type: 'error', 
+            text: `You cannot claim ${fa.player_name} (${fa.classification}). Your highest declared tier is ${userHighestTier}. You can only claim players at or below that tier.` 
+          });
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const result = await submitClaimChoices({
         season_number: 4,
         claiming_team_id: currentUser.team_id,
@@ -1773,9 +1829,9 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
         choice_2_classification: fa2?.classification || null,
         choice_3_player: choice3 || null,
         choice_3_classification: fa3?.classification || null,
-        offered_player_name: offeredPlayer,
-        offered_classification: offeredClassification.toLowerCase(),
-        offered_overall: parseInt(offeredOverall),
+        offered_player_name: 'N/A',
+        offered_classification: 'none',
+        offered_overall: 0,
       });
 
       if (result.success) {
@@ -1818,10 +1874,72 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
     );
   }
 
+  // Player Detail Modal Component (reusable across states)
+  const PlayerDetailModal = () => {
+    if (!selectedPlayer) return null;
+    
+    const rarityMap: Record<string, string> = {
+      diamond: 'Diamond',
+      gold: 'Gold',
+      silver: 'Silver',
+      bronze: 'Bronze',
+      common: 'Common',
+    };
+    
+    return (
+      <div 
+        className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+        onClick={() => setSelectedPlayer(null)}
+      >
+        <div 
+          className={`bg-slate-800 border-2 rounded-2xl p-6 max-w-md w-full ${CLASSIFICATION_COLORS[selectedPlayer.classification].border}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-start justify-between mb-4">
+            <h3 className="text-xl font-bold text-white">Player Card</h3>
+            <button 
+              onClick={() => setSelectedPlayer(null)}
+              className="p-1 hover:bg-slate-700 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-slate-400" />
+            </button>
+          </div>
+          
+          <PlayerStatsCard
+            playerUUID={selectedPlayer.player_uuid}
+            playerName={selectedPlayer.player_name}
+            position={selectedPlayer.position}
+            team={selectedPlayer.team_short_name}
+            ovr={selectedPlayer.overall_rating}
+            rarity={rarityMap[selectedPlayer.classification] || 'Common'}
+            cardImg={selectedPlayer.card_img}
+            showExpandedStats={true}
+            className="mb-4"
+          />
+          
+          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50 mb-4">
+            <span className="text-slate-400">Former Team</span>
+            <span className="text-white font-medium">{selectedPlayer.declaring_team_name || selectedPlayer.declaring_team_id}</span>
+          </div>
+          
+          <button
+            onClick={() => setSelectedPlayer(null)}
+            className="w-full px-4 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   // CLOSED STATE
   if (!claimingOpen) {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-4xl mx-auto">
+        {/* Free Agent Ticker */}
+        <FreeAgentTicker />
+        
         <Card className="bg-slate-800/50 border-red-500/30">
           <CardContent className="py-12 text-center">
             <div className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-6">
@@ -1844,13 +1962,17 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
               <Users className="w-5 h-5 text-cyan-400" />
               Available Free Agents ({availableFreeAgents.length})
             </CardTitle>
-            <p className="text-sm text-slate-400">Preview - claiming not yet open</p>
+            <p className="text-sm text-slate-400">Click any player to view their card stats</p>
           </CardHeader>
           <CardContent>
             {availableFreeAgents.length > 0 ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
                 {availableFreeAgents.map((fa) => (
-                  <div key={fa.id} className={`p-3 rounded-lg border ${CLASSIFICATION_COLORS[fa.classification].bg} ${CLASSIFICATION_COLORS[fa.classification].border}`}>
+                  <button
+                    key={fa.id}
+                    onClick={() => setSelectedPlayer(fa)}
+                    className={`p-3 rounded-lg border text-left transition-all hover:scale-[1.02] hover:shadow-lg ${CLASSIFICATION_COLORS[fa.classification].bg} ${CLASSIFICATION_COLORS[fa.classification].border}`}
+                  >
                     <div className="flex items-center gap-2">
                       <span className={`text-lg font-bold ${CLASSIFICATION_COLORS[fa.classification].text}`}>{fa.overall_rating}</span>
                       <div>
@@ -1858,7 +1980,10 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
                         <p className={`text-xs capitalize ${CLASSIFICATION_COLORS[fa.classification].text}`}>{fa.classification}</p>
                       </div>
                     </div>
-                  </div>
+                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                      <Eye className="w-3 h-3" /> View stats
+                    </p>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -1866,6 +1991,9 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
             )}
           </CardContent>
         </Card>
+        
+        {/* Player Detail Modal */}
+        <PlayerDetailModal />
       </div>
     );
   }
@@ -1873,7 +2001,10 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
   // USER ALREADY SUBMITTED (LOCKED)
   if (existingClaim) {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-4xl mx-auto">
+        {/* Free Agent Ticker */}
+        <FreeAgentTicker />
+        
         <Card className="bg-emerald-500/10 border-emerald-500/30">
           <CardContent className="py-8">
             <div className="flex items-center gap-3 mb-6">
@@ -1913,16 +2044,6 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
                   )}
                 </div>
               </div>
-
-              <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
-                <h4 className="font-medium text-white mb-2">Player You're Offering</h4>
-                <p className="text-white">
-                  {existingClaim.offered_player_name}
-                  <span className="text-slate-400 ml-2 capitalize">
-                    ({existingClaim.offered_classification} · {existingClaim.offered_overall} OVR)
-                  </span>
-                </p>
-              </div>
             </div>
 
             <div className="mt-6 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
@@ -1933,13 +2054,57 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
             </div>
           </CardContent>
         </Card>
+        
+        {/* Available Free Agents Reference */}
+        <Card className="bg-slate-800/50 border-slate-700 mt-6">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Users className="w-5 h-5 text-cyan-400" />
+              All Available Free Agents ({availableFreeAgents.length})
+            </CardTitle>
+            <p className="text-sm text-slate-400">Click any player to view their card stats</p>
+          </CardHeader>
+          <CardContent>
+            {availableFreeAgents.length > 0 ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
+                {availableFreeAgents.map((fa) => (
+                  <button
+                    key={fa.id}
+                    onClick={() => setSelectedPlayer(fa)}
+                    className={`p-3 rounded-lg border text-left transition-all hover:scale-[1.02] hover:shadow-lg ${CLASSIFICATION_COLORS[fa.classification].bg} ${CLASSIFICATION_COLORS[fa.classification].border}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`text-lg font-bold ${CLASSIFICATION_COLORS[fa.classification].text}`}>{fa.overall_rating}</span>
+                      <div>
+                        <p className="font-medium text-white text-sm">{fa.player_name}</p>
+                        <p className={`text-xs capitalize ${CLASSIFICATION_COLORS[fa.classification].text}`}>{fa.classification}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                      <Eye className="w-3 h-3" /> View stats
+                    </p>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center py-8 text-slate-400">No free agents available</p>
+            )}
+          </CardContent>
+        </Card>
+        
+        {/* Player Detail Modal */}
+        <PlayerDetailModal />
       </div>
     );
   }
 
   // OPEN - SHOW CLAIM FORM
   return (
-    <div className="grid lg:grid-cols-3 gap-6">
+    <div className="space-y-6">
+      {/* Free Agent Ticker */}
+      <FreeAgentTicker />
+      
+      <div className="grid lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
         {/* Status Banner */}
         <Card className="bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border-emerald-500/30">
@@ -1980,6 +2145,27 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
               </div>
             )}
 
+            {/* Tier eligibility info */}
+            <div className="p-4 rounded-lg bg-slate-700/50 border border-slate-600">
+              <p className="text-sm text-white mb-2">
+                <strong>Your Claim Eligibility:</strong>
+              </p>
+              {userDeclarations.length > 0 ? (
+                <div className="text-sm">
+                  <p className="text-slate-300">
+                    Your highest declared tier: <span className="font-bold text-cyan-400 capitalize">{userHighestTier}</span>
+                  </p>
+                  <p className="text-slate-400 text-xs mt-1">
+                    You can claim players rated <span className="capitalize font-medium">{userHighestTier}</span> or lower (Diamond → Gold → Silver → Bronze → Common)
+                  </p>
+                </div>
+              ) : (
+                <p className="text-amber-400 text-sm">
+                  ⚠️ You haven't declared any free agents yet. Declare players first to be eligible to claim.
+                </p>
+              )}
+            </div>
+
             {/* Choice selections */}
             <div className="space-y-4">
               <div>
@@ -1990,14 +2176,20 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
                   value={choice1}
                   onChange={(e) => setChoice1(e.target.value)}
                   className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                  disabled={userDeclarations.length === 0}
                 >
                   <option value="">Select a player...</option>
-                  {availableFreeAgents.map((fa) => (
+                  {claimableFreeAgents.map((fa) => (
                     <option key={fa.id} value={fa.player_name}>
                       {fa.player_name} ({fa.classification} - {fa.overall_rating} OVR)
                     </option>
                   ))}
                 </select>
+                {claimableFreeAgents.length < availableFreeAgents.length && userDeclarations.length > 0 && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Showing {claimableFreeAgents.length} of {availableFreeAgents.length} players (filtered by your tier)
+                  </p>
+                )}
               </div>
 
               <div>
@@ -2008,9 +2200,10 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
                   value={choice2}
                   onChange={(e) => setChoice2(e.target.value)}
                   className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                  disabled={userDeclarations.length === 0}
                 >
                   <option value="">Select a backup...</option>
-                  {availableFreeAgents.filter(fa => fa.player_name !== choice1).map((fa) => (
+                  {claimableFreeAgents.filter(fa => fa.player_name !== choice1).map((fa) => (
                     <option key={fa.id} value={fa.player_name}>
                       {fa.player_name} ({fa.classification} - {fa.overall_rating} OVR)
                     </option>
@@ -2026,64 +2219,15 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
                   value={choice3}
                   onChange={(e) => setChoice3(e.target.value)}
                   className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                  disabled={userDeclarations.length === 0}
                 >
                   <option value="">Select another backup...</option>
-                  {availableFreeAgents.filter(fa => fa.player_name !== choice1 && fa.player_name !== choice2).map((fa) => (
+                  {claimableFreeAgents.filter(fa => fa.player_name !== choice1 && fa.player_name !== choice2).map((fa) => (
                     <option key={fa.id} value={fa.player_name}>
                       {fa.player_name} ({fa.classification} - {fa.overall_rating} OVR)
                     </option>
                   ))}
                 </select>
-              </div>
-            </div>
-
-            {/* Offered player */}
-            <div className="pt-4 border-t border-slate-700">
-              <h4 className="font-medium text-white mb-4">Player You're Offering in Return</h4>
-              <div className="grid sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">
-                    Player Name <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={offeredPlayer}
-                    onChange={(e) => setOfferedPlayer(e.target.value)}
-                    placeholder="e.g., Aaron Judge"
-                    className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">
-                    Classification <span className="text-red-400">*</span>
-                  </label>
-                  <select
-                    value={offeredClassification}
-                    onChange={(e) => setOfferedClassification(e.target.value)}
-                    className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
-                  >
-                    <option value="">Select...</option>
-                    <option value="Diamond">Diamond</option>
-                    <option value="Gold">Gold</option>
-                    <option value="Silver">Silver</option>
-                    <option value="Bronze">Bronze</option>
-                    <option value="Common">Common</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">
-                    Overall <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={offeredOverall}
-                    onChange={(e) => setOfferedOverall(e.target.value)}
-                    placeholder="e.g., 92"
-                    min="1"
-                    max="99"
-                    className="w-full p-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
               </div>
             </div>
 
@@ -2098,7 +2242,7 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
             {/* Submit button */}
             <Button
               onClick={handleSubmitClaim}
-              disabled={submitting || !choice1 || !offeredPlayer || !offeredClassification || !offeredOverall}
+              disabled={submitting || !choice1}
               className="w-full bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50"
             >
               {submitting ? (
@@ -2148,19 +2292,29 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
               <Users className="w-4 h-4 text-cyan-400" />
               Available ({availableFreeAgents.length})
             </CardTitle>
+            <p className="text-xs text-slate-500">Click to view stats</p>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {availableFreeAgents.map((fa) => (
-                <div key={fa.id} className={`p-2 rounded-lg border text-xs ${CLASSIFICATION_COLORS[fa.classification].bg} ${CLASSIFICATION_COLORS[fa.classification].border}`}>
+                <button
+                  key={fa.id}
+                  onClick={() => setSelectedPlayer(fa)}
+                  className={`w-full p-2 rounded-lg border text-xs text-left transition-all hover:scale-[1.02] ${CLASSIFICATION_COLORS[fa.classification].bg} ${CLASSIFICATION_COLORS[fa.classification].border}`}
+                >
                   <span className={`font-bold ${CLASSIFICATION_COLORS[fa.classification].text}`}>{fa.overall_rating}</span>
                   <span className="text-white ml-2">{fa.player_name}</span>
-                </div>
+                  <Eye className="w-3 h-3 inline-block ml-2 text-slate-500" />
+                </button>
               ))}
             </div>
           </CardContent>
         </Card>
       </div>
+      </div>
+      
+      {/* Player Detail Modal */}
+      <PlayerDetailModal />
     </div>
   );
 }

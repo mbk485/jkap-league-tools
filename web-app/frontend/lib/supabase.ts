@@ -5001,9 +5001,9 @@ export interface ClaimSubmission {
   choice_2_classification: string | null;
   choice_3_player: string | null;
   choice_3_classification: string | null;
-  // What they're offering in return
-  offered_player_name: string;
-  offered_classification: string;
+  // Legacy fields (no longer used)
+  offered_player_name: string | null;
+  offered_classification: string | null;
   offered_overall: number;
 }
 
@@ -5019,8 +5019,8 @@ export interface DBClaimSubmission {
   choice_2_classification: string | null;
   choice_3_player: string | null;
   choice_3_classification: string | null;
-  offered_player_name: string;
-  offered_classification: string;
+  offered_player_name: string | null;
+  offered_classification: string | null;
   offered_overall: number;
   submitted_at: string;
   is_locked: boolean;
@@ -5091,6 +5091,22 @@ export async function getAllClaimSubmissions(seasonNumber: number): Promise<DBCl
   } catch (err) {
     console.error('Error fetching all claims:', err);
     return [];
+  }
+}
+
+// Commissioner only: Delete a claim submission
+export async function deleteClaimSubmission(claimId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('claim_submissions')
+      .delete()
+      .eq('id', claimId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting claim submission:', err);
+    return { success: false, error: err.message };
   }
 }
 
@@ -5886,7 +5902,7 @@ const DEFAULT_NOTIFICATIONS: DBNotification[] = [
   {
     id: 'claiming-period-open-2024',
     title: '🚨 CLAIMING PERIOD IS NOW OPEN!',
-    content: 'The free agent claiming window is LIVE! Head to the Off-Season Hub and submit your claims. Pick up to 3 players in order of preference and offer a player in return. WARNING: Once you submit, your claim is LOCKED and cannot be changed. Worst record gets priority if multiple teams claim the same player. Max 2 successful claims per team.',
+    content: 'The free agent claiming window is LIVE! Head to the Off-Season Hub and submit your claims. Pick up to 3 players in order of preference. WARNING: Once you submit, your claim is LOCKED and cannot be changed. Worst record gets priority if multiple teams claim the same player. Max 2 successful claims per team.',
     category: 'announcement',
     priority: 'urgent',
     action_url: '/offseason?tab=claims',

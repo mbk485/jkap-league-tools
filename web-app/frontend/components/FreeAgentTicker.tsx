@@ -156,7 +156,7 @@ export function FreeAgentTicker() {
                 </Badge>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50">
-                <span className="text-slate-400">Released By</span>
+                <span className="text-slate-400">Former Team</span>
                 <span className="text-white font-medium">{selectedPlayer.declaring_team_id}</span>
               </div>
               {selectedPlayer.team_short_name && (
