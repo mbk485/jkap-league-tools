@@ -2505,13 +2505,59 @@ Let's get this done! 💪`;
                           'draft': 'pre_season',
                         };
                         const nextPhase = nextPhases[currentPhase];
-                        if (nextPhase && confirm(`Advance to "${getPhaseLabel(nextPhase)}"?\n\nThis will:\n• Update the phase for all members\n• Post announcement to Discord (if configured)\n\nContinue?`)) {
+                        
+                        // Special handling for claiming period
+                        if (nextPhase === 'claiming_period') {
+                          const hours = parseInt(claimingDuration) || 48;
+                          if (confirm(`Open Claiming Period for ${hours} hours?\n\nThis will:\n• Set phase to "Claiming Period"\n• OPEN claiming for ${hours} hours\n• Allow members to submit claims\n• Post announcement to Discord\n\nContinue?`)) {
+                            setCurrentPhase(nextPhase);
+                            
+                            // Auto-open claiming
+                            const closesAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+                            await saveLeagueSettings({
+                              claiming_open: true,
+                              claiming_opened_at: new Date().toISOString(),
+                              claiming_closes_at: closesAt,
+                            });
+                            setClaimingOpen(true);
+                            setClaimingClosesAt(closesAt);
+                            
+                            // Post to Discord
+                            if (discordWebhookUrl) {
+                              await postCustomAnnouncement(
+                                discordWebhookUrl, 
+                                '🎯 Claiming Period OPEN!', 
+                                `The **${hours}-hour claiming window** is now OPEN!\n\nHead to the Off-Season Hub → Claims tab to submit your choices.\n\n⚠️ **WARNING**: Once you submit, your claim is LOCKED and cannot be changed!`
+                              );
+                            }
+                            setDiscordStatus({ type: 'success', text: `✓ Claiming period OPEN for ${hours} hours!` });
+                            setTimeout(() => setDiscordStatus(null), 5000);
+                          }
+                        } else if (nextPhase === 'claim_resolution') {
+                          // Moving to resolution = close claiming
+                          if (confirm(`Close Claiming & Move to Resolution?\n\nThis will:\n• CLOSE the claiming window\n• Move to "Claim Resolution" phase\n• You can now process signings\n\nContinue?`)) {
+                            setCurrentPhase(nextPhase);
+                            
+                            // Auto-close claiming
+                            await saveLeagueSettings({
+                              claiming_open: false,
+                              claiming_closes_at: null,
+                            });
+                            setClaimingOpen(false);
+                            setClaimingClosesAt(null);
+                            
+                            if (discordWebhookUrl) {
+                              await postCustomAnnouncement(discordWebhookUrl, '⏰ Claiming Period CLOSED', 'The claiming window has closed! The commissioner will now process all claims and announce signings.');
+                            }
+                            setDiscordStatus({ type: 'success', text: `✓ Claiming closed, ready to process signings!` });
+                            setTimeout(() => setDiscordStatus(null), 5000);
+                          }
+                        } else if (nextPhase && confirm(`Advance to "${getPhaseLabel(nextPhase)}"?\n\nThis will:\n• Update the phase for all members\n• Post announcement to Discord (if configured)\n\nContinue?`)) {
                           setCurrentPhase(nextPhase);
                           // Post to Discord if webhook is set
                           if (discordWebhookUrl) {
                             const announcements: Record<string, { title: string; msg: string }> = {
                               'free_agent_declaration': { title: 'Free Agent Declaration Period', msg: '🔄 **Declare your free agents!**\n\nYou must declare at least **1 player** as a free agent before the deadline.' },
-                              'claiming_period': { title: '48-Hour Claiming Window Open!', msg: '🎯 **The claiming period has begun!**\n\nYou have **48 hours** to submit claims on declared free agents.' },
                               'draft_prep': { title: 'Draft Order Announced!', msg: '🎯 **The draft order has been set!**\n\nReview the draft board and prepare your strategy.' },
                               'draft': { title: 'DRAFT DAY!', msg: '🏈 **IT\'S DRAFT DAY!**\n\nHead to the Draft Tool to participate. Good luck!' },
                             };
