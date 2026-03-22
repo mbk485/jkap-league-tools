@@ -5877,6 +5877,18 @@ const NOTIFICATIONS_READ_KEY = 'jkap_notifications_read';
 // Default system notifications (used as fallback if DB is not available)
 const DEFAULT_NOTIFICATIONS: DBNotification[] = [
   {
+    id: 'claiming-period-open-2024',
+    title: '🚨 CLAIMING PERIOD IS NOW OPEN!',
+    content: 'The free agent claiming window is LIVE! Head to the Off-Season Hub and submit your claims. Pick up to 3 players in order of preference and offer a player in return. WARNING: Once you submit, your claim is LOCKED and cannot be changed. Worst record gets priority if multiple teams claim the same player. Max 2 successful claims per team.',
+    category: 'announcement',
+    priority: 'urgent',
+    action_url: '/offseason?tab=claims',
+    action_label: 'Submit Your Claim',
+    icon: '🎯',
+    is_active: true,
+    created_at: new Date().toISOString(),
+  },
+  {
     id: 'fa-declaration-guide-2024',
     title: '⚾ Time to DFA Your Players!',
     content: 'Go to Off-Season → "Declare Free Agents" tab. IMPORTANT: Check your IN-GAME ROSTER in MLB The Show and pick players FROM YOUR TEAM in the game. Do NOT enter random players - only players currently on your team!',
