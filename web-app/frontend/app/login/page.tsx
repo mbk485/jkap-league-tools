@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { needsOnboarding } from '@/lib/supabase';
 
-type AuthMode = 'login' | 'register';
+type AuthMode = 'login' | 'register' | 'forgot-username' | 'forgot-password';
 type RegistrationType = 'jkap_member' | 'external_commissioner' | null;
 
 function LoginForm() {
@@ -51,6 +51,13 @@ function LoginForm() {
   const [claimedTeams, setClaimedTeams] = useState<string[]>([]);
   const [isNewRegistration, setIsNewRegistration] = useState(false);
   const [approvalCode, setApprovalCode] = useState('');
+  
+  // Recovery states
+  const [recoveredUsername, setRecoveredUsername] = useState<string | null>(null);
+  const [recoveryStep, setRecoveryStep] = useState<'verify' | 'reset' | 'success'>('verify');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [recoveryMessage, setRecoveryMessage] = useState('');
   
   // Universal approval code - only JKAP members need this
   const APPROVAL_CODE = '2006';
@@ -190,6 +197,111 @@ function LoginForm() {
     setMode(newMode);
     setError('');
     setRegistrationType(null);
+    setRecoveredUsername(null);
+    setRecoveryStep('verify');
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setRecoveryMessage('');
+    setSelectedTeam('');
+    setUsername('');
+  };
+
+  // Handle forgot username - look up username by team
+  const handleForgotUsername = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setRecoveredUsername(null);
+    
+    if (!selectedTeam) {
+      setError('Please select your team.');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Look up user by team_id in Supabase
+      const { getUserByTeam } = await import('@/lib/supabase');
+      const result = await getUserByTeam(selectedTeam);
+      
+      if (result.success && result.user) {
+        setRecoveredUsername(result.user.username);
+        setRecoveryMessage(`Your username is: ${result.user.username}`);
+      } else {
+        setError('No account found for this team. Please contact the commissioner.');
+      }
+    } catch (err) {
+      console.error('Error looking up username:', err);
+      setError('Unable to look up username. Please try again or contact the commissioner.');
+    }
+    
+    setIsSubmitting(false);
+  };
+
+  // Handle forgot password - verify user then allow reset
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    
+    if (recoveryStep === 'verify') {
+      // Step 1: Verify username and team match
+      if (!username) {
+        setError('Please enter your username.');
+        return;
+      }
+      if (!selectedTeam) {
+        setError('Please select your team to verify your identity.');
+        return;
+      }
+      
+      setIsSubmitting(true);
+      
+      try {
+        const { verifyUserForReset } = await import('@/lib/supabase');
+        const result = await verifyUserForReset(username, selectedTeam);
+        
+        if (result.success) {
+          setRecoveryStep('reset');
+          setRecoveryMessage('Identity verified! Enter your new password.');
+        } else {
+          setError(result.error || 'Username and team do not match. Please verify your information.');
+        }
+      } catch (err) {
+        console.error('Error verifying user:', err);
+        setError('Unable to verify identity. Please try again.');
+      }
+      
+      setIsSubmitting(false);
+    } else if (recoveryStep === 'reset') {
+      // Step 2: Reset the password
+      if (newPassword.length < 6) {
+        setError('Password must be at least 6 characters.');
+        return;
+      }
+      if (newPassword !== confirmNewPassword) {
+        setError('Passwords do not match.');
+        return;
+      }
+      
+      setIsSubmitting(true);
+      
+      try {
+        const { resetUserPassword } = await import('@/lib/supabase');
+        const result = await resetUserPassword(username, newPassword);
+        
+        if (result.success) {
+          setRecoveryStep('success');
+          setRecoveryMessage('Password reset successfully! You can now log in with your new password.');
+        } else {
+          setError(result.error || 'Failed to reset password. Please try again.');
+        }
+      } catch (err) {
+        console.error('Error resetting password:', err);
+        setError('Unable to reset password. Please try again.');
+      }
+      
+      setIsSubmitting(false);
+    }
   };
 
   if (isLoading) {
@@ -228,7 +340,7 @@ function LoginForm() {
             <button
               onClick={() => handleModeSwitch('login')}
               className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                mode === 'login'
+                mode === 'login' || mode === 'forgot-username' || mode === 'forgot-password'
                   ? 'bg-card text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
@@ -253,6 +365,8 @@ function LoginForm() {
             <CardHeader>
               <CardTitle className="text-center">
                 {mode === 'login' ? 'Welcome Back' : 
+                 mode === 'forgot-username' ? 'Recover Username' :
+                 mode === 'forgot-password' ? 'Reset Password' :
                  registrationType === null ? 'Choose Account Type' :
                  registrationType === 'jkap_member' ? 'Join JKAP Memorial League' :
                  'Commissioner Registration'}
@@ -327,7 +441,300 @@ function LoginForm() {
                     Sign In
                 </Button>
 
+                {/* Forgot Links */}
+                <div className="flex justify-center gap-4 mt-4 pt-4 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => handleModeSwitch('forgot-username')}
+                    className="text-sm text-muted-foreground hover:text-jkap-red-400 transition-colors"
+                  >
+                    Forgot Username?
+                  </button>
+                  <span className="text-muted-foreground">•</span>
+                  <button
+                    type="button"
+                    onClick={() => handleModeSwitch('forgot-password')}
+                    className="text-sm text-muted-foreground hover:text-jkap-red-400 transition-colors"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+
                 </form>
+              ) : mode === 'forgot-username' ? (
+                // FORGOT USERNAME FORM
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => handleModeSwitch('login')}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 mb-2"
+                  >
+                    ← Back to Sign In
+                  </button>
+
+                  <div className="text-center mb-4">
+                    <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
+                      <User className="w-6 h-6 text-blue-400" />
+                    </div>
+                    <h3 className="font-semibold text-foreground">Forgot Your Username?</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Select your team and we'll show you your username.
+                    </p>
+                  </div>
+
+                  {error && (
+                    <div className="p-3 rounded-lg bg-jkap-red-500/10 border border-jkap-red-500/30 flex items-start gap-2">
+                      <AlertCircle className="w-5 h-5 text-jkap-red-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-jkap-red-400">{error}</p>
+                    </div>
+                  )}
+
+                  {recoveredUsername ? (
+                    <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center">
+                      <Check className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                      <p className="text-emerald-400 font-medium mb-2">Username Found!</p>
+                      <p className="text-2xl font-bold text-white mb-4">@{recoveredUsername}</p>
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          setUsername(recoveredUsername);
+                          handleModeSwitch('login');
+                        }}
+                        fullWidth
+                      >
+                        <LogIn className="w-4 h-4 mr-2" />
+                        Sign In Now
+                      </Button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleForgotUsername} className="space-y-4">
+                      <div>
+                        <label htmlFor="recovery-team" className="block text-sm font-medium text-foreground mb-2">
+                          Select Your Team
+                        </label>
+                        <div className="relative">
+                          <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                          <select
+                            id="recovery-team"
+                            value={selectedTeam}
+                            onChange={(e) => setSelectedTeam(e.target.value)}
+                            className="w-full pl-10 pr-10 py-3 rounded-xl bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all appearance-none cursor-pointer"
+                            required
+                          >
+                            <option value="">Choose your team...</option>
+                            {MLB_TEAMS.map((team) => (
+                              <option key={team.id} value={team.id}>
+                                {team.name} ({team.abbreviation})
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        fullWidth
+                        loading={isSubmitting}
+                        className="bg-blue-500 hover:bg-blue-400"
+                      >
+                        Find My Username
+                      </Button>
+                    </form>
+                  )}
+                </div>
+              ) : mode === 'forgot-password' ? (
+                // FORGOT PASSWORD FORM
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => handleModeSwitch('login')}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 mb-2"
+                  >
+                    ← Back to Sign In
+                  </button>
+
+                  <div className="text-center mb-4">
+                    <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-3">
+                      <KeyRound className="w-6 h-6 text-amber-400" />
+                    </div>
+                    <h3 className="font-semibold text-foreground">Reset Your Password</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {recoveryStep === 'verify' && 'Enter your username and verify your team.'}
+                      {recoveryStep === 'reset' && 'Enter your new password.'}
+                      {recoveryStep === 'success' && 'Password reset complete!'}
+                    </p>
+                  </div>
+
+                  {error && (
+                    <div className="p-3 rounded-lg bg-jkap-red-500/10 border border-jkap-red-500/30 flex items-start gap-2">
+                      <AlertCircle className="w-5 h-5 text-jkap-red-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-jkap-red-400">{error}</p>
+                    </div>
+                  )}
+
+                  {recoveryStep === 'success' ? (
+                    <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center">
+                      <Check className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                      <p className="text-emerald-400 font-medium mb-4">{recoveryMessage}</p>
+                      <Button
+                        variant="primary"
+                        onClick={() => handleModeSwitch('login')}
+                        fullWidth
+                      >
+                        <LogIn className="w-4 h-4 mr-2" />
+                        Sign In Now
+                      </Button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleForgotPassword} className="space-y-4">
+                      {recoveryStep === 'verify' && (
+                        <>
+                          <div>
+                            <label htmlFor="reset-username" className="block text-sm font-medium text-foreground mb-2">
+                              Your Username
+                            </label>
+                            <div className="relative">
+                              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                              <input
+                                type="text"
+                                id="reset-username"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                className="w-full pl-10 pr-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
+                                placeholder="Enter your username"
+                                required
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label htmlFor="verify-team" className="block text-sm font-medium text-foreground mb-2">
+                              Verify Your Team
+                            </label>
+                            <div className="relative">
+                              <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                              <select
+                                id="verify-team"
+                                value={selectedTeam}
+                                onChange={(e) => setSelectedTeam(e.target.value)}
+                                className="w-full pl-10 pr-10 py-3 rounded-xl bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all appearance-none cursor-pointer"
+                                required
+                              >
+                                <option value="">Select your team...</option>
+                                {MLB_TEAMS.map((team) => (
+                                  <option key={team.id} value={team.id}>
+                                    {team.name} ({team.abbreviation})
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              This verifies you own this account
+                            </p>
+                          </div>
+
+                          <Button
+                            type="submit"
+                            variant="primary"
+                            fullWidth
+                            loading={isSubmitting}
+                            className="bg-amber-500 hover:bg-amber-400"
+                          >
+                            Verify Identity
+                          </Button>
+                        </>
+                      )}
+
+                      {recoveryStep === 'reset' && (
+                        <>
+                          <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 mb-2">
+                            <Check className="w-5 h-5 text-emerald-400" />
+                            <p className="text-sm text-emerald-400">Identity verified for @{username}</p>
+                          </div>
+
+                          <div>
+                            <label htmlFor="new-password" className="block text-sm font-medium text-foreground mb-2">
+                              New Password
+                            </label>
+                            <div className="relative">
+                              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                              <input
+                                type={showPassword ? 'text' : 'password'}
+                                id="new-password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                className="w-full pl-10 pr-12 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
+                                placeholder="••••••••"
+                                required
+                                minLength={6}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label htmlFor="confirm-new-password" className="block text-sm font-medium text-foreground mb-2">
+                              Confirm New Password
+                            </label>
+                            <div className="relative">
+                              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                              <input
+                                type={showPassword ? 'text' : 'password'}
+                                id="confirm-new-password"
+                                value={confirmNewPassword}
+                                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                                className={`w-full pl-10 pr-12 py-3 rounded-xl bg-muted border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all ${
+                                  confirmNewPassword && confirmNewPassword === newPassword
+                                    ? 'border-emerald-500'
+                                    : confirmNewPassword && confirmNewPassword !== newPassword
+                                    ? 'border-red-500'
+                                    : 'border-border'
+                                }`}
+                                placeholder="••••••••"
+                                required
+                              />
+                              {confirmNewPassword && confirmNewPassword === newPassword && (
+                                <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
+                              )}
+                            </div>
+                          </div>
+
+                          <Button
+                            type="submit"
+                            variant="primary"
+                            fullWidth
+                            loading={isSubmitting}
+                            className="bg-amber-500 hover:bg-amber-400"
+                          >
+                            Reset Password
+                          </Button>
+                        </>
+                      )}
+                    </form>
+                  )}
+
+                  {/* Forgot username link */}
+                  {recoveryStep === 'verify' && (
+                    <div className="text-center pt-2">
+                      <button
+                        type="button"
+                        onClick={() => handleModeSwitch('forgot-username')}
+                        className="text-sm text-muted-foreground hover:text-blue-400 transition-colors"
+                      >
+                        Don't remember your username?
+                      </button>
+                    </div>
+                  )}
+                </div>
               ) : registrationType === null ? (
                 // ACCOUNT TYPE SELECTION
                 <div className="space-y-4">

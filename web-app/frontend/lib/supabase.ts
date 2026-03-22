@@ -438,6 +438,69 @@ export async function getClaimedTeams(): Promise<string[]> {
   return data?.map(u => u.team_id).filter(Boolean) || [];
 }
 
+// Get user by team ID (for forgot username)
+export async function getUserByTeam(teamId: string): Promise<{ success: boolean; user?: DBUser; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('team_id', teamId)
+      .single();
+
+    if (error || !data) {
+      return { success: false, error: 'No user found for this team' };
+    }
+
+    return { success: true, user: data };
+  } catch (err: any) {
+    console.error('Error looking up user by team:', err);
+    return { success: false, error: err.message || 'Failed to look up user' };
+  }
+}
+
+// Verify user for password reset (check username and team match)
+export async function verifyUserForReset(username: string, teamId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, team_id')
+      .eq('username', username.toLowerCase())
+      .single();
+
+    if (error || !data) {
+      return { success: false, error: 'Username not found' };
+    }
+
+    if (data.team_id !== teamId) {
+      return { success: false, error: 'Team does not match this account' };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error verifying user for reset:', err);
+    return { success: false, error: err.message || 'Verification failed' };
+  }
+}
+
+// Reset user password
+export async function resetUserPassword(username: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('users')
+      .update({ password_hash: newPassword })
+      .eq('username', username.toLowerCase());
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error resetting password:', err);
+    return { success: false, error: err.message || 'Password reset failed' };
+  }
+}
+
 export async function deleteUser(userId: string): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase
     .from('users')
@@ -5329,6 +5392,36 @@ export async function getAllQuestionnaireStatus(seasonNumber: number): Promise<D
   } catch (err) {
     console.error('Error fetching all questionnaire status:', err);
     return [];
+  }
+}
+
+// Mark all active members' questionnaires as complete (commissioner action)
+export async function markAllQuestionnairesComplete(seasonNumber: number): Promise<{ success: boolean; count: number; error?: string }> {
+  try {
+    // Get all active JKAP members
+    const users = await getAllUsers();
+    const activeMembers = users.filter(u => u.user_type === 'jkap_member');
+    
+    let successCount = 0;
+    for (const member of activeMembers) {
+      const { error } = await supabase
+        .from('questionnaire_status')
+        .upsert({
+          user_id: member.id,
+          season_number: seasonNumber,
+          completed: true,
+          completed_at: new Date().toISOString(),
+          continuing_participation: true,
+          team_retention_preference: 'keep',
+        }, { onConflict: 'user_id,season_number' });
+      
+      if (!error) successCount++;
+    }
+    
+    return { success: true, count: successCount };
+  } catch (err: any) {
+    console.error('Error marking all questionnaires complete:', err);
+    return { success: false, count: 0, error: err.message };
   }
 }
 

@@ -1517,6 +1517,33 @@ Let's get this done! 💪`;
                       </Badge>
                     </button>
 
+                    {/* Mark All Questionnaires Complete */}
+                    <button
+                      onClick={async () => {
+                        if (!confirm('Mark ALL members as having completed the questionnaire? This cannot be undone.')) return;
+                        setDiscordStatus({ type: 'sending', text: 'Marking all questionnaires complete...' });
+                        const { markAllQuestionnairesComplete } = await import('@/lib/supabase');
+                        const result = await markAllQuestionnairesComplete(4);
+                        if (result.success) {
+                          setDiscordStatus({ type: 'success', text: `✓ Marked ${result.count} members as complete!` });
+                          // Refresh data
+                          window.location.reload();
+                        } else {
+                          setDiscordStatus({ type: 'error', text: result.error || 'Failed to update' });
+                        }
+                        setTimeout(() => setDiscordStatus(null), 5000);
+                      }}
+                      className="w-full flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-400" />
+                        <span className="text-white text-sm">Mark All Questionnaires Complete</span>
+                      </div>
+                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                        Skip step
+                      </Badge>
+                    </button>
+
                     {/* FA Declaration Reminder */}
                     <button
                       onClick={async () => {
