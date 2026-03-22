@@ -65,9 +65,11 @@ import {
   Eye,
   Lock,
   Unlock,
+  Trash2,
 } from 'lucide-react';
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
 import { PlayerStatsCard, PlayerStatsPopover } from '@/components/players';
+import { MLB_TEAMS } from '@/types/league';
 
 // Default season state (will be replaced by API data)
 const DEFAULT_SEASON_STATE: SeasonState = {
@@ -755,11 +757,13 @@ function OffSeasonContent() {
             <FreeAgentSection
               declarations={freeAgentsDeclared}
               onDeclare={(declaration) => setFreeAgentsDeclared([...freeAgentsDeclared, declaration])}
+              onDelete={(declarationId) => setFreeAgentsDeclared(prev => prev.filter(d => d.id !== declarationId))}
               seasonNumber={seasonState.season_number}
               userId={user?.id}
               userTeamId={user?.teamId}
               userTeamName={user?.teamName}
               userName={user?.displayName || user?.email}
+              isAdmin={user?.isAdmin || false}
             />
           )}
 
@@ -978,22 +982,26 @@ function QuestionnaireSection({ completed, onComplete }: QuestionnaireSectionPro
 interface FreeAgentSectionProps {
   declarations: FreeAgentDeclaration[];
   onDeclare: (declaration: FreeAgentDeclaration) => void;
+  onDelete?: (declarationId: string) => void;
   onSearchPlayer?: () => void;
   seasonNumber: number;
   userId?: string;
   userTeamId?: string;
   userTeamName?: string;
   userName?: string;
+  isAdmin?: boolean;
 }
 
 function FreeAgentSection({ 
   declarations, 
-  onDeclare, 
+  onDeclare,
+  onDelete,
   seasonNumber,
   userId,
   userTeamId,
   userTeamName,
   userName,
+  isAdmin = false,
 }: FreeAgentSectionProps) {
   const [showForm, setShowForm] = useState(false);
   const [playerName, setPlayerName] = useState('');
@@ -1014,6 +1022,11 @@ function FreeAgentSection({
   const [masterList, setMasterList] = useState<FreeAgentDeclaration[]>([]);
   const [loadingMasterList, setLoadingMasterList] = useState(true);
   const [activeView, setActiveView] = useState<'your' | 'all'>('your');
+  
+  // Admin: Selected team for declaring on behalf of others
+  const [selectedTeamId, setSelectedTeamId] = useState<string>(userTeamId || '');
+  const [selectedTeamName, setSelectedTeamName] = useState<string>(userTeamName || '');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Load master free agent list
   useEffect(() => {
@@ -1053,15 +1066,19 @@ function FreeAgentSection({
     setIsSubmitting(true);
     setSubmitError(null);
     
+    // For admins, use the selected team; for regular users, use their team
+    const teamIdToUse = isAdmin && selectedTeamId ? selectedTeamId : userTeamId;
+    const teamNameToUse = isAdmin && selectedTeamName ? selectedTeamName : userTeamName;
+    
     try {
       const { submitFreeAgentDeclaration } = await import('@/lib/supabase');
       
       const result = await submitFreeAgentDeclaration({
         season_number: seasonNumber,
-        declaring_team_id: userTeamId || 'unknown',
+        declaring_team_id: teamIdToUse || 'unknown',
         declaring_user_id: userId,
-        declaring_team_name: userTeamName,
-        declaring_user_name: userName,
+        declaring_team_name: teamNameToUse,
+        declaring_user_name: isAdmin ? `${userName} (Commissioner)` : userName,
         player_name: pendingDeclaration.player_name,
         position: pendingDeclaration.position,
         classification: pendingDeclaration.classification,
@@ -1100,6 +1117,31 @@ function FreeAgentSection({
       classification,
       overall_rating: overallRating,
     });
+  };
+
+  // Admin: Delete a declaration
+  const handleDeleteDeclaration = async (declarationId: string) => {
+    if (!isAdmin) return;
+    
+    setDeletingId(declarationId);
+    try {
+      const { deleteFreeAgentDeclaration } = await import('@/lib/supabase');
+      const result = await deleteFreeAgentDeclaration(declarationId);
+      
+      if (result.success) {
+        // Remove from master list
+        setMasterList(prev => prev.filter(d => d.id !== declarationId));
+        // Notify parent to update
+        onDelete?.(declarationId);
+      } else {
+        setSubmitError(result.error || 'Failed to delete declaration');
+      }
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      setSubmitError(err.message || 'Failed to delete declaration');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const formatDateTime = (dateStr: string) => {
@@ -1224,6 +1266,42 @@ function FreeAgentSection({
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {/* Admin: Team Selector */}
+                {isAdmin && (
+                  <div className="mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Shield className="w-5 h-5 text-amber-400" />
+                      <h4 className="font-medium text-amber-400">Commissioner Mode</h4>
+                    </div>
+                    <p className="text-sm text-slate-300 mb-3">
+                      Select which team you're declaring for. You can declare on behalf of any team.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {MLB_TEAMS.map((team) => (
+                        <button
+                          key={team.id}
+                          onClick={() => {
+                            setSelectedTeamId(team.id);
+                            setSelectedTeamName(team.name);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                            selectedTeamId === team.id
+                              ? 'bg-amber-500 text-white'
+                              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          }`}
+                        >
+                          {team.abbreviation}
+                        </button>
+                      ))}
+                    </div>
+                    {selectedTeamName && (
+                      <p className="mt-2 text-sm text-amber-300">
+                        Declaring for: <span className="font-bold">{selectedTeamName}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+                
                 {submitError && (
                   <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                     {submitError}
@@ -1475,12 +1553,28 @@ function FreeAgentSection({
                           </div>
                         </div>
                       </div>
-                      <Badge className={dec.is_claimed 
-                        ? 'bg-purple-500/20 text-purple-400 border-purple-500/30'
-                        : 'bg-green-500/20 text-green-400 border-green-500/30'
-                      }>
-                        {dec.is_claimed ? 'Claimed' : 'Available'}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className={dec.is_claimed 
+                          ? 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+                          : 'bg-green-500/20 text-green-400 border-green-500/30'
+                        }>
+                          {dec.is_claimed ? 'Claimed' : 'Available'}
+                        </Badge>
+                        {isAdmin && !dec.is_claimed && (
+                          <button
+                            onClick={() => handleDeleteDeclaration(dec.id)}
+                            disabled={deletingId === dec.id}
+                            className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                            title="Delete declaration"
+                          >
+                            {deletingId === dec.id ? (
+                              <Clock className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
