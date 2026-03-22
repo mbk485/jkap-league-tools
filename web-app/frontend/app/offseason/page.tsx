@@ -549,7 +549,7 @@ function OffSeasonContent() {
                         <h2 className="text-2xl font-bold text-white">Free Agent Declarations</h2>
                       </div>
                       <p className="text-slate-300 text-lg mb-4">
-                        Choose which players you're releasing from your team. Other owners can then claim them.
+                        Designate players from your roster for free agency. Other GMs can then put in a claim.
                       </p>
                       <div className="flex items-center gap-4 text-sm">
                         <div className="flex items-center gap-2">
@@ -590,9 +590,9 @@ function OffSeasonContent() {
                       <div className="w-12 h-12 rounded-full bg-orange-500 text-white text-xl font-bold flex items-center justify-center mb-3">
                         1
                       </div>
-                      <h3 className="font-bold text-orange-400 mb-2">You Declare</h3>
+                      <h3 className="font-bold text-orange-400 mb-2">DFA Your Players</h3>
                       <p className="text-sm text-slate-400">
-                        Pick players from YOUR team that you're willing to let go. They become "free agents."
+                        Designate players from YOUR roster for free agency. They hit the waiver wire.
                       </p>
                     </div>
                     
@@ -601,9 +601,9 @@ function OffSeasonContent() {
                       <div className="w-12 h-12 rounded-full bg-cyan-500 text-white text-xl font-bold flex items-center justify-center mb-3">
                         2
                       </div>
-                      <h3 className="font-bold text-cyan-400 mb-2">Others Claim</h3>
+                      <h3 className="font-bold text-cyan-400 mb-2">Put In Claims</h3>
                       <p className="text-sm text-slate-400">
-                        Other teams can try to claim your players by offering one of their players in exchange.
+                        Claim players of equal or lesser tier from other teams' DFA list.
                       </p>
                     </div>
                     
@@ -612,9 +612,9 @@ function OffSeasonContent() {
                       <div className="w-12 h-12 rounded-full bg-emerald-500 text-white text-xl font-bold flex items-center justify-center mb-3">
                         3
                       </div>
-                      <h3 className="font-bold text-emerald-400 mb-2">Swaps Happen</h3>
+                      <h3 className="font-bold text-emerald-400 mb-2">Claims Process</h3>
                       <p className="text-sm text-slate-400">
-                        If someone claims your player, you get their offered player. Win-win roster building!
+                        Commissioner processes all claims. You acquire the players you claimed - think waiver wire pickups.
                       </p>
                     </div>
                   </div>
@@ -642,7 +642,7 @@ function OffSeasonContent() {
                 >
                   <UserMinus className="w-8 h-8 text-orange-400 mb-2" />
                   <p className="font-bold text-white">Declare Players</p>
-                  <p className="text-sm text-slate-400">Release players from your team</p>
+                  <p className="text-sm text-slate-400">DFA players from your roster</p>
                 </button>
                 
                 <button
@@ -651,7 +651,7 @@ function OffSeasonContent() {
                 >
                   <UserPlus className="w-8 h-8 text-cyan-400 mb-2" />
                   <p className="font-bold text-white">Claim Players</p>
-                  <p className="text-sm text-slate-400">Pick up free agents</p>
+                  <p className="text-sm text-slate-400">Claim off the waiver wire</p>
                 </button>
                 
                 <button

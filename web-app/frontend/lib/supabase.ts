@@ -5768,6 +5768,18 @@ const NOTIFICATIONS_READ_KEY = 'jkap_notifications_read';
 // Default system notifications (used as fallback if DB is not available)
 const DEFAULT_NOTIFICATIONS: DBNotification[] = [
   {
+    id: 'fa-declaration-guide-2024',
+    title: '⚾ Time to DFA Your Players!',
+    content: 'The free agent declaration period is OPEN. Go to Off-Season → "Declare Free Agents" tab to designate players for free agency. You MUST declare at least 1 player to participate in claiming!',
+    category: 'announcement',
+    priority: 'urgent',
+    action_url: '/offseason?tab=free-agents',
+    action_label: 'Declare Now',
+    icon: '⚾',
+    is_active: true,
+    created_at: new Date().toISOString(),
+  },
+  {
     id: 'discord-link-update-2024',
     title: '📢 New Discord Server Link',
     content: 'Our Discord invite link has been updated! Click below to join or rejoin the server with the new link. Make sure you\'re connected to stay up to date with league announcements, matchup coordination, and community chat.',
