@@ -160,9 +160,9 @@ export function Navbar() {
 
           {/* Right side - Auth status */}
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* Notification Bell - Only show when authenticated */}
+            {/* NOTIFICATION BELL - Always visible for logged in users */}
             {isAuthenticated && user && (
-              <NotificationInbox className="hidden sm:block" />
+              <NotificationInbox />
             )}
             
             {isAuthenticated && user ? (
@@ -314,13 +314,6 @@ export function Navbar() {
               >
                 Sign In
               </Button>
-            )}
-
-            {/* Notification Bell - Mobile */}
-            {isAuthenticated && user && (
-              <div className="sm:hidden">
-                <NotificationInbox />
-              </div>
             )}
 
             {/* Mobile menu button */}

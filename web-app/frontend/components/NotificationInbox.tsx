@@ -151,15 +151,20 @@ export function NotificationInbox({ className = '' }: NotificationInboxProps) {
 
   return (
     <div ref={dropdownRef} className={`relative ${className}`}>
-      {/* Notification Bell Button */}
+      {/* Notification Bell Button - PROMINENT */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-lg hover:bg-muted transition-colors"
+        className={`relative p-2.5 rounded-xl transition-all ${
+          unreadCount > 0 
+            ? 'bg-jkap-red-500/20 hover:bg-jkap-red-500/30 ring-2 ring-jkap-red-500/50' 
+            : 'hover:bg-muted'
+        }`}
         aria-label="Notifications"
+        title={unreadCount > 0 ? `${unreadCount} new notification${unreadCount !== 1 ? 's' : ''}` : 'Notifications'}
       >
-        <Bell className="w-5 h-5 text-muted-foreground" />
+        <Bell className={`w-5 h-5 ${unreadCount > 0 ? 'text-jkap-red-500' : 'text-muted-foreground'}`} />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-5 h-5 flex items-center justify-center text-[10px] font-bold text-white bg-jkap-red-500 rounded-full animate-pulse">
+          <span className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center text-[10px] font-bold text-white bg-jkap-red-500 rounded-full animate-bounce shadow-lg shadow-jkap-red-500/50">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -167,15 +172,20 @@ export function NotificationInbox({ className = '' }: NotificationInboxProps) {
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl bg-card border border-border shadow-xl z-50 animate-slide-down overflow-hidden">
+        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl bg-card border-2 border-border shadow-2xl z-50 animate-slide-down overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gradient-to-r from-jkap-red-500/10 to-transparent">
             <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-jkap-red-500" />
-              <h3 className="font-semibold text-foreground">Notifications</h3>
+              <div className="p-1.5 rounded-lg bg-jkap-red-500/20">
+                <Bell className="w-4 h-4 text-jkap-red-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-foreground">Notifications</h3>
+                <p className="text-xs text-muted-foreground">From the Commissioner</p>
+              </div>
               {unreadCount > 0 && (
-                <span className="text-xs px-1.5 py-0.5 rounded-full bg-jkap-red-500/20 text-jkap-red-500">
-                  {unreadCount} new
+                <span className="text-xs px-2 py-1 rounded-full bg-jkap-red-500 text-white font-bold">
+                  {unreadCount} NEW
                 </span>
               )}
             </div>
