@@ -5087,6 +5087,115 @@ export async function getAllClaimSubmissions(seasonNumber: number): Promise<DBCl
   }
 }
 
+// =============================================================================
+// SIGNINGS / CLAIM RESOLUTION
+// =============================================================================
+
+export interface DBSigning {
+  id: string;
+  season_number: number;
+  signing_team_id: string;
+  signing_team_name: string;
+  player_name: string;
+  player_classification: string;
+  player_overall?: number;
+  contract_years: number;
+  contract_value: number;
+  contract_display: string;
+  from_team_id?: string;
+  from_team_name?: string;
+  offered_player_name?: string;
+  offered_classification?: string;
+  signing_type: 'claim' | 'priority_claim' | 'direct';
+  announcement_text?: string;
+  signed_at: string;
+  created_at: string;
+}
+
+export async function getSignings(seasonNumber: number): Promise<DBSigning[]> {
+  try {
+    const { data, error } = await supabase
+      .from('signings')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .order('signed_at', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching signings:', err);
+    return [];
+  }
+}
+
+export async function createSigning(signing: Omit<DBSigning, 'id' | 'created_at'>): Promise<{ success: boolean; signing?: DBSigning; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('signings')
+      .insert({
+        ...signing,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, signing: data };
+  } catch (err: any) {
+    console.error('Error creating signing:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteSigning(signingId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('signings')
+      .delete()
+      .eq('id', signingId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting signing:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateClaimSubmissionStatus(
+  claimId: string, 
+  status: 'pending' | 'processed'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('claim_submissions')
+      .update({ status })
+      .eq('id', claimId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating claim status:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function getTeamSigningsCount(teamId: string, seasonNumber: number): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from('signings')
+      .select('*', { count: 'exact', head: true })
+      .eq('signing_team_id', teamId)
+      .eq('season_number', seasonNumber);
+
+    if (error) throw error;
+    return count || 0;
+  } catch (err) {
+    console.error('Error getting team signings count:', err);
+    return 0;
+  }
+}
+
 // Process a claim (commissioner only)
 export async function processFreeAgentClaim(
   claimId: string,

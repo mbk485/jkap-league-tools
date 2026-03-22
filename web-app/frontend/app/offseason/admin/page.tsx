@@ -86,6 +86,11 @@ import {
   DBFinalStanding,
   getLeagueSettings,
   saveLeagueSettings,
+  getSignings,
+  createSigning,
+  deleteSigning,
+  DBSigning,
+  DBClaimSubmission,
 } from '@/lib/supabase';
 import { MLB_TEAMS } from '@/types/league';
 import { checkQuestionnaireCompletions, getAllQuestionnaireCompletions } from '@/lib/typeform-api';
@@ -138,7 +143,7 @@ export default function OffSeasonAdminPage() {
   const router = useRouter();
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'voting' | 'standings' | 'phases'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'voting' | 'standings' | 'phases' | 'signings'>('overview');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   
   // Season state
@@ -218,6 +223,11 @@ export default function OffSeasonAdminPage() {
   const [allDeclarations, setAllDeclarations] = useState<any[]>([]);
   const [deletingDeclaration, setDeletingDeclaration] = useState<string | null>(null);
 
+  // Signings state
+  const [signings, setSignings] = useState<DBSigning[]>([]);
+  const [processingSignings, setProcessingSignings] = useState(false);
+  const [copiedAnnouncement, setCopiedAnnouncement] = useState<string | null>(null);
+
   // Load real data from database
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -264,6 +274,10 @@ export default function OffSeasonAdminPage() {
       // Load all free agent declarations (for management)
       const allDeclarationsData = await getMasterFreeAgentList(currentSeasonNum);
       setAllDeclarations(allDeclarationsData || []);
+
+      // Load signings
+      const signingsData = await getSignings(currentSeasonNum);
+      setSignings(signingsData || []);
 
       // Set season info
       setSeasonNumber(currentSeasonNum);
@@ -931,6 +945,7 @@ export default function OffSeasonAdminPage() {
           {[
             { id: 'overview', label: 'Overview', icon: BarChart3 },
             { id: 'members', label: 'Members & SMS', icon: Users },
+            { id: 'signings', label: 'Signings', icon: Award },
             { id: 'voting', label: 'Awards Voting', icon: Trophy },
             { id: 'standings', label: 'Standings', icon: Target },
             { id: 'phases', label: 'Phase Control', icon: Settings },
@@ -2798,10 +2813,814 @@ Let's get this done! 💪`;
               </Card>
             </div>
           )}
+
+          {/* Signings Tab */}
+          {activeTab === 'signings' && (
+            <SigningsSection
+              claims={allClaims}
+              declarations={allDeclarations}
+              signings={signings}
+              seasonNumber={seasonNumber}
+              onSigningCreated={(signing) => setSignings([...signings, signing])}
+              onSigningDeleted={(id) => setSignings(signings.filter(s => s.id !== id))}
+              processingSignings={processingSignings}
+              setProcessingSignings={setProcessingSignings}
+              copiedAnnouncement={copiedAnnouncement}
+              setCopiedAnnouncement={setCopiedAnnouncement}
+            />
+          )}
         </div>
       </main>
 
       <Footer />
+    </div>
+  );
+}
+
+// =============================================================================
+// SIGNINGS SECTION COMPONENT
+// =============================================================================
+
+// Priority Order: Worst record gets first pick (index 0 = highest priority)
+const CLAIM_PRIORITY_ORDER = [
+  'min', // Twins - worst record
+  'mil', // Brewers
+  'cin', // Reds
+  'ari', // Diamondbacks
+  'nym', // Mets
+  'cle', // Guardians
+  'det', // Tigers
+  'sd',  // Padres
+  'tor', // Blue Jays
+  'tex', // Rangers
+  'nyy', // Yankees
+  'sf',  // Giants
+  'kc',  // Royals
+  'hou', // Astros
+  'tb',  // Rays
+  'cws', // White Sox
+  'col', // Rockies
+  'oak', // Athletics
+  'mia', // Marlins
+  'phi', // Phillies
+  'pit', // Pirates
+  'wsh', // Nationals
+  'bos', // Red Sox
+  'bal', // Orioles
+  'stl', // Cardinals
+  'sea', // Mariners - best record
+] as const;
+
+const TEAM_NAMES: Record<string, string> = {
+  min: 'Minnesota Twins',
+  mil: 'Milwaukee Brewers',
+  cin: 'Cincinnati Reds',
+  ari: 'Arizona Diamondbacks',
+  nym: 'New York Mets',
+  cle: 'Cleveland Guardians',
+  det: 'Detroit Tigers',
+  sd: 'San Diego Padres',
+  tor: 'Toronto Blue Jays',
+  tex: 'Texas Rangers',
+  nyy: 'New York Yankees',
+  sf: 'San Francisco Giants',
+  kc: 'Kansas City Royals',
+  hou: 'Houston Astros',
+  tb: 'Tampa Bay Rays',
+  cws: 'Chicago White Sox',
+  col: 'Colorado Rockies',
+  oak: 'Oakland Athletics',
+  mia: 'Miami Marlins',
+  phi: 'Philadelphia Phillies',
+  pit: 'Pittsburgh Pirates',
+  wsh: 'Washington Nationals',
+  bos: 'Boston Red Sox',
+  bal: 'Baltimore Orioles',
+  stl: 'St. Louis Cardinals',
+  sea: 'Seattle Mariners',
+};
+
+// Contract generation based on player classification
+function generateContract(classification: string): { years: number; value: number; display: string } {
+  const classLower = classification.toLowerCase();
+  
+  switch (classLower) {
+    case 'diamond':
+      const diamondYears = Math.floor(Math.random() * 4) + 6; // 6-9 years
+      const diamondValue = Math.floor(Math.random() * 150) + 250; // $250M-$400M
+      return {
+        years: diamondYears,
+        value: diamondValue * 1000000,
+        display: `${diamondYears} years, $${diamondValue}M`,
+      };
+    case 'gold':
+      const goldYears = Math.floor(Math.random() * 3) + 4; // 4-6 years
+      const goldValue = Math.floor(Math.random() * 80) + 80; // $80M-$160M
+      return {
+        years: goldYears,
+        value: goldValue * 1000000,
+        display: `${goldYears} years, $${goldValue}M`,
+      };
+    case 'silver':
+      const silverYears = Math.floor(Math.random() * 2) + 2; // 2-3 years
+      const silverValue = Math.floor(Math.random() * 25) + 20; // $20M-$45M
+      return {
+        years: silverYears,
+        value: silverValue * 1000000,
+        display: `${silverYears} years, $${silverValue}M`,
+      };
+    case 'bronze':
+      const bronzeYears = Math.floor(Math.random() * 2) + 1; // 1-2 years
+      const bronzeValue = Math.floor(Math.random() * 8) + 2; // $2M-$10M
+      return {
+        years: bronzeYears,
+        value: bronzeValue * 1000000,
+        display: `${bronzeYears} years, $${bronzeValue}M`,
+      };
+    default: // common
+      return {
+        years: 1,
+        value: 1000000,
+        display: '1 year, $1M',
+      };
+  }
+}
+
+// Generate ESPN-style announcement
+function generateAnnouncement(
+  playerName: string,
+  signingTeam: string,
+  contract: { years: number; value: number; display: string },
+  classification: string
+): string {
+  const classEmoji = {
+    diamond: '💎',
+    gold: '🥇',
+    silver: '🥈',
+    bronze: '🥉',
+    common: '⚪',
+  }[classification.toLowerCase()] || '⚾';
+
+  const avgPerYear = Math.round(contract.value / contract.years / 1000000);
+  
+  return `${classEmoji} BREAKING: ${playerName} signs with the ${signingTeam}!
+
+📝 Contract Details:
+• ${contract.display}
+• $${avgPerYear}M AAV
+
+The ${signingTeam} have bolstered their roster with this ${classification.toLowerCase()} acquisition. ${playerName} joins the team looking to make an immediate impact.
+
+#JKAP #MLBTheShow #FreeAgency`;
+}
+
+interface SigningsSectionProps {
+  claims: DBClaimSubmission[];
+  declarations: any[];
+  signings: DBSigning[];
+  seasonNumber: number;
+  onSigningCreated: (signing: DBSigning) => void;
+  onSigningDeleted: (id: string) => void;
+  processingSignings: boolean;
+  setProcessingSignings: (val: boolean) => void;
+  copiedAnnouncement: string | null;
+  setCopiedAnnouncement: (val: string | null) => void;
+}
+
+function SigningsSection({
+  claims,
+  declarations,
+  signings,
+  seasonNumber,
+  onSigningCreated,
+  onSigningDeleted,
+  processingSignings,
+  setProcessingSignings,
+  copiedAnnouncement,
+  setCopiedAnnouncement,
+}: SigningsSectionProps) {
+  const [selectedClaim, setSelectedClaim] = useState<DBClaimSubmission | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+  const [manualSigningMode, setManualSigningMode] = useState(false);
+  const [manualTeam, setManualTeam] = useState('');
+  const [manualPlayer, setManualPlayer] = useState('');
+  const [manualClassification, setManualClassification] = useState('');
+
+  // Get team's priority ranking (lower = better priority)
+  const getTeamPriority = (teamId: string): number => {
+    const idx = CLAIM_PRIORITY_ORDER.indexOf(teamId.toLowerCase() as any);
+    return idx === -1 ? 999 : idx;
+  };
+
+  // Count how many successful claims a team has
+  const getTeamSigningsCount = (teamId: string): number => {
+    return signings.filter(s => s.signing_team_id.toLowerCase() === teamId.toLowerCase()).length;
+  };
+
+  // Check if team can still claim (max 2)
+  const canTeamClaim = (teamId: string): boolean => {
+    return getTeamSigningsCount(teamId) < 2;
+  };
+
+  // Get all teams claiming a specific player, sorted by priority
+  const getClaimsForPlayer = (playerName: string) => {
+    const playerClaims = claims.filter(c => 
+      c.choice_1_player === playerName || 
+      c.choice_2_player === playerName || 
+      c.choice_3_player === playerName
+    );
+    
+    return playerClaims
+      .map(c => ({
+        ...c,
+        priority: getTeamPriority(c.claiming_team_id),
+        choiceRank: c.choice_1_player === playerName ? 1 : c.choice_2_player === playerName ? 2 : 3,
+        canClaim: canTeamClaim(c.claiming_team_id),
+      }))
+      .sort((a, b) => a.priority - b.priority);
+  };
+
+  // Check if a player was declared by a team that is claiming someone
+  const checkPriorityClaimRight = (playerName: string, claimingTeamId: string): {
+    hasPriorityRight: boolean;
+    originalOwnerTeamId: string | null;
+  } => {
+    const declaration = declarations.find(d => d.player_name === playerName);
+    if (!declaration) return { hasPriorityRight: false, originalOwnerTeamId: null };
+
+    // Check if the original owner (who declared this player) is claiming someone
+    const originalOwnerClaim = claims.find(c => c.claiming_team_id === declaration.declaring_team_id);
+    
+    // If original owner has a claim and the claiming team declared the player the original owner wants...
+    // This is complex - let's simplify: the priority right is when YOUR player gets claimed, 
+    // you can take the claimer's offered player
+    return {
+      hasPriorityRight: originalOwnerClaim !== null,
+      originalOwnerTeamId: declaration.declaring_team_id,
+    };
+  };
+
+  // Process a signing
+  const handleProcessSigning = async (
+    teamId: string,
+    teamName: string,
+    playerName: string,
+    playerClassification: string,
+    signingType: 'claim' | 'priority_claim' | 'direct',
+    fromTeamId?: string,
+    fromTeamName?: string,
+    offeredPlayer?: string,
+    offeredClass?: string
+  ) => {
+    setProcessingSignings(true);
+    try {
+      const contract = generateContract(playerClassification);
+      const announcement = generateAnnouncement(playerName, teamName, contract, playerClassification);
+      
+      const result = await createSigning({
+        season_number: seasonNumber,
+        signing_team_id: teamId,
+        signing_team_name: teamName,
+        player_name: playerName,
+        player_classification: playerClassification,
+        contract_years: contract.years,
+        contract_value: contract.value,
+        contract_display: contract.display,
+        from_team_id: fromTeamId,
+        from_team_name: fromTeamName,
+        offered_player_name: offeredPlayer,
+        offered_classification: offeredClass,
+        signing_type: signingType,
+        announcement_text: announcement,
+        signed_at: new Date().toISOString(),
+      });
+
+      if (result.success && result.signing) {
+        onSigningCreated(result.signing);
+        setSelectedPlayer(null);
+        setSelectedClaim(null);
+      } else {
+        alert('Failed to create signing: ' + result.error);
+      }
+    } catch (err) {
+      console.error('Error processing signing:', err);
+      alert('Error processing signing');
+    } finally {
+      setProcessingSignings(false);
+    }
+  };
+
+  // Delete a signing
+  const handleDeleteSigning = async (signingId: string) => {
+    if (!confirm('Delete this signing? This cannot be undone.')) return;
+    
+    try {
+      const result = await deleteSigning(signingId);
+      if (result.success) {
+        onSigningDeleted(signingId);
+      } else {
+        alert('Failed to delete signing: ' + result.error);
+      }
+    } catch (err) {
+      console.error('Error deleting signing:', err);
+    }
+  };
+
+  // Copy announcement to clipboard
+  const handleCopyAnnouncement = (announcement: string, signingId: string) => {
+    navigator.clipboard.writeText(announcement);
+    setCopiedAnnouncement(signingId);
+    setTimeout(() => setCopiedAnnouncement(null), 2000);
+  };
+
+  // Get unique claimed players from all claims
+  const allClaimedPlayers: string[] = Array.from(new Set(
+    claims.flatMap(c => [c.choice_1_player, c.choice_2_player, c.choice_3_player].filter((p): p is string => p !== null && p !== undefined))
+  ));
+
+  // Get available free agents (declared but not yet signed)
+  const signedPlayerNames = signings.map(s => s.player_name);
+  const availableFreeAgents = declarations.filter(d => !signedPlayerNames.includes(d.player_name));
+
+  return (
+    <div className="space-y-6">
+      {/* Overview Cards */}
+      <div className="grid md:grid-cols-4 gap-4">
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-cyan-500/20">
+                <ClipboardList className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-cyan-400">{claims.length}</p>
+                <p className="text-xs text-slate-400">Claims Submitted</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-500/20">
+                <Users className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-amber-400">{availableFreeAgents.length}</p>
+                <p className="text-xs text-slate-400">Free Agents Available</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/20">
+                <Award className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-emerald-400">{signings.length}</p>
+                <p className="text-xs text-slate-400">Signings Completed</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-500/20">
+                <Target className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-purple-400">{allClaimedPlayers.length}</p>
+                <p className="text-xs text-slate-400">Players With Claims</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Rules Reference */}
+      <Card className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30">
+        <CardContent className="py-4">
+          <div className="flex items-start gap-4">
+            <div className="p-2 rounded-lg bg-amber-500/20">
+              <Shield className="w-6 h-6 text-amber-400" />
+            </div>
+            <div className="space-y-2 text-sm">
+              <h4 className="font-bold text-amber-400">Signing Rules</h4>
+              <ul className="space-y-1 text-slate-300">
+                <li>✅ <strong>Priority Claim:</strong> If YOUR player gets claimed, you can take the claiming team&apos;s offered player first</li>
+                <li>⚠️ <strong>Multiple Claims:</strong> Worst regular season record gets priority (Twins → Mariners)</li>
+                <li>🚫 <strong>Claim Limit:</strong> Each team limited to 2 successful claims total</li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* All Claims - Organized by Player */}
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Vote className="w-5 h-5 text-cyan-400" />
+              Claims by Player
+            </CardTitle>
+            <p className="text-sm text-slate-400">
+              Click a player to see who&apos;s claiming them and process the signing
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {allClaimedPlayers.map((playerName) => {
+                const declaration = declarations.find(d => d.player_name === playerName);
+                const claimsForPlayer = getClaimsForPlayer(playerName);
+                const isSigned = signedPlayerNames.includes(playerName);
+                
+                return (
+                  <button
+                    key={playerName}
+                    onClick={() => !isSigned && setSelectedPlayer(playerName)}
+                    disabled={isSigned}
+                    className={`w-full p-3 rounded-lg border text-left transition-all ${
+                      isSigned
+                        ? 'bg-emerald-500/10 border-emerald-500/30 opacity-60 cursor-not-allowed'
+                        : selectedPlayer === playerName
+                        ? 'bg-cyan-500/20 border-cyan-500/50'
+                        : 'bg-slate-700/30 border-slate-600 hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-white">{playerName}</p>
+                        <p className="text-xs text-slate-400">
+                          {declaration?.classification || 'Unknown'} · From {declaration?.declaring_team_name || 'Unknown'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isSigned ? (
+                          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Signed
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
+                            {claimsForPlayer.length} claim{claimsForPlayer.length !== 1 ? 's' : ''}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              
+              {allClaimedPlayers.length === 0 && (
+                <div className="text-center py-8 text-slate-400">
+                  <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                  <p>No claims submitted yet</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Process Signing Panel */}
+        <Card className="bg-slate-800/50 border-cyan-500/30">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Award className="w-5 h-5 text-cyan-400" />
+              Process Signing
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selectedPlayer ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
+                  <h4 className="font-bold text-cyan-400 text-lg mb-1">{selectedPlayer}</h4>
+                  <p className="text-sm text-slate-300">
+                    {declarations.find(d => d.player_name === selectedPlayer)?.classification || 'Unknown'} ·
+                    From {declarations.find(d => d.player_name === selectedPlayer)?.declaring_team_name || 'Unknown'}
+                  </p>
+                </div>
+
+                <div>
+                  <h5 className="text-sm font-medium text-white mb-2">Teams Claiming (by priority):</h5>
+                  <div className="space-y-2">
+                    {getClaimsForPlayer(selectedPlayer).map((claim, idx) => {
+                      const teamSignings = getTeamSigningsCount(claim.claiming_team_id);
+                      const canClaim = teamSignings < 2;
+                      
+                      return (
+                        <div 
+                          key={claim.id} 
+                          className={`p-3 rounded-lg border ${
+                            idx === 0 && canClaim
+                              ? 'bg-emerald-500/10 border-emerald-500/30'
+                              : !canClaim
+                              ? 'bg-red-500/10 border-red-500/30 opacity-60'
+                              : 'bg-slate-700/30 border-slate-600'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center text-xs font-bold text-white">
+                                {idx + 1}
+                              </span>
+                              <span className="font-medium text-white">{claim.claiming_team_name}</span>
+                              {idx === 0 && canClaim && (
+                                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
+                                  PRIORITY
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-400">
+                                {teamSignings}/2 claims used
+                              </span>
+                              {!canClaim && (
+                                <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
+                                  MAXED
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-sm text-slate-300">
+                            <span className="text-slate-400">Choice #{claim.choiceRank}</span>
+                            <span className="mx-2">·</span>
+                            <span>Offering: <span className="text-amber-400">{claim.offered_player_name}</span></span>
+                            <span className="text-slate-500 ml-1">({claim.offered_classification})</span>
+                          </div>
+                          
+                          {canClaim && (
+                            <Button
+                              onClick={() => handleProcessSigning(
+                                claim.claiming_team_id,
+                                claim.claiming_team_name,
+                                selectedPlayer,
+                                declarations.find(d => d.player_name === selectedPlayer)?.classification || 'unknown',
+                                'claim',
+                                declarations.find(d => d.player_name === selectedPlayer)?.declaring_team_id,
+                                declarations.find(d => d.player_name === selectedPlayer)?.declaring_team_name,
+                                claim.offered_player_name,
+                                claim.offered_classification
+                              )}
+                              disabled={processingSignings}
+                              className="mt-3 w-full bg-emerald-600 hover:bg-emerald-500"
+                            >
+                              {processingSignings ? (
+                                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                              ) : (
+                                <Award className="w-4 h-4 mr-2" />
+                              )}
+                              Award to {claim.claiming_team_name}
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedPlayer(null)}
+                  className="w-full"
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-slate-400">
+                <Vote className="w-16 h-16 mx-auto mb-4 opacity-20" />
+                <p className="text-lg">Select a player from the list</p>
+                <p className="text-sm">to see claims and process signings</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Completed Signings with Announcements */}
+      <Card className="bg-slate-800/50 border-emerald-500/30">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-emerald-400" />
+            Completed Signings ({signings.length})
+          </CardTitle>
+          <p className="text-sm text-slate-400">
+            Copy announcements for Discord/Facebook
+          </p>
+        </CardHeader>
+        <CardContent>
+          {signings.length > 0 ? (
+            <div className="space-y-4">
+              {signings.map((signing) => (
+                <div key={signing.id} className="p-4 rounded-lg bg-slate-700/50 border border-slate-600">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h4 className="font-bold text-white text-lg">{signing.player_name}</h4>
+                      <p className="text-sm text-slate-300">
+                        Signed by <span className="text-emerald-400">{signing.signing_team_name}</span>
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {signing.contract_display} · {signing.player_classification}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCopyAnnouncement(signing.announcement_text || '', signing.id)}
+                        className={copiedAnnouncement === signing.id ? 'bg-emerald-500/20 text-emerald-400' : ''}
+                      >
+                        {copiedAnnouncement === signing.id ? (
+                          <>
+                            <Check className="w-4 h-4 mr-1" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 mr-1" />
+                            Copy
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDeleteSigning(signing.id)}
+                        className="text-red-400 hover:bg-red-500/20"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* Announcement Preview */}
+                  <div className="p-3 rounded-lg bg-slate-800 border border-slate-600 text-sm">
+                    <pre className="whitespace-pre-wrap text-slate-300 font-sans">
+                      {signing.announcement_text}
+                    </pre>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-slate-400">
+              <Award className="w-16 h-16 mx-auto mb-4 opacity-20" />
+              <p className="text-lg">No signings yet</p>
+              <p className="text-sm">Process claims above to create signings</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Manual Signing (for special cases) */}
+      <Card className="bg-slate-800/50 border-slate-700">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-white flex items-center gap-2">
+              <Edit3 className="w-5 h-5 text-slate-400" />
+              Manual Signing
+            </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setManualSigningMode(!manualSigningMode)}
+            >
+              {manualSigningMode ? 'Hide' : 'Show'}
+            </Button>
+          </div>
+        </CardHeader>
+        {manualSigningMode && (
+          <CardContent>
+            <p className="text-sm text-slate-400 mb-4">
+              For special cases (missed deadlines, commissioner decisions, etc.)
+            </p>
+            <div className="grid md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Team</label>
+                <select
+                  value={manualTeam}
+                  onChange={(e) => setManualTeam(e.target.value)}
+                  className="w-full p-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                >
+                  <option value="">Select team...</option>
+                  {CLAIM_PRIORITY_ORDER.map((teamId) => (
+                    <option key={teamId} value={teamId}>
+                      {TEAM_NAMES[teamId]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Player</label>
+                <select
+                  value={manualPlayer}
+                  onChange={(e) => {
+                    setManualPlayer(e.target.value);
+                    const dec = declarations.find(d => d.player_name === e.target.value);
+                    if (dec) setManualClassification(dec.classification);
+                  }}
+                  className="w-full p-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                >
+                  <option value="">Select player...</option>
+                  {availableFreeAgents.map((fa) => (
+                    <option key={fa.id} value={fa.player_name}>
+                      {fa.player_name} ({fa.classification})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Classification</label>
+                <select
+                  value={manualClassification}
+                  onChange={(e) => setManualClassification(e.target.value)}
+                  className="w-full p-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                >
+                  <option value="">Select...</option>
+                  <option value="diamond">Diamond</option>
+                  <option value="gold">Gold</option>
+                  <option value="silver">Silver</option>
+                  <option value="bronze">Bronze</option>
+                  <option value="common">Common</option>
+                </select>
+              </div>
+            </div>
+            <Button
+              onClick={() => {
+                if (!manualTeam || !manualPlayer || !manualClassification) {
+                  alert('Please fill in all fields');
+                  return;
+                }
+                handleProcessSigning(
+                  manualTeam,
+                  TEAM_NAMES[manualTeam],
+                  manualPlayer,
+                  manualClassification,
+                  'direct'
+                );
+                setManualTeam('');
+                setManualPlayer('');
+                setManualClassification('');
+              }}
+              disabled={processingSignings || !manualTeam || !manualPlayer || !manualClassification}
+              className="w-full bg-slate-600 hover:bg-slate-500"
+            >
+              {processingSignings ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Award className="w-4 h-4 mr-2" />
+              )}
+              Create Manual Signing
+            </Button>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Team Claims Tracker */}
+      <Card className="bg-slate-800/50 border-slate-700">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-purple-400" />
+            Team Claims Tracker (Max 2 per team)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+            {CLAIM_PRIORITY_ORDER.map((teamId, idx) => {
+              const count = getTeamSigningsCount(teamId);
+              const teamClaim = claims.find(c => c.claiming_team_id.toLowerCase() === teamId);
+              
+              return (
+                <div
+                  key={teamId}
+                  className={`p-2 rounded-lg border text-center ${
+                    count >= 2
+                      ? 'bg-emerald-500/10 border-emerald-500/30'
+                      : teamClaim
+                      ? 'bg-amber-500/10 border-amber-500/30'
+                      : 'bg-slate-700/30 border-slate-600'
+                  }`}
+                >
+                  <p className="text-xs text-slate-400">#{idx + 1}</p>
+                  <p className="font-bold text-white uppercase">{teamId}</p>
+                  <p className={`text-lg font-bold ${
+                    count >= 2 ? 'text-emerald-400' : count > 0 ? 'text-amber-400' : 'text-slate-500'
+                  }`}>
+                    {count}/2
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
