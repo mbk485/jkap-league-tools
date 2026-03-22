@@ -448,15 +448,23 @@ export default function OffSeasonAdminPage() {
         }
       });
 
-      // Build declarations map
-      const declarationsMap = new Map<string, boolean>();
+      // Build declarations maps - by user ID AND by team ID (fallback for ID mismatches)
+      const declarationsByUserId = new Map<string, boolean>();
+      const declarationsByTeamId = new Map<string, boolean>();
       declarationsData.forEach(d => {
-        declarationsMap.set(d.declaring_user_id, true);
+        if (d.declaring_user_id) {
+          declarationsByUserId.set(d.declaring_user_id, true);
+        }
+        if (d.declaring_team_id) {
+          declarationsByTeamId.set(d.declaring_team_id, true);
+        }
       });
 
       // Process members (jkapMembers already defined above)
       const processedMembers: MemberData[] = jkapMembers.map(u => {
         const mlbTeam = MLB_TEAMS.find(t => t.abbreviation === u.team_id);
+        // Check if user has declared by user ID OR by team ID
+        const hasDeclared = declarationsByUserId.has(u.id) || declarationsByTeamId.has(u.team_id || '');
         return {
           id: u.id,
           username: u.username || u.display_name || 'unknown',
@@ -468,7 +476,7 @@ export default function OffSeasonAdminPage() {
           isActive: true, // Default to active (no tracking yet)
           lastActive: u.created_at || '',
           questionnaireCompleted: questionnaireCompletedMap.get(u.id) || false,
-          freeAgentsDeclared: declarationsMap.has(u.id),
+          freeAgentsDeclared: hasDeclared,
         };
       });
       setMembers(processedMembers);
