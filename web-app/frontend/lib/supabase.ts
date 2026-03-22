@@ -5770,7 +5770,7 @@ const DEFAULT_NOTIFICATIONS: DBNotification[] = [
   {
     id: 'fa-declaration-guide-2024',
     title: '⚾ Time to DFA Your Players!',
-    content: 'The free agent declaration period is OPEN. Go to Off-Season → "Declare Free Agents" tab to designate players for free agency. You MUST declare at least 1 player to participate in claiming!',
+    content: 'Go to Off-Season → "Declare Free Agents" tab. IMPORTANT: Check your IN-GAME ROSTER in MLB The Show and pick players FROM YOUR TEAM in the game. Do NOT enter random players - only players currently on your team!',
     category: 'announcement',
     priority: 'urgent',
     action_url: '/offseason?tab=free-agents',

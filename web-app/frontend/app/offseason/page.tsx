@@ -549,7 +549,7 @@ function OffSeasonContent() {
                         <h2 className="text-2xl font-bold text-white">Free Agent Declarations</h2>
                       </div>
                       <p className="text-slate-300 text-lg mb-4">
-                        Designate players from your roster for free agency. Other GMs can then put in a claim.
+                        Check your <span className="text-orange-400 font-bold">IN-GAME ROSTER</span> in MLB The Show and designate players <span className="text-orange-400 font-bold">FROM YOUR TEAM</span> for free agency.
                       </p>
                       <div className="flex items-center gap-4 text-sm">
                         <div className="flex items-center gap-2">
@@ -592,7 +592,7 @@ function OffSeasonContent() {
                       </div>
                       <h3 className="font-bold text-orange-400 mb-2">DFA Your Players</h3>
                       <p className="text-sm text-slate-400">
-                        Designate players from YOUR roster for free agency. They hit the waiver wire.
+                        Open MLB The Show, check your roster, and pick players <span className="text-orange-300 font-semibold">from YOUR team in the game</span>.
                       </p>
                     </div>
                     
@@ -619,15 +619,28 @@ function OffSeasonContent() {
                     </div>
                   </div>
                   
-                  {/* Important Rule */}
-                  <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/30">
-                    <div className="flex items-center gap-3">
-                      <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0" />
-                      <div>
-                        <p className="font-bold text-red-400">Important Rule:</p>
-                        <p className="text-sm text-slate-300">
-                          You MUST declare at least 1 player to participate in claiming. No declarations = you can't claim anyone!
-                        </p>
+                  {/* Important Rules */}
+                  <div className="mt-4 space-y-3">
+                    <div className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">🎮</span>
+                        <div>
+                          <p className="font-bold text-orange-400">Check Your In-Game Roster First!</p>
+                          <p className="text-sm text-slate-300">
+                            Open MLB The Show → Go to your team roster → Only declare players that are <span className="font-bold text-white">actually on your team in the game</span>. Don't enter random players!
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+                      <div className="flex items-center gap-3">
+                        <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0" />
+                        <div>
+                          <p className="font-bold text-red-400">Must Declare to Claim:</p>
+                          <p className="text-sm text-slate-300">
+                            You MUST declare at least 1 player to participate in claiming. No declarations = you can't claim anyone!
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
