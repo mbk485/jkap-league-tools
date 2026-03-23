@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/Badge';
 import {
   fetchPlayerByUUID,
   searchPlayers,
+  findPlayerByName,
   getRarityBadgeColor,
   calculateTrueOverall,
   MLBTheShowPlayer,
@@ -69,6 +70,7 @@ export function PlayerStatsPopover({
     setError(null);
     
     try {
+      // Try UUID first if available
       if (playerUUID) {
         const data = await fetchPlayerByUUID(playerUUID);
         if (data) {
@@ -77,28 +79,34 @@ export function PlayerStatsPopover({
         }
       }
       
-      // Search by name if no UUID or UUID lookup failed
+      // Use fuzzy name search as fallback
+      const bestMatch = await findPlayerByName(playerName, {
+        position: position,
+      });
+      
+      if (bestMatch) {
+        // Fetch full player data using the UUID from the match
+        const fullData = await fetchPlayerByUUID(bestMatch.uuid);
+        if (fullData) {
+          setPlayer(fullData);
+          return;
+        }
+      }
+      
+      // Last resort: try basic search
       const results = await searchPlayers(playerName, {
         position: position,
       });
       
       if (results.length > 0) {
-        // Find exact match or closest match
-        const exactMatch = results.find(
-          p => p.name.toLowerCase() === playerName.toLowerCase()
-        );
-        const bestMatch = exactMatch || results[0];
-        
-        // Fetch full player data
-        const fullData = await fetchPlayerByUUID(bestMatch.uuid);
+        const fullData = await fetchPlayerByUUID(results[0].uuid);
         if (fullData) {
           setPlayer(fullData);
-        } else {
-          setError('Could not load player details');
+          return;
         }
-      } else {
-        setError('Player not found');
       }
+      
+      setError('Player not found in database');
     } catch (err) {
       console.error('Failed to load player:', err);
       setError('Failed to load player');

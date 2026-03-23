@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import {
   fetchPlayerByUUID,
+  findPlayerByName,
   getRarityColor,
   getRarityBadgeColor,
   calculateTrueOverall,
@@ -93,23 +94,40 @@ export function PlayerStatsCard({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (playerUUID && (expanded || showExpandedStats)) {
+    if ((playerUUID || playerName) && (expanded || showExpandedStats)) {
       loadPlayerData();
     }
-  }, [playerUUID, expanded, showExpandedStats]);
+  }, [playerUUID, playerName, expanded, showExpandedStats]);
 
   const loadPlayerData = async () => {
-    if (!playerUUID || player) return;
+    if (player) return;
+    if (!playerUUID && !playerName) return;
     
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPlayerByUUID(playerUUID);
-      if (data) {
-        setPlayer(data);
-      } else {
-        setError('Player not found');
+      // Try UUID first
+      if (playerUUID) {
+        const data = await fetchPlayerByUUID(playerUUID);
+        if (data) {
+          setPlayer(data);
+          return;
+        }
       }
+      
+      // Fallback to fuzzy name search
+      if (playerName) {
+        const match = await findPlayerByName(playerName, { position });
+        if (match) {
+          const data = await fetchPlayerByUUID(match.uuid);
+          if (data) {
+            setPlayer(data);
+            return;
+          }
+        }
+      }
+      
+      setError('Player not found');
     } catch (err) {
       console.error('Failed to load player:', err);
       setError('Failed to load stats');

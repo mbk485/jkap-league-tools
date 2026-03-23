@@ -372,8 +372,56 @@ async function loadAllLiveSeriesPlayers(): Promise<PlayerSearchResult[]> {
 }
 
 /**
+ * Normalize a player name for better matching
+ */
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[.''-]/g, '') // Remove punctuation
+    .replace(/\s+/g, ' ')   // Normalize spaces
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b/gi, '') // Remove suffixes
+    .trim();
+}
+
+/**
+ * Calculate similarity score between two names (0-1)
+ */
+function nameSimilarity(name1: string, name2: string): number {
+  const n1 = normalizeName(name1);
+  const n2 = normalizeName(name2);
+  
+  // Exact match
+  if (n1 === n2) return 1;
+  
+  // One contains the other
+  if (n1.includes(n2) || n2.includes(n1)) return 0.9;
+  
+  // Split into parts and check matches
+  const parts1 = n1.split(' ').filter(p => p.length > 1);
+  const parts2 = n2.split(' ').filter(p => p.length > 1);
+  
+  // Count matching parts
+  let matchScore = 0;
+  for (const p1 of parts1) {
+    for (const p2 of parts2) {
+      if (p1 === p2) {
+        matchScore += 1;
+      } else if (p1.startsWith(p2) || p2.startsWith(p1)) {
+        matchScore += 0.7;
+      }
+    }
+  }
+  
+  const maxParts = Math.max(parts1.length, parts2.length);
+  if (maxParts === 0) return 0;
+  
+  return Math.min(1, matchScore / maxParts);
+}
+
+/**
  * Search players by name (Live Series only)
  * Uses cached data for instant search results
+ * Now with improved fuzzy matching!
  */
 export async function searchPlayers(
   query: string,
@@ -383,22 +431,22 @@ export async function searchPlayers(
     minOvr?: number;
     maxOvr?: number;
     rarity?: string;
+    fuzzy?: boolean; // Enable fuzzy matching for better results
   } = {}
 ): Promise<PlayerSearchResult[]> {
   // Load all players first (uses cache if available)
   const allPlayers = await loadAllLiveSeriesPlayers();
   
+  const queryLower = query?.toLowerCase() || '';
+  const queryNorm = normalizeName(query || '');
+  
   // Filter based on criteria
-  const filtered = allPlayers.filter(p => {
-    // Name search
-    if (query && !p.name.toLowerCase().includes(query.toLowerCase())) {
-      return false;
-    }
+  let filtered = allPlayers.filter(p => {
     // Team filter
     if (options.team && p.team_short_name !== options.team && p.team !== options.team) {
       return false;
     }
-    // Position filter
+    // Position filter  
     if (options.position && p.display_position !== options.position) {
       return false;
     }
@@ -408,10 +456,97 @@ export async function searchPlayers(
     // Rarity
     if (options.rarity && p.rarity !== options.rarity) return false;
     
+    // Name search - basic contains check
+    if (query) {
+      const pNameLower = p.name.toLowerCase();
+      if (!pNameLower.includes(queryLower) && !queryLower.includes(pNameLower)) {
+        // Try normalized match
+        const pNameNorm = normalizeName(p.name);
+        if (!pNameNorm.includes(queryNorm) && !queryNorm.includes(pNameNorm)) {
+          return false;
+        }
+      }
+    }
+    
     return true;
   });
   
+  // If no results and we have a query, try fuzzy search
+  if (filtered.length === 0 && query && query.length >= 3) {
+    const fuzzyResults = allPlayers
+      .filter(p => {
+        // Apply non-name filters first
+        if (options.team && p.team_short_name !== options.team && p.team !== options.team) return false;
+        if (options.position && p.display_position !== options.position) return false;
+        if (options.minOvr && p.ovr < options.minOvr) return false;
+        if (options.maxOvr && p.ovr > options.maxOvr) return false;
+        if (options.rarity && p.rarity !== options.rarity) return false;
+        return true;
+      })
+      .map(p => ({
+        player: p,
+        score: nameSimilarity(query, p.name),
+      }))
+      .filter(r => r.score >= 0.5) // At least 50% match
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10)
+      .map(r => r.player);
+    
+    filtered = fuzzyResults;
+  }
+  
   return filtered;
+}
+
+/**
+ * Find a player by name with fuzzy matching
+ * Returns the best match or null
+ */
+export async function findPlayerByName(
+  name: string,
+  options: { position?: string; team?: string } = {}
+): Promise<PlayerSearchResult | null> {
+  const allPlayers = await loadAllLiveSeriesPlayers();
+  
+  // Filter by position/team first if provided
+  let candidates = allPlayers;
+  if (options.position) {
+    candidates = candidates.filter(p => p.display_position === options.position);
+  }
+  if (options.team) {
+    candidates = candidates.filter(p => 
+      p.team_short_name === options.team || p.team === options.team
+    );
+  }
+  
+  // Score all candidates
+  const scored = candidates.map(p => ({
+    player: p,
+    score: nameSimilarity(name, p.name),
+  }));
+  
+  // Sort by score descending
+  scored.sort((a, b) => b.score - a.score);
+  
+  // Return best match if score is good enough
+  if (scored.length > 0 && scored[0].score >= 0.6) {
+    return scored[0].player;
+  }
+  
+  // If we filtered by position/team and got no good match, try without filters
+  if ((options.position || options.team) && scored[0]?.score < 0.6) {
+    const allScored = allPlayers.map(p => ({
+      player: p,
+      score: nameSimilarity(name, p.name),
+    }));
+    allScored.sort((a, b) => b.score - a.score);
+    
+    if (allScored.length > 0 && allScored[0].score >= 0.6) {
+      return allScored[0].player;
+    }
+  }
+  
+  return null;
 }
 
 /**
