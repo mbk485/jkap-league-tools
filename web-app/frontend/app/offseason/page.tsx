@@ -1810,8 +1810,16 @@ function getTierIndex(tier: string): number {
 }
 
 function canClaimTier(userHighestTier: string, targetTier: string): boolean {
+  // If user has no declarations, they can't claim anything
+  if (userHighestTier === 'none' || userHighestTier === '') {
+    return false;
+  }
   const userTierIndex = getTierIndex(userHighestTier);
   const targetTierIndex = getTierIndex(targetTier);
+  // If either tier is invalid, block the claim
+  if (userTierIndex === -1 || targetTierIndex === -1) {
+    return false;
+  }
   // User can claim players at or below their highest declared tier
   return targetTierIndex <= userTierIndex;
 }
@@ -1853,21 +1861,35 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
         if (currentUser?.id) {
           const [userClaim, declarations] = await Promise.all([
             getUserClaimSubmission(currentUser.id, 4),
-            getUserDeclarations(currentUser.id, 4),
+            getUserDeclarations(currentUser.id, 4, currentUser.team_id),
           ]);
           setExistingClaim(userClaim);
           setUserDeclarations(declarations || []);
+          
+          // Debug: log what we found
+          console.log('[Claims] User:', currentUser.id, 'Team:', currentUser.team_id);
+          console.log('[Claims] Found declarations:', declarations?.length || 0);
+          if (declarations && declarations.length > 0) {
+            console.log('[Claims] Declarations:', declarations.map(d => `${d.player_name} (${d.classification})`));
+          }
           
           // Determine user's highest declared tier
           if (declarations && declarations.length > 0) {
             let highestIndex = -1;
             declarations.forEach(d => {
               const idx = getTierIndex(d.classification);
+              console.log('[Claims] Declaration tier:', d.classification, '-> index:', idx);
               if (idx > highestIndex) highestIndex = idx;
             });
             if (highestIndex >= 0) {
-              setUserHighestTier(TIER_HIERARCHY[highestIndex]);
+              const tier = TIER_HIERARCHY[highestIndex];
+              console.log('[Claims] Setting userHighestTier to:', tier);
+              setUserHighestTier(tier);
             }
+          } else {
+            // No declarations found - set to 'none' to block all claims
+            console.log('[Claims] No declarations found - blocking all claims');
+            setUserHighestTier('none');
           }
         }
       } catch (err) {
@@ -2166,11 +2188,8 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
                       const { deleteClaimSubmission } = await import('@/lib/supabase');
                       const result = await deleteClaimSubmission(existingClaim.id);
                       if (result.success) {
-                        setExistingClaim(null);
-                        setChoice1('');
-                        setChoice2('');
-                        setChoice3('');
-                        setSubmitMessage({ type: 'success', text: 'Claim deleted successfully. You can submit a new claim.' });
+                        // Force page reload to ensure fresh data
+                        window.location.reload();
                       } else {
                         setSubmitMessage({ type: 'error', text: result.error || 'Failed to delete claim' });
                       }

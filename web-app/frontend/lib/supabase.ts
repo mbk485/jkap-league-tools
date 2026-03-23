@@ -4811,18 +4811,36 @@ export async function getAvailableFreeAgents(seasonNumber: number): Promise<DBFr
   }
 }
 
-// Get user's free agent declarations
-export async function getUserDeclarations(userId: string, seasonNumber: number): Promise<DBFreeAgentDeclaration[]> {
+// Get user's free agent declarations (matches by user_id OR team_id for robustness)
+export async function getUserDeclarations(userId: string, seasonNumber: number, teamId?: string): Promise<DBFreeAgentDeclaration[]> {
   try {
-    const { data, error } = await supabase
+    // First try by user_id
+    const { data: byUser, error: userError } = await supabase
       .from('free_agent_declarations')
       .select('*')
       .eq('declaring_user_id', userId)
       .eq('season_number', seasonNumber)
       .order('declared_at', { ascending: false });
 
-    if (error) throw error;
-    return data || [];
+    if (!userError && byUser && byUser.length > 0) {
+      return byUser;
+    }
+
+    // Fallback: try by team_id if provided
+    if (teamId) {
+      const { data: byTeam, error: teamError } = await supabase
+        .from('free_agent_declarations')
+        .select('*')
+        .eq('declaring_team_id', teamId.toLowerCase())
+        .eq('season_number', seasonNumber)
+        .order('declared_at', { ascending: false });
+
+      if (!teamError && byTeam) {
+        return byTeam;
+      }
+    }
+
+    return [];
   } catch (err) {
     console.error('Error fetching user declarations:', err);
     return [];
