@@ -1157,21 +1157,32 @@ function FreeAgentSection({
   const [selectedTeamName, setSelectedTeamName] = useState<string>(userTeamName || '');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Load master free agent list
+  // Declaration period status - closed when claiming is open
+  const [declarationsClosed, setDeclarationsClosed] = useState(false);
+
+  // Load master free agent list AND check if claiming is open
   useEffect(() => {
-    const loadMasterList = async () => {
+    const loadData = async () => {
       setLoadingMasterList(true);
       try {
-        const { getMasterFreeAgentList } = await import('@/lib/supabase');
-        const list = await getMasterFreeAgentList(seasonNumber);
+        const { getMasterFreeAgentList, getLeagueSettings } = await import('@/lib/supabase');
+        const [list, settings] = await Promise.all([
+          getMasterFreeAgentList(seasonNumber),
+          getLeagueSettings(),
+        ]);
         setMasterList(list as FreeAgentDeclaration[]);
+        
+        // If claiming is open, declarations are closed
+        if (settings?.claiming_open) {
+          setDeclarationsClosed(true);
+        }
       } catch (err) {
-        console.error('Failed to load master list:', err);
+        console.error('Failed to load data:', err);
       } finally {
         setLoadingMasterList(false);
       }
     };
-    loadMasterList();
+    loadData();
   }, [seasonNumber]);
 
   const handleSubmitRequest = (player: any) => {
@@ -1286,21 +1297,43 @@ function FreeAgentSection({
 
   return (
     <div className="space-y-6">
-      {/* Important Notice */}
-      <Card className="bg-red-500/10 border-red-500/30">
-        <CardContent className="py-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-medium text-red-400 mb-1">Important: Declarations Are Final</h4>
-              <p className="text-sm text-slate-300">
-                Once you submit a free agent declaration, it is <span className="text-red-400 font-bold">permanently locked</span> and 
-                cannot be removed or changed. Make sure you want to declare this player before confirming.
-              </p>
+      {/* Declaration Period Closed Banner */}
+      {declarationsClosed && (
+        <Card className="bg-red-500/20 border-red-500/50 border-2">
+          <CardContent className="py-6">
+            <div className="flex items-center justify-center gap-4">
+              <Lock className="w-10 h-10 text-red-400" />
+              <div className="text-center">
+                <h3 className="text-2xl font-bold text-red-400">Declaration Period CLOSED</h3>
+                <p className="text-slate-300 mt-1">
+                  The claiming period is now open. You can no longer declare free agents.
+                </p>
+                <p className="text-sm text-slate-400 mt-2">
+                  Go to the <span className="text-cyan-400 font-medium">Claim Players</span> tab to submit your claims.
+                </p>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Important Notice - Only show if declarations still open */}
+      {!declarationsClosed && (
+        <Card className="bg-red-500/10 border-red-500/30">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-red-400 mb-1">Important: Declarations Are Final</h4>
+                <p className="text-sm text-slate-300">
+                  Once you submit a free agent declaration, it is <span className="text-red-400 font-bold">permanently locked</span> and 
+                  cannot be removed or changed. Make sure you want to declare this player before confirming.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* How It Works - Step by Step */}
       <Card className="bg-gradient-to-r from-orange-500/10 to-amber-500/10 border-orange-500/30">
@@ -1373,25 +1406,33 @@ function FreeAgentSection({
                     <UserMinus className="w-5 h-5 text-orange-400" />
                     Declare a Free Agent
                   </span>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setShowPlayerSearch(true)}
-                    >
-                      <Search className="w-4 h-4 mr-2" />
-                      Search Database
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => setShowForm(!showForm)}
-                      className="bg-orange-500 hover:bg-orange-400"
-                    >
-                      <UserMinus className="w-4 h-4 mr-2" />
-                      {showForm ? 'Cancel' : 'Manual Entry'}
-                    </Button>
-                  </div>
+                  {!declarationsClosed && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setShowPlayerSearch(true)}
+                      >
+                        <Search className="w-4 h-4 mr-2" />
+                        Search Database
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setShowForm(!showForm)}
+                        className="bg-orange-500 hover:bg-orange-400"
+                      >
+                        <UserMinus className="w-4 h-4 mr-2" />
+                        {showForm ? 'Cancel' : 'Manual Entry'}
+                      </Button>
+                    </div>
+                  )}
+                  {declarationsClosed && (
+                    <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+                      <Lock className="w-3 h-3 mr-1" />
+                      CLOSED
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1437,7 +1478,7 @@ function FreeAgentSection({
                   </div>
                 )}
                 
-                {showForm && (
+                {showForm && !declarationsClosed && (
                   <div className="p-4 rounded-xl bg-slate-700/50 border border-slate-600 mb-4 space-y-4">
                     <p className="text-sm text-slate-400 mb-2">
                       Use "Search Database" above to find players from the Live Series database, or manually enter below:
