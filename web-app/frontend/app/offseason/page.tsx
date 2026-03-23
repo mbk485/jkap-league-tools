@@ -1860,7 +1860,7 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
         // Check if user already submitted a claim
         if (currentUser?.id) {
           const [userClaim, declarations] = await Promise.all([
-            getUserClaimSubmission(currentUser.id, 4),
+            getUserClaimSubmission(currentUser.id, 4, currentUser.team_id),
             getUserDeclarations(currentUser.id, 4, currentUser.team_id),
           ]);
           setExistingClaim(userClaim);
@@ -2185,15 +2185,35 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
                   onClick={async () => {
                     if (!confirm('Are you sure you want to delete your claim? This cannot be undone.')) return;
                     try {
-                      const { deleteClaimSubmission } = await import('@/lib/supabase');
-                      const result = await deleteClaimSubmission(existingClaim.id);
-                      if (result.success) {
-                        // Force page reload to ensure fresh data
-                        window.location.reload();
+                      console.log('[Reset] Deleting claim ID:', existingClaim.id);
+                      console.log('[Reset] User ID:', currentUser.id);
+                      console.log('[Reset] Team ID:', currentUser.team_id);
+                      
+                      const { deleteClaimSubmission, deleteClaimSubmissionByUserId, deleteClaimSubmissionByTeamId } = await import('@/lib/supabase');
+                      
+                      // Try ALL methods to ensure deletion
+                      const result1 = await deleteClaimSubmission(existingClaim.id);
+                      console.log('[Reset] Delete by ID result:', result1);
+                      
+                      const result2 = await deleteClaimSubmissionByUserId(currentUser.id, 4);
+                      console.log('[Reset] Delete by UserID result:', result2);
+                      
+                      const result3 = await deleteClaimSubmissionByTeamId(currentUser.team_id, 4);
+                      console.log('[Reset] Delete by TeamID result:', result3);
+                      
+                      if (result1.success || result2.success || result3.success) {
+                        alert('Claim deleted! Page will reload.');
+                        // Wait for DB to sync, then reload
+                        setTimeout(() => {
+                          window.location.reload();
+                        }, 1500);
                       } else {
-                        setSubmitMessage({ type: 'error', text: result.error || 'Failed to delete claim' });
+                        const errMsg = result1.error || result2.error || result3.error || 'Failed to delete claim';
+                        console.error('[Reset] All methods failed:', errMsg);
+                        setSubmitMessage({ type: 'error', text: errMsg });
                       }
                     } catch (err: any) {
+                      console.error('[Reset] Error:', err);
                       setSubmitMessage({ type: 'error', text: err.message });
                     }
                   }}

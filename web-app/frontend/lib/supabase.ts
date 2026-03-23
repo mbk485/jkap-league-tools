@@ -5140,18 +5140,36 @@ export async function submitClaimChoices(claim: ClaimSubmission): Promise<{ succ
   }
 }
 
-// Get user's claim submission (they can only see their own)
-export async function getUserClaimSubmission(userId: string, seasonNumber: number): Promise<DBClaimSubmission | null> {
+// Get user's claim submission (matches by user_id OR team_id for robustness)
+export async function getUserClaimSubmission(userId: string, seasonNumber: number, teamId?: string): Promise<DBClaimSubmission | null> {
   try {
-    const { data, error } = await supabase
+    // First try by user_id
+    const { data: byUser, error: userError } = await supabase
       .from('claim_submissions')
       .select('*')
       .eq('claiming_user_id', userId)
       .eq('season_number', seasonNumber)
       .single();
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
-    return data || null;
+    if (!userError && byUser) {
+      return byUser;
+    }
+
+    // Fallback: try by team_id if provided
+    if (teamId) {
+      const { data: byTeam, error: teamError } = await supabase
+        .from('claim_submissions')
+        .select('*')
+        .eq('claiming_team_id', teamId.toLowerCase())
+        .eq('season_number', seasonNumber)
+        .single();
+
+      if (!teamError && byTeam) {
+        return byTeam;
+      }
+    }
+
+    return null;
   } catch (err) {
     console.error('Error fetching user claim:', err);
     return null;
@@ -5204,6 +5222,23 @@ export async function deleteClaimSubmissionByUserId(userId: string, seasonNumber
     return { success: true };
   } catch (err: any) {
     console.error('Error deleting claim submission:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Commissioner only: Delete a claim submission by team ID
+export async function deleteClaimSubmissionByTeamId(teamId: string, seasonNumber: number): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('claim_submissions')
+      .delete()
+      .eq('claiming_team_id', teamId.toLowerCase())
+      .eq('season_number', seasonNumber);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting claim submission by team:', err);
     return { success: false, error: err.message };
   }
 }
