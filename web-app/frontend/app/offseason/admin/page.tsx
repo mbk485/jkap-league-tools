@@ -143,7 +143,8 @@ export default function OffSeasonAdminPage() {
   const router = useRouter();
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'voting' | 'standings' | 'phases' | 'signings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'voting' | 'standings' | 'phases' | 'free-agency'>('overview');
+  const [faSection, setFaSection] = useState<'declarations' | 'claims' | 'signings'>('declarations');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   
   // Season state
@@ -952,8 +953,8 @@ export default function OffSeasonAdminPage() {
         >
           {[
             { id: 'overview', label: 'Overview', icon: BarChart3 },
+            { id: 'free-agency', label: 'Free Agency', icon: UserMinus },
             { id: 'members', label: 'Members & SMS', icon: Users },
-            { id: 'signings', label: 'Signings', icon: Award },
             { id: 'voting', label: 'Awards Voting', icon: Trophy },
             { id: 'standings', label: 'Standings', icon: Target },
             { id: 'phases', label: 'Phase Control', icon: Settings },
@@ -2908,20 +2909,392 @@ Let's get this done! 💪`;
             </div>
           )}
 
-          {/* Signings Tab */}
-          {activeTab === 'signings' && (
-            <SigningsSection
-              claims={allClaims}
-              declarations={allDeclarations}
-              signings={signings}
-              seasonNumber={seasonNumber}
-              onSigningCreated={(signing) => setSignings([...signings, signing])}
-              onSigningDeleted={(id) => setSignings(signings.filter(s => s.id !== id))}
-              processingSignings={processingSignings}
-              setProcessingSignings={setProcessingSignings}
-              copiedAnnouncement={copiedAnnouncement}
-              setCopiedAnnouncement={setCopiedAnnouncement}
-            />
+          {/* Free Agency Tab - Consolidated View */}
+          {activeTab === 'free-agency' && (
+            <div className="space-y-6">
+              {/* Status Overview Cards */}
+              <div className="grid grid-cols-3 gap-4">
+                <Card className={`border-2 cursor-pointer transition-all ${faSection === 'declarations' ? 'bg-orange-500/20 border-orange-500' : 'bg-slate-800/50 border-slate-700 hover:border-orange-500/50'}`}
+                  onClick={() => setFaSection('declarations')}>
+                  <CardContent className="py-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${faSection === 'declarations' ? 'bg-orange-500/30' : 'bg-orange-500/20'}`}>
+                        <UserMinus className="w-5 h-5 text-orange-400" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-orange-400">{members.filter(m => m.freeAgentsDeclared).length}/{members.length}</p>
+                        <p className="text-xs text-slate-400">Declarations</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className={`border-2 cursor-pointer transition-all ${faSection === 'claims' ? 'bg-cyan-500/20 border-cyan-500' : 'bg-slate-800/50 border-slate-700 hover:border-cyan-500/50'}`}
+                  onClick={() => setFaSection('claims')}>
+                  <CardContent className="py-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${faSection === 'claims' ? 'bg-cyan-500/30' : 'bg-cyan-500/20'}`}>
+                        <ClipboardList className="w-5 h-5 text-cyan-400" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-cyan-400">{allClaims.length}</p>
+                        <p className="text-xs text-slate-400">Claims {claimingOpen ? '(OPEN)' : '(CLOSED)'}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className={`border-2 cursor-pointer transition-all ${faSection === 'signings' ? 'bg-emerald-500/20 border-emerald-500' : 'bg-slate-800/50 border-slate-700 hover:border-emerald-500/50'}`}
+                  onClick={() => setFaSection('signings')}>
+                  <CardContent className="py-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${faSection === 'signings' ? 'bg-emerald-500/30' : 'bg-emerald-500/20'}`}>
+                        <Award className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-emerald-400">{signings.length}</p>
+                        <p className="text-xs text-slate-400">Signings</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Section Navigation */}
+              <div className="flex gap-2 border-b border-slate-700 pb-2">
+                <button
+                  onClick={() => setFaSection('declarations')}
+                  className={`px-4 py-2 rounded-t-lg font-medium transition-all ${
+                    faSection === 'declarations'
+                      ? 'bg-orange-500/20 text-orange-400 border-b-2 border-orange-500'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <UserMinus className="w-4 h-4 inline mr-2" />
+                  1. Declarations
+                </button>
+                <button
+                  onClick={() => setFaSection('claims')}
+                  className={`px-4 py-2 rounded-t-lg font-medium transition-all ${
+                    faSection === 'claims'
+                      ? 'bg-cyan-500/20 text-cyan-400 border-b-2 border-cyan-500'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <ClipboardList className="w-4 h-4 inline mr-2" />
+                  2. Claims
+                </button>
+                <button
+                  onClick={() => setFaSection('signings')}
+                  className={`px-4 py-2 rounded-t-lg font-medium transition-all ${
+                    faSection === 'signings'
+                      ? 'bg-emerald-500/20 text-emerald-400 border-b-2 border-emerald-500'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Award className="w-4 h-4 inline mr-2" />
+                  3. Signings
+                </button>
+              </div>
+
+              {/* DECLARATIONS SECTION */}
+              {faSection === 'declarations' && (
+                <div className="space-y-6">
+                  {/* Declaration Status Grid */}
+                  <Card className="bg-gradient-to-br from-orange-900/30 to-slate-800/50 border-orange-500/30 border-2">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-white flex items-center gap-2 text-xl">
+                          <UserMinus className="w-6 h-6 text-orange-400" />
+                          Declaration Status
+                        </CardTitle>
+                        <Badge className={members.filter(m => m.freeAgentsDeclared).length === members.length ? 'bg-emerald-500' : 'bg-amber-500'}>
+                          {members.filter(m => m.freeAgentsDeclared).length}/{members.length} Complete
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* Visual Team Grid */}
+                      <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-10 gap-2">
+                        {members.map(member => (
+                          <div
+                            key={member.id}
+                            className={`relative p-2 rounded-lg border-2 text-center transition-all ${
+                              member.freeAgentsDeclared
+                                ? 'bg-emerald-500/20 border-emerald-500/50'
+                                : 'bg-red-500/20 border-red-500/50 animate-pulse'
+                            }`}
+                            title={`${member.teamName}: ${member.freeAgentsDeclared ? 'DECLARED' : 'NOT DECLARED'}`}
+                          >
+                            <span className={`font-bold text-sm ${member.freeAgentsDeclared ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {member.teamId}
+                            </span>
+                            {member.freeAgentsDeclared ? (
+                              <CheckCircle className="w-3 h-3 text-emerald-400 absolute -top-1 -right-1" />
+                            ) : (
+                              <XCircle className="w-3 h-3 text-red-400 absolute -top-1 -right-1" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Teams Not Declared */}
+                      {members.filter(m => !m.freeAgentsDeclared).length > 0 && (
+                        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+                          <div className="flex items-center gap-2 mb-3">
+                            <AlertTriangle className="w-5 h-5 text-red-400" />
+                            <span className="text-red-400 font-bold">
+                              {members.filter(m => !m.freeAgentsDeclared).length} Teams Have NOT Declared:
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {members.filter(m => !m.freeAgentsDeclared).map(member => (
+                              <span key={member.id} className="px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-300 font-medium">
+                                {member.teamId} - {member.displayName}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Declared Players List */}
+                  <Card className="bg-slate-800/50 border-orange-500/30">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-white flex items-center gap-2">
+                          <Users className="w-5 h-5 text-orange-400" />
+                          All Declared Players ({allDeclarations.length})
+                        </CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {allDeclarations.length > 0 ? (
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto">
+                          {allDeclarations.map((dec) => (
+                            <div key={dec.id} className="p-3 rounded-lg bg-slate-700/50 border border-slate-600 flex items-center justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-white truncate">{dec.player_name}</span>
+                                  <Badge className={`text-xs flex-shrink-0 ${
+                                    dec.classification === 'diamond' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' :
+                                    dec.classification === 'gold' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+                                    dec.classification === 'silver' ? 'bg-slate-400/20 text-slate-300 border-slate-400/30' :
+                                    dec.classification === 'bronze' ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' :
+                                    'bg-slate-600/20 text-slate-400 border-slate-600/30'
+                                  }`}>
+                                    {dec.classification} · {dec.overall_rating}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-slate-400 mt-1 truncate">
+                                  Former Team: {dec.declaring_team_name || dec.declaring_user_id}
+                                </p>
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (confirm(`Remove ${dec.player_name} from the free agent pool?`)) {
+                                    setDeletingDeclaration(dec.id);
+                                    try {
+                                      const { deleteFreeAgentDeclaration } = await import('@/lib/supabase');
+                                      const result = await deleteFreeAgentDeclaration(dec.id);
+                                      if (result.success) {
+                                        setAllDeclarations(prev => prev.filter(d => d.id !== dec.id));
+                                      } else {
+                                        alert('Failed to delete: ' + result.error);
+                                      }
+                                    } finally {
+                                      setDeletingDeclaration(null);
+                                    }
+                                  }
+                                }}
+                                disabled={deletingDeclaration === dec.id}
+                                className="ml-2 p-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors disabled:opacity-50"
+                              >
+                                {deletingDeclaration === dec.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-slate-400">
+                          <UserMinus className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                          <p>No free agent declarations yet</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* CLAIMS SECTION */}
+              {faSection === 'claims' && (
+                <div className="space-y-6">
+                  {/* Claiming Period Control */}
+                  <Card className="bg-slate-800/50 border-cyan-500/30">
+                    <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2">
+                        <UserPlus className="w-5 h-5 text-cyan-400" />
+                        Claiming Period Control
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* Status Banner */}
+                      <div className={`p-4 rounded-xl border ${claimingOpen ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                        <div className="flex items-center justify-between flex-wrap gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${claimingOpen ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}>
+                              {claimingOpen ? <Unlock className="w-6 h-6 text-emerald-400" /> : <Lock className="w-6 h-6 text-red-400" />}
+                            </div>
+                            <div>
+                              <p className={`font-bold text-lg ${claimingOpen ? 'text-emerald-400' : 'text-red-400'}`}>
+                                Claiming Period: {claimingOpen ? 'OPEN' : 'CLOSED'}
+                              </p>
+                              {claimingClosesAt && claimingOpen && (
+                                <p className="text-sm text-slate-400">Closes: {new Date(claimingClosesAt).toLocaleString()}</p>
+                              )}
+                            </div>
+                          </div>
+                          <Badge className={claimingOpen ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}>
+                            {claimingOpen ? 'ACCEPTING CLAIMS' : 'NOT ACCEPTING CLAIMS'}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* Open/Close Controls */}
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-400 mb-2">Duration (hours)</label>
+                          <input
+                            type="number"
+                            value={claimingDuration}
+                            onChange={(e) => setClaimingDuration(e.target.value)}
+                            min="1"
+                            max="168"
+                            className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                            disabled={claimingOpen}
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            onClick={async () => {
+                              if (claimingOpen) {
+                                if (confirm('Close claiming period? Members will no longer be able to submit claims.')) {
+                                  await saveLeagueSettings({ claiming_open: false, claiming_closes_at: null });
+                                  setClaimingOpen(false);
+                                  setClaimingClosesAt(null);
+                                }
+                              } else {
+                                const hours = parseInt(claimingDuration) || 24;
+                                const closesAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+                                await saveLeagueSettings({ claiming_open: true, claiming_opened_at: new Date().toISOString(), claiming_closes_at: closesAt });
+                                setClaimingOpen(true);
+                                setClaimingClosesAt(closesAt);
+                              }
+                            }}
+                            className={`w-full px-4 py-3 rounded-lg font-medium transition-colors ${
+                              claimingOpen ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                            }`}
+                          >
+                            {claimingOpen ? <><Lock className="w-4 h-4 inline mr-2" />Close Claiming</> : <><Unlock className="w-4 h-4 inline mr-2" />Open Claiming</>}
+                          </button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Claims Submitted */}
+                  <Card className="bg-slate-800/50 border-cyan-500/30">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-white flex items-center gap-2">
+                          <ClipboardList className="w-5 h-5 text-cyan-400" />
+                          Claims Submitted ({allClaims.length})
+                        </CardTitle>
+                        <Badge className="bg-slate-700 text-slate-300">Only you can see these</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {allClaims.length > 0 ? (
+                        <div className="grid md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto">
+                          {allClaims.map((claim, idx) => (
+                            <div key={claim.id || idx} className="p-4 rounded-lg bg-slate-700/50 border border-slate-600">
+                              <div className="flex items-start justify-between mb-3">
+                                <div>
+                                  <p className="text-lg font-bold text-cyan-400">{claim.claiming_team_name}</p>
+                                  <p className="text-xs text-slate-400">Submitted: {new Date(claim.submitted_at).toLocaleString()}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">#{idx + 1}</Badge>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/20"
+                                    onClick={async () => {
+                                      if (confirm(`Delete claim from ${claim.claiming_team_name}?`)) {
+                                        const { deleteClaimSubmission } = await import('@/lib/supabase');
+                                        const result = await deleteClaimSubmission(claim.id);
+                                        if (result.success) {
+                                          setAllClaims(allClaims.filter(c => c.id !== claim.id));
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-cyan-400 font-medium w-8">1st:</span>
+                                  <span className="text-white">{claim.choice_1_player}</span>
+                                  <span className="text-slate-400 text-xs capitalize">({claim.choice_1_classification})</span>
+                                </div>
+                                {claim.choice_2_player && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-slate-400 font-medium w-8">2nd:</span>
+                                    <span className="text-white">{claim.choice_2_player}</span>
+                                    <span className="text-slate-400 text-xs capitalize">({claim.choice_2_classification})</span>
+                                  </div>
+                                )}
+                                {claim.choice_3_player && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-slate-400 font-medium w-8">3rd:</span>
+                                    <span className="text-white">{claim.choice_3_player}</span>
+                                    <span className="text-slate-400 text-xs capitalize">({claim.choice_3_classification})</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-slate-400">
+                          <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                          <p>No claims submitted yet</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* SIGNINGS SECTION */}
+              {faSection === 'signings' && (
+                <SigningsSection
+                  claims={allClaims}
+                  declarations={allDeclarations}
+                  signings={signings}
+                  seasonNumber={seasonNumber}
+                  onSigningCreated={(signing) => setSignings([...signings, signing])}
+                  onSigningDeleted={(id) => setSignings(signings.filter(s => s.id !== id))}
+                  processingSignings={processingSignings}
+                  setProcessingSignings={setProcessingSignings}
+                  copiedAnnouncement={copiedAnnouncement}
+                  setCopiedAnnouncement={setCopiedAnnouncement}
+                />
+              )}
+            </div>
           )}
         </div>
       </main>
