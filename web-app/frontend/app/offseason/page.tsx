@@ -503,20 +503,45 @@ function OffSeasonContent() {
               )}
             </div>
 
-            {/* Step 3: Claim (Coming Soon) */}
+            {/* Step 3: Claim - Dynamic based on claiming status */}
             <div 
-              className="p-4 rounded-xl border-2 bg-slate-800/30 border-slate-700 opacity-60 cursor-not-allowed"
+              className={`p-4 rounded-xl border-2 transition-all ${
+                claimingOpen || seasonState.phase === 'claiming_period'
+                  ? claimsSubmitted.length > 0
+                    ? 'bg-emerald-500/10 border-emerald-500/50 cursor-pointer hover:scale-102'
+                    : 'bg-cyan-500/10 border-cyan-500/50 animate-pulse cursor-pointer hover:scale-102'
+                  : 'bg-slate-800/30 border-slate-700 opacity-60 cursor-not-allowed'
+              }`}
+              onClick={() => {
+                if (claimingOpen || seasonState.phase === 'claiming_period') {
+                  setActiveTab('claims');
+                }
+              }}
             >
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold bg-slate-700 text-slate-400">
-                  3
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold ${
+                  claimingOpen || seasonState.phase === 'claiming_period'
+                    ? claimsSubmitted.length > 0
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-cyan-500 text-white'
+                    : 'bg-slate-700 text-slate-400'
+                }`}>
+                  {claimsSubmitted.length > 0 ? '✓' : '3'}
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500">Step 3</p>
-                  <p className="font-bold text-slate-400">Claim Players</p>
+                  <p className={`text-sm ${claimingOpen || seasonState.phase === 'claiming_period' ? 'text-slate-400' : 'text-slate-500'}`}>Step 3</p>
+                  <p className={`font-bold ${claimingOpen || seasonState.phase === 'claiming_period' ? 'text-white' : 'text-slate-400'}`}>Claim Players</p>
                 </div>
               </div>
-              <p className="text-sm text-slate-500">🔒 Opens after declarations close</p>
+              {claimingOpen || seasonState.phase === 'claiming_period' ? (
+                claimsSubmitted.length > 0 ? (
+                  <p className="text-sm text-emerald-400">Claim submitted! ✅</p>
+                ) : (
+                  <p className="text-sm text-cyan-400 font-medium">🎯 OPEN NOW</p>
+                )
+              ) : (
+                <p className="text-sm text-slate-500">🔒 Opens after declarations close</p>
+              )}
             </div>
           </div>
         </div>
