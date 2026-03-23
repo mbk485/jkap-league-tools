@@ -499,13 +499,108 @@ export async function searchPlayers(
 }
 
 /**
+ * Quick search for a player by name without loading entire database
+ * Uses alphabetical page estimation to find player faster
+ */
+async function quickSearchByName(name: string): Promise<PlayerSearchResult | null> {
+  const normalizedQuery = name.toLowerCase().trim();
+  const firstLetter = normalizedQuery.charAt(0);
+  
+  // Estimate page range based on first letter (API sorts alphabetically)
+  // Total ~146 pages, roughly 5-6 pages per letter
+  const letterToPage: Record<string, number> = {
+    'a': 1, 'b': 12, 'c': 24, 'd': 36, 'e': 45, 'f': 50,
+    'g': 56, 'h': 62, 'i': 68, 'j': 72, 'k': 82, 'l': 88,
+    'm': 94, 'n': 104, 'o': 108, 'p': 112, 'q': 116, 'r': 118,
+    's': 124, 't': 130, 'u': 134, 'v': 136, 'w': 140, 'x': 144,
+    'y': 145, 'z': 146
+  };
+  
+  const startPage = letterToPage[firstLetter] || 1;
+  const endPage = Math.min(startPage + 8, 146); // Check ~8 pages
+  
+  console.log(`[MLB API] Quick search for "${name}" starting at page ${startPage}`);
+  
+  // Fetch pages in parallel
+  const pagePromises = [];
+  for (let page = startPage; page <= endPage; page++) {
+    const url = buildProxyUrl('items', { type: 'mlb_card', page });
+    pagePromises.push(
+      fetch(url)
+        .then(res => res.ok ? res.json() : null)
+        .catch(() => null)
+    );
+  }
+  
+  const results = await Promise.all(pagePromises);
+  
+  let bestMatch: PlayerSearchResult | null = null;
+  let bestScore = 0;
+  
+  for (const data of results) {
+    if (!data || !data.items) continue;
+    
+    for (const p of data.items) {
+      if (p.series !== 'Live' || !p.is_live_set) continue;
+      
+      const score = nameSimilarity(name, p.name);
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = {
+          uuid: p.uuid,
+          name: p.name,
+          team: p.team,
+          team_short_name: p.team_short_name,
+          ovr: p.ovr,
+          rarity: p.rarity,
+          display_position: p.display_position,
+          img: p.img,
+          baked_img: p.baked_img,
+          is_hitter: p.is_hitter,
+        };
+      }
+      
+      // If exact match, return immediately
+      if (score === 1) {
+        console.log(`[MLB API] Found exact match: ${p.name}`);
+        return bestMatch;
+      }
+    }
+  }
+  
+  if (bestMatch && bestScore >= 0.7) {
+    console.log(`[MLB API] Found match: ${bestMatch.name} (score: ${bestScore.toFixed(2)})`);
+    return bestMatch;
+  }
+  
+  console.log(`[MLB API] No match found for "${name}" (best score: ${bestScore.toFixed(2)})`);
+  return null;
+}
+
+/**
  * Find a player by name with fuzzy matching
  * Returns the best match or null
+ * Uses quick search first, then falls back to full database if needed
  */
 export async function findPlayerByName(
   name: string,
   options: { position?: string; team?: string } = {}
 ): Promise<PlayerSearchResult | null> {
+  console.log(`[MLB API] findPlayerByName called for: "${name}"`);
+  
+  // Try quick search first (much faster)
+  const quickResult = await quickSearchByName(name);
+  if (quickResult) {
+    // Verify position if specified
+    if (options.position && quickResult.display_position !== options.position) {
+      console.log(`[MLB API] Position mismatch: wanted ${options.position}, got ${quickResult.display_position}`);
+      // Still return if close match, position might be secondary
+    }
+    return quickResult;
+  }
+  
+  // Fall back to full database search if quick search fails
+  console.log(`[MLB API] Quick search failed, trying full database...`);
   const allPlayers = await loadAllLiveSeriesPlayers();
   
   // Filter by position/team first if provided
@@ -530,6 +625,7 @@ export async function findPlayerByName(
   
   // Return best match if score is good enough
   if (scored.length > 0 && scored[0].score >= 0.6) {
+    console.log(`[MLB API] Found in full DB: ${scored[0].player.name}`);
     return scored[0].player;
   }
   
@@ -542,10 +638,12 @@ export async function findPlayerByName(
     allScored.sort((a, b) => b.score - a.score);
     
     if (allScored.length > 0 && allScored[0].score >= 0.6) {
+      console.log(`[MLB API] Found without filters: ${allScored[0].player.name}`);
       return allScored[0].player;
     }
   }
   
+  console.log(`[MLB API] Player not found: "${name}"`);
   return null;
 }
 

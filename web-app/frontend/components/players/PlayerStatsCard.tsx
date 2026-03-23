@@ -101,35 +101,46 @@ export function PlayerStatsCard({
 
   const loadPlayerData = async () => {
     if (player) return;
-    if (!playerUUID && !playerName) return;
+    if (!playerUUID && !playerName) {
+      console.log('[PlayerStatsCard] No UUID or name provided');
+      return;
+    }
     
+    console.log(`[PlayerStatsCard] Loading data for: ${playerName || playerUUID}`);
     setLoading(true);
     setError(null);
     try {
       // Try UUID first
       if (playerUUID) {
+        console.log(`[PlayerStatsCard] Trying UUID: ${playerUUID}`);
         const data = await fetchPlayerByUUID(playerUUID);
         if (data) {
+          console.log(`[PlayerStatsCard] Found by UUID: ${data.name}`);
           setPlayer(data);
           return;
         }
+        console.log(`[PlayerStatsCard] UUID lookup failed`);
       }
       
       // Fallback to fuzzy name search
       if (playerName) {
+        console.log(`[PlayerStatsCard] Trying name search: ${playerName}`);
         const match = await findPlayerByName(playerName, { position });
         if (match) {
+          console.log(`[PlayerStatsCard] Found match: ${match.name} (${match.uuid})`);
           const data = await fetchPlayerByUUID(match.uuid);
           if (data) {
+            console.log(`[PlayerStatsCard] Loaded full data for: ${data.name}`);
             setPlayer(data);
             return;
           }
         }
+        console.log(`[PlayerStatsCard] Name search failed for: ${playerName}`);
       }
       
       setError('Player not found');
     } catch (err) {
-      console.error('Failed to load player:', err);
+      console.error('[PlayerStatsCard] Failed to load player:', err);
       setError('Failed to load stats');
     } finally {
       setLoading(false);
