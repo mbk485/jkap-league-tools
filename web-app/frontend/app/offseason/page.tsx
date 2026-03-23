@@ -2210,32 +2210,32 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
                   onClick={async () => {
                     if (!confirm('Are you sure you want to delete your claim? This cannot be undone.')) return;
                     try {
-                      console.log('[Reset] Deleting claim ID:', existingClaim.id);
+                      console.log('[Reset] Deleting via API...');
+                      console.log('[Reset] Claim ID:', existingClaim.id);
                       console.log('[Reset] User ID:', currentUser.id);
                       console.log('[Reset] Team ID:', currentUser.team_id);
                       
-                      const { deleteClaimSubmission, deleteClaimSubmissionByUserId, deleteClaimSubmissionByTeamId } = await import('@/lib/supabase');
+                      // Use API route to bypass RLS
+                      const response = await fetch('/api/delete-claim', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          claimId: existingClaim.id,
+                          userId: currentUser.id,
+                          teamId: currentUser.team_id,
+                          seasonNumber: 4,
+                        }),
+                      });
                       
-                      // Try ALL methods to ensure deletion
-                      const result1 = await deleteClaimSubmission(existingClaim.id);
-                      console.log('[Reset] Delete by ID result:', result1);
+                      const result = await response.json();
+                      console.log('[Reset] API result:', result);
                       
-                      const result2 = await deleteClaimSubmissionByUserId(currentUser.id, 4);
-                      console.log('[Reset] Delete by UserID result:', result2);
-                      
-                      const result3 = await deleteClaimSubmissionByTeamId(currentUser.team_id, 4);
-                      console.log('[Reset] Delete by TeamID result:', result3);
-                      
-                      if (result1.success || result2.success || result3.success) {
+                      if (result.success) {
                         alert('Claim deleted! Page will reload.');
-                        // Wait for DB to sync, then reload
-                        setTimeout(() => {
-                          window.location.reload();
-                        }, 1500);
+                        setTimeout(() => window.location.reload(), 1000);
                       } else {
-                        const errMsg = result1.error || result2.error || result3.error || 'Failed to delete claim';
-                        console.error('[Reset] All methods failed:', errMsg);
-                        setSubmitMessage({ type: 'error', text: errMsg });
+                        console.error('[Reset] API failed:', result);
+                        setSubmitMessage({ type: 'error', text: result.message || 'Failed to delete claim' });
                       }
                     } catch (err: any) {
                       console.error('[Reset] Error:', err);
