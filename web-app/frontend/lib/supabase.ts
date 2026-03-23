@@ -4811,10 +4811,27 @@ export async function getAvailableFreeAgents(seasonNumber: number): Promise<DBFr
   }
 }
 
-// Get user's free agent declarations (matches by user_id OR team_id for robustness)
+// Get user's free agent declarations for THEIR OWN TEAM only (for tier validation)
 export async function getUserDeclarations(userId: string, seasonNumber: number, teamId?: string): Promise<DBFreeAgentDeclaration[]> {
   try {
-    // First try by user_id
+    // If we have a team_id, get declarations for THAT team only
+    // This is important for admins who may declare for multiple teams
+    if (teamId && teamId !== 'admin' && teamId !== 'null') {
+      const { data: byTeam, error: teamError } = await supabase
+        .from('free_agent_declarations')
+        .select('*')
+        .eq('declaring_team_id', teamId.toLowerCase())
+        .eq('season_number', seasonNumber)
+        .order('declared_at', { ascending: false });
+
+      if (!teamError && byTeam && byTeam.length > 0) {
+        console.log('[getUserDeclarations] Found', byTeam.length, 'declarations for team:', teamId);
+        return byTeam;
+      }
+    }
+
+    // Fallback: get declarations by user_id that match their team
+    // For admins, we need to find their actual managed team
     const { data: byUser, error: userError } = await supabase
       .from('free_agent_declarations')
       .select('*')
@@ -4823,23 +4840,54 @@ export async function getUserDeclarations(userId: string, seasonNumber: number, 
       .order('declared_at', { ascending: false });
 
     if (!userError && byUser && byUser.length > 0) {
-      return byUser;
-    }
-
-    // Fallback: try by team_id if provided
-    if (teamId) {
-      const { data: byTeam, error: teamError } = await supabase
-        .from('free_agent_declarations')
-        .select('*')
-        .eq('declaring_team_id', teamId.toLowerCase())
-        .eq('season_number', seasonNumber)
-        .order('declared_at', { ascending: false });
-
-      if (!teamError && byTeam) {
-        return byTeam;
+      // For admins (teamId is 'admin' or null), we need to figure out their actual team
+      // by looking at which team they're MOST associated with (most declarations or first one)
+      const isAdminOrNull = !teamId || teamId === 'admin' || teamId === 'null';
+      
+      if (isAdminOrNull) {
+        // Count declarations per team to find their primary team
+        const teamCounts: Record<string, number> = {};
+        byUser.forEach(d => {
+          const team = d.declaring_team_id?.toLowerCase() || 'unknown';
+          teamCounts[team] = (teamCounts[team] || 0) + 1;
+        });
+        
+        // Find team with most declarations
+        let primaryTeam = byUser[0]?.declaring_team_id;
+        let maxCount = 0;
+        Object.entries(teamCounts).forEach(([team, count]) => {
+          if (count > maxCount) {
+            maxCount = count;
+            primaryTeam = team;
+          }
+        });
+        
+        const filtered = byUser.filter(d => 
+          d.declaring_team_id?.toLowerCase() === primaryTeam?.toLowerCase()
+        );
+        
+        console.log('[getUserDeclarations] Admin mode: using team', primaryTeam, 'with', filtered.length, 'declarations');
+        return filtered;
       }
+      
+      // Regular user with valid team_id
+      const filtered = byUser.filter(d => 
+        d.declaring_team_id?.toLowerCase() === teamId?.toLowerCase()
+      );
+      
+      if (filtered.length > 0) {
+        console.log('[getUserDeclarations] Filtered to', filtered.length, 'declarations for team:', teamId);
+        return filtered;
+      }
+      
+      // If no match for their team, return first team's declarations
+      const firstTeam = byUser[0]?.declaring_team_id;
+      const firstTeamDecs = byUser.filter(d => d.declaring_team_id === firstTeam);
+      console.log('[getUserDeclarations] Using first team declarations:', firstTeam, 'count:', firstTeamDecs.length);
+      return firstTeamDecs;
     }
 
+    console.log('[getUserDeclarations] No declarations found for user:', userId);
     return [];
   } catch (err) {
     console.error('Error fetching user declarations:', err);

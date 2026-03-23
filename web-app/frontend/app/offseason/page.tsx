@@ -1912,7 +1912,7 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
     const loadData = async () => {
       setLoading(true);
       try {
-        const { getAvailableFreeAgents, getLeagueSettings, getUserClaimSubmission, getUserDeclarations } = await import('@/lib/supabase');
+        const { getAvailableFreeAgents, getLeagueSettings, getUserClaimSubmission, getUserDeclarations, supabase } = await import('@/lib/supabase');
         
         const [agents, settings] = await Promise.all([
           getAvailableFreeAgents(4),
@@ -1925,18 +1925,36 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
 
         // Check if user already submitted a claim
         if (currentUser?.id) {
+          // Fetch the FRESH user data from database to get correct team_id
+          // (auth context may have stale data)
+          let actualTeamId = currentUser.team_id;
+          try {
+            const { data: freshUser } = await supabase
+              .from('users')
+              .select('team_id')
+              .eq('id', currentUser.id)
+              .single();
+            
+            if (freshUser?.team_id && freshUser.team_id !== 'admin') {
+              actualTeamId = freshUser.team_id;
+              console.log('[Claims] Using fresh team_id from DB:', actualTeamId);
+            }
+          } catch (err) {
+            console.log('[Claims] Could not fetch fresh user data, using context');
+          }
+          
           const [userClaim, declarations] = await Promise.all([
-            getUserClaimSubmission(currentUser.id, 4, currentUser.team_id),
-            getUserDeclarations(currentUser.id, 4, currentUser.team_id),
+            getUserClaimSubmission(currentUser.id, 4, actualTeamId),
+            getUserDeclarations(currentUser.id, 4, actualTeamId),
           ]);
           setExistingClaim(userClaim);
           setUserDeclarations(declarations || []);
           
           // Debug: log what we found
-          console.log('[Claims] User:', currentUser.id, 'Team:', currentUser.team_id);
+          console.log('[Claims] User:', currentUser.id, 'Team:', actualTeamId);
           console.log('[Claims] Found declarations:', declarations?.length || 0);
           if (declarations && declarations.length > 0) {
-            console.log('[Claims] Declarations:', declarations.map(d => `${d.player_name} (${d.classification})`));
+            console.log('[Claims] Declarations:', declarations.map(d => `${d.player_name} (${d.classification})`).join(', '));
           }
           
           // Determine user's highest declared tier

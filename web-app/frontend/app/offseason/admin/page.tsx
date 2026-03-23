@@ -965,7 +965,7 @@ export default function OffSeasonAdminPage() {
               onClick={() => setActiveTab(tab.id as any)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === tab.id
-                  ? tab.id === 'claims' ? 'bg-cyan-500 text-white' : 'bg-amber-500 text-white'
+                  ? tab.id === 'free-agency' ? 'bg-cyan-500 text-white' : 'bg-amber-500 text-white'
                   : tab.highlight 
                     ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 hover:bg-cyan-500/30'
                     : 'text-slate-400 hover:text-white hover:bg-slate-700'
@@ -1755,140 +1755,6 @@ Let's get this done! 💪`;
                 </CardContent>
               </Card>
             </div>
-            </div>
-          )}
-
-          {/* CLAIMS TAB - DEDICATED VIEW */}
-          {activeTab === 'claims' && (
-            <div className="space-y-6">
-              {/* Header */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                    <ClipboardList className="w-7 h-7 text-cyan-400" />
-                    All Submitted Claims
-                    <Badge className="bg-cyan-500 text-white text-lg px-3 py-1">
-                      {allClaims.length}
-                    </Badge>
-                  </h2>
-                  <p className="text-slate-400 mt-1">
-                    Review and manage all free agent claims from your teams
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {claimingOpen ? (
-                    <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-sm px-4 py-2">
-                      <Unlock className="w-4 h-4 mr-2" />
-                      CLAIMING OPEN
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-sm px-4 py-2">
-                      <Lock className="w-4 h-4 mr-2" />
-                      CLAIMING CLOSED
-                    </Badge>
-                  )}
-                  <Button
-                    onClick={() => setActiveTab('phases' as any)}
-                    variant="secondary"
-                    className="bg-slate-700 hover:bg-slate-600"
-                  >
-                    <Settings className="w-4 h-4 mr-2" />
-                    Phase Control
-                  </Button>
-                </div>
-              </div>
-
-              {/* Claims Grid */}
-              {allClaims.length > 0 ? (
-                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {allClaims.map((claim, idx) => (
-                    <Card key={claim.id || idx} className="bg-slate-800/50 border-cyan-500/30 hover:border-cyan-400/50 transition-all">
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <CardTitle className="text-cyan-400 text-lg">{claim.claiming_team_name}</CardTitle>
-                            <p className="text-xs text-slate-400 mt-1">
-                              Submitted: {new Date(claim.submitted_at).toLocaleString()}
-                            </p>
-                          </div>
-                          <button
-                            className="p-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors"
-                            title="Delete claim"
-                            onClick={async () => {
-                              if (confirm(`Delete claim from ${claim.claiming_team_name}? This cannot be undone.`)) {
-                                const { deleteClaimSubmission } = await import('@/lib/supabase');
-                                const result = await deleteClaimSubmission(claim.id);
-                                if (result.success) {
-                                  setAllClaims(allClaims.filter(c => c.id !== claim.id));
-                                } else {
-                                  alert('Failed to delete claim: ' + result.error);
-                                }
-                              }
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          {[
-                            { label: '1st Choice', value: claim.choice_1, color: 'text-amber-400' },
-                            { label: '2nd Choice', value: claim.choice_2, color: 'text-slate-300' },
-                            { label: '3rd Choice', value: claim.choice_3, color: 'text-slate-400' },
-                          ].map((choice, i) => choice.value && (
-                            <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-slate-700/50">
-                              <span className={`text-xs font-medium ${choice.color}`}>{choice.label}:</span>
-                              <span className="text-white font-medium">{choice.value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <Card className="bg-slate-800/50 border-slate-700">
-                  <CardContent className="py-16 text-center">
-                    <ClipboardList className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                    <h3 className="text-xl font-bold text-slate-400 mb-2">No Claims Yet</h3>
-                    <p className="text-slate-500 max-w-md mx-auto">
-                      {claimingOpen 
-                        ? 'Claiming is open, but no teams have submitted their claims yet. Check back soon!'
-                        : 'Claiming is currently closed. Open the claiming period in Phase Control to allow teams to submit claims.'}
-                    </p>
-                    {!claimingOpen && (
-                      <Button
-                        onClick={() => setActiveTab('phases' as any)}
-                        className="mt-4 bg-cyan-600 hover:bg-cyan-500"
-                      >
-                        <Settings className="w-4 h-4 mr-2" />
-                        Open Claiming Period
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Quick Actions */}
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={() => setActiveTab('free-agency' as any)}
-                  variant="secondary"
-                  className="bg-slate-700 hover:bg-slate-600"
-                >
-                  <UserMinus className="w-4 h-4 mr-2" />
-                  View Declarations
-                </Button>
-                <Button
-                  onClick={() => setActiveTab('phases' as any)}
-                  variant="secondary"
-                  className="bg-slate-700 hover:bg-slate-600"
-                >
-                  <Target className="w-4 h-4 mr-2" />
-                  Process Signings
-                </Button>
-              </div>
             </div>
           )}
 
