@@ -5157,13 +5157,30 @@ export async function getAllClaimSubmissions(seasonNumber: number): Promise<DBCl
   }
 }
 
-// Commissioner only: Delete a claim submission
+// Commissioner only: Delete a claim submission by ID
 export async function deleteClaimSubmission(claimId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { error } = await supabase
       .from('claim_submissions')
       .delete()
       .eq('id', claimId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting claim submission:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Commissioner only: Delete a claim submission by user ID
+export async function deleteClaimSubmissionByUserId(userId: string, seasonNumber: number): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('claim_submissions')
+      .delete()
+      .eq('claiming_user_id', userId)
+      .eq('season_number', seasonNumber);
 
     if (error) throw error;
     return { success: true };

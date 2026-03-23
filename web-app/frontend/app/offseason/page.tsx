@@ -2052,6 +2052,37 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
                 Your claim is locked and cannot be changed. The commissioner will process all claims after the deadline.
               </p>
             </div>
+
+            {/* Commissioner Reset Button */}
+            {currentUser && (
+              <div className="mt-4">
+                <Button
+                  variant="danger"
+                  onClick={async () => {
+                    if (!confirm('Are you sure you want to delete your claim? This cannot be undone.')) return;
+                    try {
+                      const { deleteClaimSubmission } = await import('@/lib/supabase');
+                      const result = await deleteClaimSubmission(existingClaim.id);
+                      if (result.success) {
+                        setExistingClaim(null);
+                        setChoice1('');
+                        setChoice2('');
+                        setChoice3('');
+                        setSubmitMessage({ type: 'success', text: 'Claim deleted successfully. You can submit a new claim.' });
+                      } else {
+                        setSubmitMessage({ type: 'error', text: result.error || 'Failed to delete claim' });
+                      }
+                    } catch (err: any) {
+                      setSubmitMessage({ type: 'error', text: err.message });
+                    }
+                  }}
+                  className="w-full"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Reset My Claim
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
         
