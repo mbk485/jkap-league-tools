@@ -148,15 +148,23 @@ function OffSeasonContent() {
   // Preview mode - when true, hide all admin elements to see exactly what members see
   const [previewMode, setPreviewMode] = useState(false);
 
+  // Claiming status from league settings
+  const [claimingOpen, setClaimingOpen] = useState(false);
+  const [claimingClosesAt, setClaimingClosesAt] = useState<string | null>(null);
+
   useEffect(() => {
     // Load season state and user progress from the database
     const loadData = async () => {
       try {
         // Import dynamically to avoid circular dependencies
-        const { getCurrentSeasonState, getQuestionnaireStatus, getUserDeclarations, getUserClaims } = await import('@/lib/supabase');
+        const { getCurrentSeasonState, getQuestionnaireStatus, getUserDeclarations, getUserClaims, getLeagueSettings } = await import('@/lib/supabase');
         
-        // Load season state
-        const state = await getCurrentSeasonState();
+        // Load season state and league settings in parallel
+        const [state, leagueSettings] = await Promise.all([
+          getCurrentSeasonState(),
+          getLeagueSettings(),
+        ]);
+
         if (state) {
           setSeasonState({
             id: state.id,
@@ -168,6 +176,10 @@ function OffSeasonContent() {
             updated_at: state.updated_at,
           });
         }
+
+        // Set claiming status from league settings
+        setClaimingOpen(leagueSettings?.claiming_open || false);
+        setClaimingClosesAt(leagueSettings?.claiming_closes_at || null);
         
         // Load user progress if logged in
         if (user?.id) {
@@ -324,59 +336,110 @@ function OffSeasonContent() {
           </div>
         )}
 
-        {/* SIMPLIFIED HERO - What do I need to do RIGHT NOW? */}
+        {/* DYNAMIC HERO - What do I need to do RIGHT NOW? */}
         <div
           className={`mb-6 transition-all duration-500 ${
             isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}
         >
-          {/* Big Action Card - THE MAIN THING */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-orange-600/30 via-orange-500/20 to-amber-500/30 border-2 border-orange-500/50 p-6 sm:p-8">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/20 rounded-full blur-3xl" />
-            
-            <div className="relative z-10">
-              {/* Status Badge */}
-              <div className="flex items-center gap-3 mb-4">
-                <Badge className="bg-orange-500 text-white text-sm px-3 py-1">
-                  🔥 ACTION REQUIRED
-                </Badge>
-                {seasonState.phase_deadline && (
-                  <Badge className="bg-slate-800/80 text-amber-400 border-amber-500/50">
-                    <Clock className="w-3 h-3 mr-1" />
-                    {getTimeRemaining()}
+          {/* Dynamic Action Card based on current phase and claiming status */}
+          {claimingOpen || seasonState.phase === 'claiming_period' ? (
+            /* CLAIMING PERIOD HERO */
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-cyan-600/30 via-cyan-500/20 to-blue-500/30 border-2 border-cyan-500/50 p-6 sm:p-8">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/20 rounded-full blur-3xl" />
+              
+              <div className="relative z-10">
+                {/* Status Badge */}
+                <div className="flex items-center gap-3 mb-4">
+                  <Badge className="bg-cyan-500 text-white text-sm px-3 py-1">
+                    🎯 CLAIMING OPEN
                   </Badge>
-                )}
-              </div>
-              
-              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-                Declare Your Free Agents
-              </h1>
-              <p className="text-slate-200 text-lg mb-6 max-w-2xl">
-                Pick the players you're letting go. You MUST declare at least 1 player to participate in free agent claiming.
-              </p>
-              
-              {/* Big Action Button */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <button
-                  onClick={() => setActiveTab('free-agents')}
-                  className="flex items-center justify-center gap-3 px-8 py-4 bg-orange-500 hover:bg-orange-400 text-white text-xl font-bold rounded-xl transition-all shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-105"
-                >
-                  <UserMinus className="w-6 h-6" />
-                  DECLARE FREE AGENTS
-                  <ArrowRight className="w-6 h-6" />
-                </button>
+                  {claimingClosesAt && (
+                    <Badge className="bg-slate-800/80 text-amber-400 border-amber-500/50">
+                      <Clock className="w-3 h-3 mr-1" />
+                      Closes {new Date(claimingClosesAt).toLocaleDateString()} at {new Date(claimingClosesAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Badge>
+                  )}
+                </div>
                 
-                {freeAgentsDeclared.length > 0 && (
-                  <div className="flex items-center gap-2 px-4 py-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl">
-                    <CheckCircle className="w-5 h-5 text-emerald-400" />
-                    <span className="text-emerald-400 font-medium">
-                      {freeAgentsDeclared.length} player{freeAgentsDeclared.length !== 1 ? 's' : ''} declared
-                    </span>
-                  </div>
-                )}
+                <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                  Claim Free Agents
+                </h1>
+                <p className="text-slate-200 text-lg mb-6 max-w-2xl">
+                  Submit your claim for available free agents. Choose your top 3 priorities - claims are locked once submitted!
+                </p>
+                
+                {/* Big Action Button */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <button
+                    onClick={() => setActiveTab('claims')}
+                    className="flex items-center justify-center gap-3 px-8 py-4 bg-cyan-500 hover:bg-cyan-400 text-white text-xl font-bold rounded-xl transition-all shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 hover:scale-105"
+                  >
+                    <UserPlus className="w-6 h-6" />
+                    SUBMIT CLAIM
+                    <ArrowRight className="w-6 h-6" />
+                  </button>
+                  
+                  {claimsSubmitted.length > 0 && (
+                    <div className="flex items-center gap-2 px-4 py-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl">
+                      <CheckCircle className="w-5 h-5 text-emerald-400" />
+                      <span className="text-emerald-400 font-medium">
+                        Claim submitted!
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            /* DECLARATION PERIOD HERO (default) */
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-orange-600/30 via-orange-500/20 to-amber-500/30 border-2 border-orange-500/50 p-6 sm:p-8">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/20 rounded-full blur-3xl" />
+              
+              <div className="relative z-10">
+                {/* Status Badge */}
+                <div className="flex items-center gap-3 mb-4">
+                  <Badge className="bg-orange-500 text-white text-sm px-3 py-1">
+                    🔥 ACTION REQUIRED
+                  </Badge>
+                  {seasonState.phase_deadline && (
+                    <Badge className="bg-slate-800/80 text-amber-400 border-amber-500/50">
+                      <Clock className="w-3 h-3 mr-1" />
+                      {getTimeRemaining()}
+                    </Badge>
+                  )}
+                </div>
+                
+                <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                  Declare Your Free Agents
+                </h1>
+                <p className="text-slate-200 text-lg mb-6 max-w-2xl">
+                  Pick the players you're letting go. You MUST declare at least 1 player to participate in free agent claiming.
+                </p>
+                
+                {/* Big Action Button */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <button
+                    onClick={() => setActiveTab('free-agents')}
+                    className="flex items-center justify-center gap-3 px-8 py-4 bg-orange-500 hover:bg-orange-400 text-white text-xl font-bold rounded-xl transition-all shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-105"
+                  >
+                    <UserMinus className="w-6 h-6" />
+                    DECLARE FREE AGENTS
+                    <ArrowRight className="w-6 h-6" />
+                  </button>
+                  
+                  {freeAgentsDeclared.length > 0 && (
+                    <div className="flex items-center gap-2 px-4 py-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl">
+                      <CheckCircle className="w-5 h-5 text-emerald-400" />
+                      <span className="text-emerald-400 font-medium">
+                        {freeAgentsDeclared.length} player{freeAgentsDeclared.length !== 1 ? 's' : ''} declared
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* YOUR PROGRESS - Simple Checklist */}
@@ -543,41 +606,80 @@ function OffSeasonContent() {
           {/* Overview Tab - Simplified */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
-              {/* MAIN ACTION CARD - What to do RIGHT NOW */}
-              <Card className="bg-gradient-to-br from-orange-500/20 to-amber-500/10 border-2 border-orange-500/40">
-                <CardContent className="p-6">
-                  <div className="flex flex-col lg:flex-row items-start lg:items-center gap-6">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-3xl">⚾</span>
-                        <h2 className="text-2xl font-bold text-white">Free Agent Declarations</h2>
-                      </div>
-                      <p className="text-slate-300 text-lg mb-4">
-                        Check your <span className="text-orange-400 font-bold">IN-GAME ROSTER</span> in MLB The Show and designate players <span className="text-orange-400 font-bold">FROM YOUR TEAM</span> for free agency.
-                      </p>
-                      <div className="flex items-center gap-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${freeAgentsDeclared.length > 0 ? 'bg-emerald-500' : 'bg-orange-500 animate-pulse'}`} />
-                          <span className="text-slate-400">
-                            {freeAgentsDeclared.length > 0 
-                              ? `You've declared ${freeAgentsDeclared.length} player${freeAgentsDeclared.length !== 1 ? 's' : ''}`
-                              : 'You need to declare at least 1 player'
-                            }
-                          </span>
+              {/* DYNAMIC ACTION CARD - based on current phase */}
+              {claimingOpen || seasonState.phase === 'claiming_period' ? (
+                /* CLAIMING PERIOD CARD */
+                <Card className="bg-gradient-to-br from-cyan-500/20 to-blue-500/10 border-2 border-cyan-500/40">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col lg:flex-row items-start lg:items-center gap-6">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-3xl">🎯</span>
+                          <h2 className="text-2xl font-bold text-white">Claim Free Agents</h2>
+                          <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 ml-2">
+                            OPEN
+                          </Badge>
+                        </div>
+                        <p className="text-slate-300 text-lg mb-4">
+                          Submit your claim for available free agents! Rank your <span className="text-cyan-400 font-bold">top 3 choices</span> - claims are locked once submitted.
+                        </p>
+                        <div className="flex items-center gap-4 text-sm">
+                          {claimingClosesAt && (
+                            <div className="flex items-center gap-2 text-amber-400">
+                              <Clock className="w-4 h-4" />
+                              <span>Closes {new Date(claimingClosesAt).toLocaleDateString()} at {new Date(claimingClosesAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
+                      <button
+                        onClick={() => setActiveTab('claims')}
+                        className="flex items-center gap-3 px-6 py-4 bg-cyan-500 hover:bg-cyan-400 text-white text-lg font-bold rounded-xl transition-all shadow-lg hover:shadow-cyan-500/30"
+                      >
+                        <UserPlus className="w-5 h-5" />
+                        {claimsSubmitted.length > 0 ? 'View Your Claim' : 'Submit Claim'}
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => setActiveTab('free-agents')}
-                      className="flex items-center gap-3 px-6 py-4 bg-orange-500 hover:bg-orange-400 text-white text-lg font-bold rounded-xl transition-all shadow-lg hover:shadow-orange-500/30"
-                    >
-                      <UserMinus className="w-5 h-5" />
-                      {freeAgentsDeclared.length > 0 ? 'Declare More Players' : 'Start Declaring'}
-                      <ArrowRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              ) : (
+                /* DECLARATION PERIOD CARD (default) */
+                <Card className="bg-gradient-to-br from-orange-500/20 to-amber-500/10 border-2 border-orange-500/40">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col lg:flex-row items-start lg:items-center gap-6">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-3xl">⚾</span>
+                          <h2 className="text-2xl font-bold text-white">Free Agent Declarations</h2>
+                        </div>
+                        <p className="text-slate-300 text-lg mb-4">
+                          Check your <span className="text-orange-400 font-bold">IN-GAME ROSTER</span> in MLB The Show and designate players <span className="text-orange-400 font-bold">FROM YOUR TEAM</span> for free agency.
+                        </p>
+                        <div className="flex items-center gap-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${freeAgentsDeclared.length > 0 ? 'bg-emerald-500' : 'bg-orange-500 animate-pulse'}`} />
+                            <span className="text-slate-400">
+                              {freeAgentsDeclared.length > 0 
+                                ? `You've declared ${freeAgentsDeclared.length} player${freeAgentsDeclared.length !== 1 ? 's' : ''}`
+                                : 'You need to declare at least 1 player'
+                              }
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab('free-agents')}
+                        className="flex items-center gap-3 px-6 py-4 bg-orange-500 hover:bg-orange-400 text-white text-lg font-bold rounded-xl transition-all shadow-lg hover:shadow-orange-500/30"
+                      >
+                        <UserMinus className="w-5 h-5" />
+                        {freeAgentsDeclared.length > 0 ? 'Declare More Players' : 'Start Declaring'}
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* HOW IT WORKS - Super Simple Explainer */}
               <Card className="bg-slate-800/50 border-slate-700">
