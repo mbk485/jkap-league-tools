@@ -3765,159 +3765,164 @@ Let's get this done! 💪`;
               )}
 
               {/* JKAP Memorial League Draft Lottery */}
-              <Card className="bg-slate-800/50 border-cyan-500/30">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
-                    <Dices className="w-5 h-5 text-cyan-400" />
+              <Card className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border-2 border-cyan-500/50">
+                <CardHeader className="border-b border-slate-700 pb-4">
+                  <CardTitle className="text-white flex items-center gap-3 text-2xl">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center">
+                      <Dices className="w-6 h-6 text-white" />
+                    </div>
                     JKAP Memorial League Draft Lottery
                   </CardTitle>
-                  <p className="text-sm text-slate-400">
-                    Top 5 picks LOCKED (worst teams) | Picks 6+ by WEIGHTED LOTTERY
-                  </p>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
+                      <Lock className="w-3 h-3 mr-1" /> Picks 1-5 LOCKED
+                    </Badge>
+                    <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">
+                      <Dices className="w-3 h-3 mr-1" /> Picks 6+ LOTTERY
+                    </Badge>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Contracted Teams Management */}
-                  <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
-                    <h4 className="text-red-400 font-semibold mb-3 flex items-center gap-2">
-                      <UserMinus className="w-4 h-4" />
-                      Contracted Teams (Excluded from Draft)
-                    </h4>
-                    <p className="text-xs text-slate-400 mb-3">
-                      These teams are permanently contracted and won't appear in the draft order. This list is cumulative each year.
-                    </p>
-                    
-                    {/* Current Contracted Teams */}
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {contractedTeamIds.map((teamId) => {
-                        const team = MLB_TEAMS.find(t => t.abbreviation === teamId) || standings.find(s => s.teamAbbr === teamId || s.teamId === teamId);
-                        const displayName = team ? ('name' in team ? team.name : team.teamName) : teamId;
-                        const displayAbbr = team ? ('abbreviation' in team ? team.abbreviation : team.teamAbbr) : teamId;
-                        return (
-                          <span
-                            key={teamId}
-                            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/20 text-red-400 border border-red-500/50 flex items-center gap-2"
-                          >
-                            {displayAbbr}
-                            <button
-                              onClick={() => setContractedTeamIds(contractedTeamIds.filter(id => id !== teamId))}
-                              className="hover:text-red-300"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </span>
-                        );
-                      })}
-                      {contractedTeamIds.length === 0 && (
-                        <span className="text-slate-500 text-sm">No teams contracted</span>
+                <CardContent className="space-y-6 pt-6">
+                  
+                  {/* STEP 1: Previously Contracted Teams */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white font-bold">1</span>
+                      <h4 className="text-white font-semibold">Previously Contracted Teams</h4>
+                    </div>
+                    <div className="ml-10 p-4 rounded-lg bg-slate-700/50 border border-slate-600">
+                      <p className="text-xs text-slate-400 mb-3">These teams were contracted in previous seasons and are permanently excluded:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {contractedTeamIds.length > 0 ? (
+                          contractedTeamIds.map((teamId) => {
+                            const team = MLB_TEAMS.find(t => t.abbreviation === teamId);
+                            return (
+                              <span
+                                key={teamId}
+                                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/20 text-red-400 border border-red-500/50 flex items-center gap-2"
+                              >
+                                {teamId} - {team?.name || teamId}
+                                <button
+                                  onClick={() => setContractedTeamIds(contractedTeamIds.filter(id => id !== teamId))}
+                                  className="hover:text-red-300"
+                                  title="Remove from list"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            );
+                          })
+                        ) : (
+                          <span className="text-slate-500 text-sm italic">No teams contracted yet</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* STEP 2: This Year's Contracted Team */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold">2</span>
+                      <h4 className="text-white font-semibold">What team are you contracting THIS YEAR?</h4>
+                    </div>
+                    <div className="ml-10 p-4 rounded-lg bg-amber-500/10 border-2 border-amber-500/50">
+                      <p className="text-amber-300 text-sm mb-3">
+                        Select the team being contracted this season. This team will be added to the permanent exclusion list.
+                      </p>
+                      <div className="flex gap-2">
+                        <select
+                          value={newContractedTeam}
+                          onChange={(e) => setNewContractedTeam(e.target.value)}
+                          className="flex-1 px-4 py-3 rounded-lg bg-slate-800 border-2 border-amber-500/50 text-white text-base font-medium focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20"
+                        >
+                          <option value="">-- Select team to contract --</option>
+                          {MLB_TEAMS
+                            .filter(t => !contractedTeamIds.includes(t.abbreviation))
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map(team => (
+                              <option key={team.abbreviation} value={team.abbreviation}>
+                                {team.name} ({team.abbreviation})
+                              </option>
+                            ))
+                          }
+                        </select>
+                        <button
+                          onClick={() => {
+                            if (newContractedTeam && !contractedTeamIds.includes(newContractedTeam)) {
+                              const teamName = MLB_TEAMS.find(t => t.abbreviation === newContractedTeam)?.name;
+                              if (confirm(`Add ${teamName} (${newContractedTeam}) to the contracted teams list?\n\nThis team will be excluded from this year's draft and all future drafts.`)) {
+                                setContractedTeamIds([...contractedTeamIds, newContractedTeam]);
+                                setNewContractedTeam('');
+                              }
+                            }
+                          }}
+                          disabled={!newContractedTeam}
+                          className="px-6 py-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-white font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                      {newContractedTeam && (
+                        <p className="text-amber-400 text-sm mt-2 font-medium">
+                          → {MLB_TEAMS.find(t => t.abbreviation === newContractedTeam)?.name} will be excluded from the draft
+                        </p>
                       )}
                     </div>
+                  </div>
 
-                    {/* Add New Contracted Team */}
-                    <div className="flex gap-2">
-                      <select
-                        value={newContractedTeam}
-                        onChange={(e) => setNewContractedTeam(e.target.value)}
-                        className="flex-1 px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"
-                      >
-                        <option value="">Add contracted team...</option>
-                        {MLB_TEAMS
-                          .filter(t => !contractedTeamIds.includes(t.abbreviation))
-                          .map(team => (
-                            <option key={team.abbreviation} value={team.abbreviation}>
-                              {team.abbreviation} - {team.name}
-                            </option>
-                          ))
-                        }
-                      </select>
+                  {/* STEP 3: Run the Lottery */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center text-white font-bold">3</span>
+                      <h4 className="text-white font-semibold">Run the Draft Lottery</h4>
+                    </div>
+                    <div className="ml-10">
+                      {/* Summary before running */}
+                      <div className="p-4 rounded-lg bg-slate-700/50 border border-slate-600 mb-4">
+                        <p className="text-slate-300 text-sm">
+                          <strong className="text-white">{30 - contractedTeamIds.length}</strong> teams will participate in the lottery
+                          {contractedTeamIds.length > 0 && (
+                            <span className="text-red-400"> ({contractedTeamIds.length} excluded: {contractedTeamIds.join(', ')})</span>
+                          )}
+                        </p>
+                      </div>
+
                       <button
-                        onClick={() => {
-                          if (newContractedTeam && !contractedTeamIds.includes(newContractedTeam)) {
-                            setContractedTeamIds([...contractedTeamIds, newContractedTeam]);
-                            setNewContractedTeam('');
+                        onClick={async () => {
+                          // Save contracted teams first
+                          await saveContractedTeams(contractedTeamIds);
+                          
+                          setIsCalculatingDraft(true);
+                          setCalculatedDraftOrder([]);
+                          setLotteryLog([]);
+                          try {
+                            const result = await calculateDraftOrder(seasonNumber, contractedTeamIds);
+                            if (result.success && result.draftOrder) {
+                              setCalculatedDraftOrder(result.draftOrder);
+                              setLotteryLog(result.lotteryLog || []);
+                            } else {
+                              alert(result.error || 'Failed to run lottery');
+                            }
+                          } catch (err: any) {
+                            alert('Error: ' + err.message);
+                          } finally {
+                            setIsCalculatingDraft(false);
                           }
                         }}
-                        disabled={!newContractedTeam}
-                        className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium disabled:opacity-50"
+                        disabled={isCalculatingDraft || standings.length === 0}
+                        className="w-full flex items-center justify-center gap-3 p-5 rounded-xl bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-bold text-xl transition-all disabled:opacity-50 shadow-lg shadow-purple-500/25"
                       >
-                        Add
+                        {isCalculatingDraft ? (
+                          <Loader2 className="w-7 h-7 animate-spin" />
+                        ) : (
+                          <>
+                            <Dices className="w-7 h-7" />
+                            🎲 RUN DRAFT LOTTERY
+                          </>
+                        )}
                       </button>
                     </div>
-
-                    {/* Save Contracted Teams */}
-                    <button
-                      onClick={async () => {
-                        setIsSavingContracted(true);
-                        const result = await saveContractedTeams(contractedTeamIds);
-                        if (result.success) {
-                          setSeasonActionMessage({ type: 'success', text: '✓ Contracted teams saved!' });
-                        } else {
-                          setSeasonActionMessage({ type: 'error', text: result.error || 'Failed to save' });
-                        }
-                        setIsSavingContracted(false);
-                        setTimeout(() => setSeasonActionMessage(null), 3000);
-                      }}
-                      disabled={isSavingContracted}
-                      className="w-full mt-3 flex items-center justify-center gap-2 p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium"
-                    >
-                      {isSavingContracted ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      Save Contracted Teams List
-                    </button>
                   </div>
-
-                  {/* Lottery Rules Info */}
-                  <div className="p-4 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
-                    <h4 className="text-cyan-400 font-semibold mb-2 flex items-center gap-2">
-                      <ListOrdered className="w-4 h-4" />
-                      Draft Lottery Rules
-                    </h4>
-                    <ul className="text-sm text-slate-300 space-y-1">
-                      <li className="flex items-center gap-2">
-                        <Lock className="w-3 h-3 text-amber-400" />
-                        <strong>Picks 1-5:</strong> LOCKED to the 5 worst teams (by record)
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Dices className="w-3 h-3 text-purple-400" />
-                        <strong>Picks 6+:</strong> WEIGHTED LOTTERY (worse record = higher odds)
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <UserMinus className="w-3 h-3 text-red-400" />
-                        <strong>Contracted teams:</strong> Excluded entirely from the draft
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* Run Lottery Button */}
-                  <button
-                    onClick={async () => {
-                      setIsCalculatingDraft(true);
-                      setCalculatedDraftOrder([]);
-                      setLotteryLog([]);
-                      try {
-                        const result = await calculateDraftOrder(seasonNumber, contractedTeamIds);
-                        if (result.success && result.draftOrder) {
-                          setCalculatedDraftOrder(result.draftOrder);
-                          setLotteryLog(result.lotteryLog || []);
-                        } else {
-                          alert(result.error || 'Failed to run lottery');
-                        }
-                      } catch (err: any) {
-                        alert('Error: ' + err.message);
-                      } finally {
-                        setIsCalculatingDraft(false);
-                      }
-                    }}
-                    disabled={isCalculatingDraft || standings.length === 0}
-                    className="w-full flex items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-bold text-lg transition-all disabled:opacity-50"
-                  >
-                    {isCalculatingDraft ? (
-                      <Loader2 className="w-6 h-6 animate-spin" />
-                    ) : (
-                      <>
-                        <Dices className="w-6 h-6" />
-                        🎲 RUN DRAFT LOTTERY
-                      </>
-                    )}
-                  </button>
 
                   {/* Lottery Results */}
                   {calculatedDraftOrder.length > 0 && (
