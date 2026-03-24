@@ -22,6 +22,48 @@ interface Team {
 }
 
 // Card type colors
+// Season Draft Pool - Pre-configured players for the current season draft
+const SEASON_DRAFT_POOL: Omit<Player, 'id'>[] = [
+  // Diamond Tier 💎
+  { name: 'Bobby Witt Jr.', position: 'SS', rating: 91, cardType: 'Live Diamond' },
+  { name: 'Ramon Laureano', position: 'LF', rating: 85, cardType: 'Live Diamond' },
+  // Gold Tier ⭐️
+  { name: 'Trevor Story', position: 'SS', rating: 84, cardType: 'Live Gold' },
+  { name: 'Michael Busch', position: '1B', rating: 84, cardType: 'Live Gold' },
+  { name: 'Wilyer Abreu', position: 'RF', rating: 83, cardType: 'Live Gold' },
+  { name: 'Max Muncy', position: '3B', rating: 82, cardType: 'Live Gold' },
+  { name: 'Jorge Polanco', position: '2B', rating: 81, cardType: 'Live Gold' },
+  { name: 'Ivan Herrera', position: 'C', rating: 81, cardType: 'Live Gold' },
+  // Silver Tier 🪙
+  { name: 'Austin Wells', position: 'C', rating: 79, cardType: 'Live Silver' },
+  { name: 'Tyler Soderstrom', position: '1B', rating: 79, cardType: 'Live Silver' },
+  { name: 'Jacob Young', position: 'CF', rating: 79, cardType: 'Live Silver' },
+  { name: 'Framber Valdez', position: 'SP', rating: 78, cardType: 'Live Silver' },
+  { name: 'Brock Stewart', position: 'RP', rating: 78, cardType: 'Live Silver' },
+  { name: 'Max Meyer', position: 'SP', rating: 76, cardType: 'Live Silver' },
+  // Bronze Tier 🥉
+  { name: 'Colin Rea', position: 'SP', rating: 74, cardType: 'Live Bronze' },
+  { name: 'Michael Lorenzen', position: 'SP', rating: 73, cardType: 'Live Bronze' },
+  { name: 'Matthew Liberatore', position: 'SP', rating: 72, cardType: 'Live Bronze' },
+  { name: 'Joel Payamps', position: 'RP', rating: 68, cardType: 'Live Bronze' },
+  { name: 'Tyler Gilbert', position: 'RP', rating: 68, cardType: 'Live Bronze' },
+  { name: 'Caden Dana', position: 'SP', rating: 67, cardType: 'Live Bronze' },
+  { name: 'Jack Suwinski', position: 'CF', rating: 67, cardType: 'Live Bronze' },
+  { name: 'Alexander Canario', position: 'RF', rating: 67, cardType: 'Live Bronze' },
+  { name: 'Carlos Vargas', position: 'RP', rating: 65, cardType: 'Live Bronze' },
+  // Common Tier ⚫️
+  { name: 'Ryan Noda', position: '1B', rating: 64, cardType: 'Live Common' },
+  { name: 'Kris Bryant', position: '1B', rating: 64, cardType: 'Live Common' },
+  { name: 'Michael Darrell-Hicks', position: 'SP', rating: 64, cardType: 'Live Common' },
+  { name: 'Thomas Harrington', position: 'SP', rating: 63, cardType: 'Live Common' },
+  { name: 'Ryan Pressly', position: 'RP', rating: 63, cardType: 'Live Common' },
+  { name: 'Graham Ashcraft', position: 'RP', rating: 63, cardType: 'Live Common' },
+  { name: 'Tyler Saucedo', position: 'RP', rating: 63, cardType: 'Live Common' },
+  { name: 'Ryne Stanek', position: 'RP', rating: 63, cardType: 'Live Common' },
+  { name: 'Gustavo Campero', position: 'RF', rating: 63, cardType: 'Live Common' },
+  { name: 'David Villar', position: '3B', rating: 61, cardType: 'Live Common' },
+];
+
 const cardTypeColors: Record<string, { bg: string; text: string; border: string }> = {
   'Diamond': { bg: 'rgba(168, 85, 247, 0.2)', text: '#c084fc', border: 'rgba(168, 85, 247, 0.5)' },
   'Gold': { bg: 'rgba(234, 179, 8, 0.2)', text: '#facc15', border: 'rgba(234, 179, 8, 0.5)' },
@@ -259,6 +301,15 @@ export default function DraftPage() {
     }
   };
 
+  // Load the current season draft pool
+  const loadSeasonDraftPool = () => {
+    const draftPoolPlayers: Player[] = SEASON_DRAFT_POOL.map((p, idx) => ({
+      id: idx,
+      ...p,
+    }));
+    setPlayers(draftPoolPlayers);
+  };
+
   // Load sample data for quick testing
   const loadSampleData = () => {
     const samplePlayers: Player[] = [
@@ -435,6 +486,35 @@ export default function DraftPage() {
 
           {/* Quick Load Options */}
           <div className="mt-8 space-y-4">
+            {/* Load Season Draft Pool - Most prominent option */}
+            <div className="glass-card p-6 border-2 border-amber-500/50 bg-gradient-to-br from-amber-500/10 to-orange-500/5">
+              <h3 className="font-display text-xl text-white mb-3 flex items-center gap-2">
+                <span className="text-2xl">🏆</span>
+                LOAD CURRENT SEASON DRAFT POOL
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                Pre-configured list of {SEASON_DRAFT_POOL.length} players for this season's draft. Ready to go!
+              </p>
+              <div className="flex flex-wrap gap-2 mb-4 text-xs">
+                <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded border border-purple-500/30">💎 2 Diamond</span>
+                <span className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded border border-amber-500/30">⭐️ 6 Gold</span>
+                <span className="px-2 py-1 bg-slate-400/20 text-slate-300 rounded border border-slate-400/30">🪙 6 Silver</span>
+                <span className="px-2 py-1 bg-orange-600/20 text-orange-400 rounded border border-orange-600/30">🥉 9 Bronze</span>
+                <span className="px-2 py-1 bg-slate-600/20 text-slate-400 rounded border border-slate-600/30">⚫️ 10 Common</span>
+              </div>
+              <button
+                onClick={loadSeasonDraftPool}
+                className="btn btn-primary w-full text-lg py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400"
+              >
+                🚀 LOAD DRAFT POOL ({SEASON_DRAFT_POOL.length} Players)
+              </button>
+              {players.length > 0 && players.length === SEASON_DRAFT_POOL.length && (
+                <p className="text-green-400 mt-3 text-center font-semibold">
+                  ✓ Season Draft Pool loaded!
+                </p>
+              )}
+            </div>
+
             {/* Load from MLB The Show API */}
             <div className="glass-card p-6">
               <h3 className="font-display text-xl text-white mb-3 flex items-center gap-2">
