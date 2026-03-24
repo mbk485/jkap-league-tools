@@ -116,7 +116,7 @@ const PHASE_COLORS: Record<SeasonPhase, string> = {
   pre_season: 'teal',
 };
 
-type TabType = 'overview' | 'questionnaire' | 'free-agents' | 'claims' | 'standings' | 'winter-league';
+type TabType = 'overview' | 'questionnaire' | 'free-agents' | 'claims' | 'standings' | 'draft' | 'winter-league';
 
 function OffSeasonContent() {
   const { user } = useAuth();
@@ -127,7 +127,7 @@ function OffSeasonContent() {
   // Read initial tab from URL query parameter
   const getInitialTab = (): TabType => {
     const tabParam = searchParams.get('tab');
-    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'winter-league'];
+    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'winter-league'];
     if (tabParam && validTabs.includes(tabParam as TabType)) {
       return tabParam as TabType;
     }
@@ -620,6 +620,17 @@ function OffSeasonContent() {
             <BarChart3 className="w-4 h-4" />
             Standings
           </button>
+          <button
+            onClick={() => setActiveTab('draft')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'draft'
+                ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Draft Pool
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -908,6 +919,11 @@ function OffSeasonContent() {
           {/* Standings Tab */}
           {activeTab === 'standings' && (
             <StandingsSection seasonNumber={seasonState.season_number} />
+          )}
+
+          {/* Draft Pool Tab */}
+          {activeTab === 'draft' && (
+            <DraftPoolSection />
           )}
 
           {/* Winter League Tab */}
@@ -2820,6 +2836,241 @@ function StandingsSection({ seasonNumber }: { seasonNumber: number }) {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// DRAFT POOL SECTION
+// =============================================================================
+
+interface DraftPlayer {
+  name: string;
+  position: string;
+  overall: number;
+  tier: 'diamond' | 'gold' | 'silver' | 'bronze' | 'common';
+}
+
+const DRAFT_POOL_PLAYERS: DraftPlayer[] = [
+  // Diamond Tier 💎
+  { name: 'Bobby Witt Jr.', position: 'SS', overall: 91, tier: 'diamond' },
+  { name: 'Ramon Laureano', position: 'LF', overall: 85, tier: 'diamond' },
+  // Gold Tier ⭐️
+  { name: 'Trevor Story', position: 'SS', overall: 84, tier: 'gold' },
+  { name: 'Michael Busch', position: '1B', overall: 84, tier: 'gold' },
+  { name: 'Wilyer Abreu', position: 'RF', overall: 83, tier: 'gold' },
+  { name: 'Max Muncy', position: '3B', overall: 82, tier: 'gold' },
+  { name: 'Jorge Polanco', position: '2B', overall: 81, tier: 'gold' },
+  { name: 'Ivan Herrera', position: 'C', overall: 81, tier: 'gold' },
+  // Silver Tier 🪙
+  { name: 'Austin Wells', position: 'C', overall: 79, tier: 'silver' },
+  { name: 'Tyler Soderstrom', position: '1B', overall: 79, tier: 'silver' },
+  { name: 'Jacob Young', position: 'CF', overall: 79, tier: 'silver' },
+  { name: 'Framber Valdez', position: 'SP', overall: 78, tier: 'silver' },
+  { name: 'Brock Stewart', position: 'RP', overall: 78, tier: 'silver' },
+  { name: 'Max Meyer', position: 'SP', overall: 76, tier: 'silver' },
+  // Bronze Tier 🥉
+  { name: 'Colin Rea', position: 'SP', overall: 74, tier: 'bronze' },
+  { name: 'Michael Lorenzen', position: 'SP', overall: 73, tier: 'bronze' },
+  { name: 'Matthew Liberatore', position: 'SP', overall: 72, tier: 'bronze' },
+  { name: 'Joel Payamps', position: 'RP', overall: 68, tier: 'bronze' },
+  { name: 'Tyler Gilbert', position: 'RP', overall: 68, tier: 'bronze' },
+  { name: 'Caden Dana', position: 'SP', overall: 67, tier: 'bronze' },
+  { name: 'Jack Suwinski', position: 'CF', overall: 67, tier: 'bronze' },
+  { name: 'Alexander Canario', position: 'RF', overall: 67, tier: 'bronze' },
+  { name: 'Carlos Vargas', position: 'RP', overall: 65, tier: 'bronze' },
+  // Common Tier ⚫️
+  { name: 'Ryan Noda', position: '1B', overall: 64, tier: 'common' },
+  { name: 'Kris Bryant', position: '1B', overall: 64, tier: 'common' },
+  { name: 'Michael Darrell-Hicks', position: 'SP', overall: 64, tier: 'common' },
+  { name: 'Thomas Harrington', position: 'SP', overall: 63, tier: 'common' },
+  { name: 'Ryan Pressly', position: 'RP', overall: 63, tier: 'common' },
+  { name: 'Graham Ashcraft', position: 'RP', overall: 63, tier: 'common' },
+  { name: 'Tyler Saucedo', position: 'RP', overall: 63, tier: 'common' },
+  { name: 'Ryne Stanek', position: 'RP', overall: 63, tier: 'common' },
+  { name: 'Gustavo Campero', position: 'RF', overall: 63, tier: 'common' },
+  { name: 'David Villar', position: '3B', overall: 61, tier: 'common' },
+];
+
+const TIER_CONFIG = {
+  diamond: { label: 'Diamond', emoji: '💎', bgColor: 'bg-cyan-500/20', borderColor: 'border-cyan-500/50', textColor: 'text-cyan-400' },
+  gold: { label: 'Gold', emoji: '⭐️', bgColor: 'bg-amber-500/20', borderColor: 'border-amber-500/50', textColor: 'text-amber-400' },
+  silver: { label: 'Silver', emoji: '🪙', bgColor: 'bg-slate-400/20', borderColor: 'border-slate-400/50', textColor: 'text-slate-300' },
+  bronze: { label: 'Bronze', emoji: '🥉', bgColor: 'bg-orange-700/20', borderColor: 'border-orange-700/50', textColor: 'text-orange-400' },
+  common: { label: 'Common', emoji: '⚫️', bgColor: 'bg-slate-600/20', borderColor: 'border-slate-600/50', textColor: 'text-slate-400' },
+};
+
+function DraftPoolSection() {
+  const [selectedTier, setSelectedTier] = useState<string>('all');
+  const [selectedPlayer, setSelectedPlayer] = useState<DraftPlayer | null>(null);
+  
+  const filteredPlayers = selectedTier === 'all' 
+    ? DRAFT_POOL_PLAYERS 
+    : DRAFT_POOL_PLAYERS.filter(p => p.tier === selectedTier);
+
+  const playersByTier = {
+    diamond: DRAFT_POOL_PLAYERS.filter(p => p.tier === 'diamond'),
+    gold: DRAFT_POOL_PLAYERS.filter(p => p.tier === 'gold'),
+    silver: DRAFT_POOL_PLAYERS.filter(p => p.tier === 'silver'),
+    bronze: DRAFT_POOL_PLAYERS.filter(p => p.tier === 'bronze'),
+    common: DRAFT_POOL_PLAYERS.filter(p => p.tier === 'common'),
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <Card className="bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border-2 border-amber-500/40">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-4xl">🏆</span>
+            <div>
+              <h2 className="text-2xl font-bold text-white">Season Draft Pool</h2>
+              <p className="text-slate-300">
+                {DRAFT_POOL_PLAYERS.length} players available for draft • Click any player to view detailed stats
+              </p>
+            </div>
+          </div>
+          
+          {/* Tier Filter Buttons */}
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button
+              onClick={() => setSelectedTier('all')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                selectedTier === 'all'
+                  ? 'bg-white text-slate-900'
+                  : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'
+              }`}
+            >
+              All ({DRAFT_POOL_PLAYERS.length})
+            </button>
+            {Object.entries(TIER_CONFIG).map(([tier, config]) => (
+              <button
+                key={tier}
+                onClick={() => setSelectedTier(tier)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                  selectedTier === tier
+                    ? `${config.bgColor} ${config.textColor} border ${config.borderColor}`
+                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'
+                }`}
+              >
+                <span>{config.emoji}</span>
+                {config.label} ({playersByTier[tier as keyof typeof playersByTier].length})
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Draft Pool Grid - Organized by Tier */}
+      {selectedTier === 'all' ? (
+        // Show all tiers grouped
+        Object.entries(TIER_CONFIG).map(([tier, config]) => {
+          const tierPlayers = playersByTier[tier as keyof typeof playersByTier];
+          if (tierPlayers.length === 0) return null;
+          
+          return (
+            <div key={tier} className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{config.emoji}</span>
+                <h3 className={`text-xl font-bold ${config.textColor}`}>
+                  {config.label} Tier
+                </h3>
+                <Badge className={`${config.bgColor} ${config.textColor} border ${config.borderColor}`}>
+                  {tierPlayers.length} players
+                </Badge>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {tierPlayers.map((player, idx) => (
+                  <PlayerStatsPopover
+                    key={`${tier}-${idx}`}
+                    playerName={player.name}
+                    position={player.position}
+                    trigger={
+                      <button
+                        className={`w-full p-4 rounded-xl ${config.bgColor} border ${config.borderColor} hover:scale-[1.02] transition-all text-left group`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-12 h-12 rounded-lg ${config.bgColor} border ${config.borderColor} flex items-center justify-center`}>
+                              <span className={`text-lg font-bold ${config.textColor}`}>{player.overall}</span>
+                            </div>
+                            <div>
+                              <div className="font-bold text-white group-hover:text-amber-300 transition-colors">
+                                {player.name}
+                              </div>
+                              <div className="text-sm text-slate-400">{player.position}</div>
+                            </div>
+                          </div>
+                          <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-amber-400 transition-colors" />
+                        </div>
+                      </button>
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })
+      ) : (
+        // Show filtered tier only
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {filteredPlayers.map((player, idx) => {
+            const config = TIER_CONFIG[player.tier];
+            return (
+              <PlayerStatsPopover
+                key={idx}
+                playerName={player.name}
+                position={player.position}
+                trigger={
+                  <button
+                    className={`w-full p-4 rounded-xl ${config.bgColor} border ${config.borderColor} hover:scale-[1.02] transition-all text-left group`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-lg ${config.bgColor} border ${config.borderColor} flex items-center justify-center`}>
+                          <span className={`text-lg font-bold ${config.textColor}`}>{player.overall}</span>
+                        </div>
+                        <div>
+                          <div className="font-bold text-white group-hover:text-amber-300 transition-colors">
+                            {player.name}
+                          </div>
+                          <div className="text-sm text-slate-400">{player.position}</div>
+                        </div>
+                      </div>
+                      <span className="text-lg">{config.emoji}</span>
+                    </div>
+                  </button>
+                }
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Draft Rules Card */}
+      <Card className="bg-slate-800/50 border-slate-700">
+        <CardContent className="p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Info className="w-5 h-5 text-blue-400" />
+            Draft Rules
+          </h3>
+          <div className="grid sm:grid-cols-2 gap-4 text-sm">
+            <div className="space-y-2">
+              <h4 className="font-semibold text-amber-400">Draft Order</h4>
+              <p className="text-slate-300">
+                Draft order is determined by previous season standings (worst to first).
+              </p>
+            </div>
+            <div className="space-y-2">
+              <h4 className="font-semibold text-amber-400">Selection Process</h4>
+              <p className="text-slate-300">
+                Snake draft format - order reverses each round for fairness.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
