@@ -118,7 +118,7 @@ const PHASE_COLORS: Record<SeasonPhase, string> = {
   pre_season: 'teal',
 };
 
-type TabType = 'overview' | 'questionnaire' | 'free-agents' | 'claims' | 'standings' | 'draft' | 'winter-league';
+type TabType = 'overview' | 'questionnaire' | 'free-agents' | 'claims' | 'standings' | 'draft' | 'signings' | 'winter-league';
 
 function OffSeasonContent() {
   const { user } = useAuth();
@@ -129,7 +129,7 @@ function OffSeasonContent() {
   // Read initial tab from URL query parameter
   const getInitialTab = (): TabType => {
     const tabParam = searchParams.get('tab');
-    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'winter-league'];
+    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'signings', 'winter-league'];
     if (tabParam && validTabs.includes(tabParam as TabType)) {
       return tabParam as TabType;
     }
@@ -739,6 +739,17 @@ function OffSeasonContent() {
             <Users className="w-4 h-4" />
             Draft Pool
           </button>
+          <button
+            onClick={() => setActiveTab('signings')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'signings'
+                ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            <Scroll className="w-4 h-4" />
+            FA Signings
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -1032,6 +1043,11 @@ function OffSeasonContent() {
           {/* Draft Pool Tab */}
           {activeTab === 'draft' && (
             <DraftPoolSection />
+          )}
+
+          {/* FA Signings Tab - Master List */}
+          {activeTab === 'signings' && (
+            <SigningsSection seasonNumber={seasonState.season_number} />
           )}
 
           {/* Winter League Tab */}
@@ -3383,6 +3399,227 @@ function WinterLeagueSection() {
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// SIGNINGS SECTION - Free Agency Master List
+// =============================================================================
+
+interface Signing {
+  id: string;
+  season_number: number;
+  signing_team_id: string;
+  signing_team_name: string;
+  player_name: string;
+  player_classification: string;
+  player_overall?: number;
+  contract_years?: number;
+  contract_value?: number;
+  contract_display?: string;
+  from_team_id?: string;
+  from_team_name?: string;
+  signing_type: 'claim' | 'priority_claim' | 'direct';
+  signed_at: string;
+}
+
+const TIER_BADGES: Record<string, { bg: string; text: string; label: string; emoji: string }> = {
+  diamond: { bg: 'bg-cyan-500', text: 'text-white', label: 'Diamond', emoji: '💎' },
+  gold: { bg: 'bg-yellow-500', text: 'text-black', label: 'Gold', emoji: '🥇' },
+  silver: { bg: 'bg-slate-400', text: 'text-black', label: 'Silver', emoji: '🥈' },
+  bronze: { bg: 'bg-orange-600', text: 'text-white', label: 'Bronze', emoji: '🥉' },
+  common: { bg: 'bg-slate-600', text: 'text-white', label: 'Common', emoji: '⚪' },
+};
+
+function SigningsSection({ seasonNumber }: { seasonNumber: number }) {
+  const [signings, setSignings] = useState<Signing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterTier, setFilterTier] = useState<string>('all');
+
+  useEffect(() => {
+    const loadSignings = async () => {
+      try {
+        const { getSignings } = await import('@/lib/supabase');
+        const data = await getSignings(seasonNumber);
+        setSignings(data as Signing[]);
+      } catch (err) {
+        console.error('Error loading signings:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSignings();
+  }, [seasonNumber]);
+
+  const filteredSignings = filterTier === 'all' 
+    ? signings 
+    : signings.filter(s => s.player_classification.toLowerCase() === filterTier);
+
+  // Group by tier for summary
+  const tierCounts = signings.reduce((acc, s) => {
+    const tier = s.player_classification.toLowerCase();
+    acc[tier] = (acc[tier] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  if (loading) {
+    return (
+      <Card className="bg-slate-800/50 border-slate-700">
+        <CardContent className="p-8 text-center">
+          <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-slate-400">Loading Free Agency Master List...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <Card className="bg-gradient-to-br from-purple-500/20 to-indigo-500/10 border-2 border-purple-500/40">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 rounded-xl bg-purple-500/20 border border-purple-500/30">
+              <Scroll className="w-8 h-8 text-purple-400" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white">Free Agency Master List</h2>
+              <p className="text-slate-300">
+                Season {seasonNumber} • {signings.length} total signings
+              </p>
+            </div>
+          </div>
+
+          {/* Tier Summary */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setFilterTier('all')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                filterTier === 'all'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              All ({signings.length})
+            </button>
+            {Object.entries(TIER_BADGES).map(([tier, config]) => {
+              const count = tierCounts[tier] || 0;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={tier}
+                  onClick={() => setFilterTier(tier)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
+                    filterTier === tier
+                      ? `${config.bg} ${config.text}`
+                      : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  {config.emoji} {config.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Signings List */}
+      {filteredSignings.length === 0 ? (
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="p-8 text-center">
+            <Scroll className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-white mb-2">No Signings Yet</h3>
+            <p className="text-slate-400">
+              {filterTier === 'all' 
+                ? 'Free agent signings will appear here once claims are processed.'
+                : `No ${TIER_BADGES[filterTier]?.label || filterTier} signings recorded.`}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4">
+          {filteredSignings.map((signing, index) => {
+            const tierConfig = TIER_BADGES[signing.player_classification.toLowerCase()] || TIER_BADGES.common;
+            
+            return (
+              <Card key={signing.id} className="bg-slate-800/50 border-slate-700 hover:border-slate-600 transition-all">
+                <CardContent className="p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    {/* Rank Number */}
+                    <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full bg-slate-700 text-slate-400 font-bold text-lg">
+                      {index + 1}
+                    </div>
+                    
+                    {/* Player Info */}
+                    <div className="flex-grow">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${tierConfig.bg} ${tierConfig.text}`}>
+                          {tierConfig.emoji} {tierConfig.label}
+                        </span>
+                        <h3 className="text-lg font-bold text-white">{signing.player_name}</h3>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                        <span className="text-emerald-400 font-medium">
+                          → {signing.signing_team_name}
+                        </span>
+                        {signing.from_team_name && (
+                          <span className="text-slate-400">
+                            From: <span className="text-slate-300">{signing.from_team_name}</span>
+                          </span>
+                        )}
+                        {signing.contract_display && (
+                          <span className="text-amber-400">
+                            {signing.contract_display}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Signing Type Badge */}
+                    <div className="flex items-center gap-2">
+                      <Badge className={`${
+                        signing.signing_type === 'priority_claim' ? 'bg-amber-500 text-black' :
+                        signing.signing_type === 'claim' ? 'bg-cyan-500 text-white' :
+                        'bg-emerald-500 text-white'
+                      }`}>
+                        {signing.signing_type === 'priority_claim' ? '⭐ Priority' :
+                         signing.signing_type === 'claim' ? '📋 Claim' : '✍️ Direct'}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Summary Stats */}
+      {signings.length > 0 && (
+        <Card className="bg-slate-800/30 border-slate-700">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+              <div>
+                <p className="text-2xl font-bold text-white">{signings.length}</p>
+                <p className="text-sm text-slate-400">Total Signings</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-cyan-400">{tierCounts.diamond || 0}</p>
+                <p className="text-sm text-slate-400">💎 Diamonds</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-yellow-400">{tierCounts.gold || 0}</p>
+                <p className="text-sm text-slate-400">🥇 Golds</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-300">{(tierCounts.silver || 0) + (tierCounts.bronze || 0)}</p>
+                <p className="text-sm text-slate-400">🥈🥉 Silver/Bronze</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
