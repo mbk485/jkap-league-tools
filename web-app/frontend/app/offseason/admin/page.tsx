@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   SeasonPhase,
   getPhaseLabel,
@@ -76,6 +76,8 @@ import {
   SkipForward,
   Archive,
   Zap,
+  ArrowRight,
+  Clipboard,
 } from 'lucide-react';
 import {
   getLeagueStandings,
@@ -162,9 +164,11 @@ interface AwardCandidate {
 export default function OffSeasonAdminPage() {
   const { user, isAuthenticated } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab') as 'overview' | 'members' | 'voting' | 'standings' | 'phases' | 'free-agency' | 'seasons' | 'draft' | null;
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'voting' | 'standings' | 'phases' | 'free-agency' | 'seasons'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'voting' | 'standings' | 'phases' | 'free-agency' | 'seasons' | 'draft'>(initialTab || 'overview');
   const [faSection, setFaSection] = useState<'declarations' | 'claims' | 'signings'>('declarations');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   
@@ -972,6 +976,9 @@ export default function OffSeasonAdminPage() {
               <Link href="/offseason?tab=free-agents" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
                 <Users className="w-3 h-3" /> Free Agents
               </Link>
+              <Link href="/draft" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+                <Dices className="w-3 h-3" /> Draft
+              </Link>
             </div>
           </div>
 
@@ -1084,6 +1091,7 @@ export default function OffSeasonAdminPage() {
             { id: 'overview', label: 'Overview', icon: BarChart3 },
             { id: 'claims', label: `Claims (${allClaims.length})`, icon: ClipboardList, highlight: allClaims.length > 0 },
             { id: 'free-agency', label: 'Free Agency', icon: UserMinus },
+            { id: 'draft', label: 'Draft', icon: Dices },
             { id: 'members', label: 'Members & SMS', icon: Users },
             { id: 'voting', label: 'Awards Voting', icon: Trophy },
             { id: 'standings', label: 'Standings', icon: Target },
@@ -1095,7 +1103,9 @@ export default function OffSeasonAdminPage() {
               onClick={() => setActiveTab(tab.id as any)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === tab.id
-                  ? tab.id === 'free-agency' ? 'bg-cyan-500 text-white' : 'bg-amber-500 text-white'
+                  ? tab.id === 'free-agency' ? 'bg-cyan-500 text-white' 
+                    : tab.id === 'draft' ? 'bg-purple-500 text-white'
+                    : 'bg-amber-500 text-white'
                   : tab.highlight 
                     ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 hover:bg-cyan-500/30'
                     : 'text-slate-400 hover:text-white hover:bg-slate-700'
@@ -2698,6 +2708,270 @@ Let's get this done! 💪`;
                         </>
                       )}
                     </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Draft Tab */}
+          {activeTab === 'draft' && (
+            <div className="space-y-6">
+              {/* Quick Access Tools */}
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Draft Board Link */}
+                <Link href="/draft">
+                  <Card className="bg-gradient-to-r from-purple-500/20 to-indigo-500/10 border-purple-500/30 hover:border-purple-400 transition-all cursor-pointer group">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                          <Clipboard className="w-7 h-7 text-purple-400" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-bold text-white group-hover:text-purple-300 transition-colors">Draft Board</h3>
+                          <p className="text-sm text-slate-400">Run live snake drafts with timer and player pool</p>
+                        </div>
+                        <ArrowRight className="w-5 h-5 text-purple-400 group-hover:translate-x-1 transition-transform" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+
+                {/* Draft Pool Preview */}
+                <Card className="bg-gradient-to-r from-amber-500/20 to-orange-500/10 border-amber-500/30">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                        <Users className="w-7 h-7 text-amber-400" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-bold text-white">Draft Pool</h3>
+                        <p className="text-sm text-slate-400">Season {seasonNumber + 1} draft pool configured</p>
+                      </div>
+                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                        Ready
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Status Message */}
+              {standingsMessage && (
+                <div className={`p-4 rounded-xl border ${
+                  standingsMessage.type === 'success' 
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                    : 'bg-red-500/10 border-red-500/30 text-red-400'
+                }`}>
+                  {standingsMessage.text}
+                </div>
+              )}
+
+              {/* JKAP Draft Lottery */}
+              <Card className="bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-blue-500/10 border-purple-500/30">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Dices className="w-5 h-5 text-purple-400" />
+                    JKAP Draft Lottery - Season {seasonNumber + 1}
+                  </CardTitle>
+                  <p className="text-slate-400 text-sm mt-1">
+                    Top {lockedPicksCount} picks are locked to worst records. Remaining picks determined by weighted lottery.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Lottery Settings */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {/* Locked Picks Setting */}
+                    <div className="p-4 rounded-xl bg-slate-700/30 border border-slate-600">
+                      <label className="text-white font-medium flex items-center gap-2 mb-3">
+                        <Lock className="w-4 h-4 text-amber-400" />
+                        Locked Picks (Non-Lottery)
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          min={0}
+                          max={standings.length - contractedTeams.length}
+                          value={lockedPicksCount}
+                          onChange={(e) => {
+                            setLockedPicksCount(parseInt(e.target.value) || 0);
+                            setLotteryRun(false);
+                          }}
+                          className="w-20 px-3 py-2 rounded bg-slate-800 border border-slate-600 text-white text-center"
+                        />
+                        <span className="text-slate-400 text-sm">
+                          picks go to worst records
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Run Lottery Button */}
+                    <div className="p-4 rounded-xl bg-slate-700/30 border border-slate-600">
+                      <label className="text-white font-medium flex items-center gap-2 mb-3">
+                        <Shuffle className="w-4 h-4 text-purple-400" />
+                        Lottery Actions
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={runDraftLottery}
+                          className="bg-purple-600 hover:bg-purple-500"
+                        >
+                          <Dices className="w-4 h-4 mr-2" />
+                          {lotteryRun ? 'Re-Run Lottery' : 'Run Draft Lottery'}
+                        </Button>
+                        {lotteryRun && (
+                          <Button
+                            variant="secondary"
+                            onClick={resetLottery}
+                          >
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            Reset
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Contracted Teams */}
+                  <div>
+                    <label className="text-white font-medium flex items-center gap-2 mb-2">
+                      <XCircle className="w-4 h-4 text-red-400" />
+                      Contracted Teams (Omit from Draft)
+                    </label>
+                    <p className="text-slate-400 text-sm mb-3">
+                      Select teams that have been contracted this season. They will be excluded from the draft order.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {standings.map(team => (
+                        <button
+                          key={team.teamId}
+                          onClick={() => toggleContractedTeam(team.teamId)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                            contractedTeams.includes(team.teamId)
+                              ? 'bg-red-500/20 text-red-400 border border-red-500/50'
+                              : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'
+                          }`}
+                        >
+                          {team.teamAbbr}
+                          {contractedTeams.includes(team.teamId) && (
+                            <XCircle className="w-3 h-3 ml-1 inline" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Draft Order Results */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <h3 className="text-white font-medium">Draft Order</h3>
+                      {lotteryRun && (
+                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                          Lottery Complete
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                      {draftOrder.filter(t => !contractedTeams.includes(t.teamId)).map((team, index) => {
+                        const isLocked = index < lockedPicksCount;
+                        return (
+                          <div
+                            key={team.teamId}
+                            className={`flex items-center gap-3 p-3 rounded-xl border ${
+                              isLocked 
+                                ? 'bg-amber-500/10 border-amber-500/30' 
+                                : lotteryRun 
+                                  ? 'bg-purple-500/10 border-purple-500/30'
+                                  : 'bg-slate-700/30 border-slate-600'
+                            }`}
+                          >
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                              isLocked ? 'bg-amber-500 text-white' : 'bg-slate-600 text-slate-300'
+                            }`}>
+                              {index + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-medium text-sm">{team.teamAbbr}</p>
+                              {isLocked ? (
+                                <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                                  <Lock className="w-3 h-3 mr-1" />
+                                  Locked
+                                </Badge>
+                              ) : lotteryRun ? (
+                                <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
+                                  <Shuffle className="w-3 h-3 mr-1" />
+                                  Lottery
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-slate-500 text-xs mt-3">
+                      {standings.length - contractedTeams.length} active teams • {lockedPicksCount} locked picks • {Math.max(0, standings.length - contractedTeams.length - lockedPicksCount)} lottery picks
+                    </p>
+                  </div>
+
+                  {/* Share Draft Order */}
+                  <div className="flex gap-3 pt-4 border-t border-slate-700">
+                    <Button
+                      onClick={() => {
+                        const activeTeams = draftOrder.filter(t => !contractedTeams.includes(t.teamId));
+                        const draftText = [
+                          `🎲 JKAP League Season ${seasonNumber + 1} Draft Order`,
+                          lotteryRun ? '(Lottery Complete)' : '',
+                          '',
+                          `🔒 LOCKED PICKS (1-${lockedPicksCount}):`,
+                          ...activeTeams.slice(0, lockedPicksCount).map((team, i) => 
+                            `${i + 1}. ${team.teamAbbr} (${team.wins}-${team.losses}) - ${team.owner}`
+                          ),
+                          '',
+                          `🎰 LOTTERY PICKS (${lockedPicksCount + 1}-${activeTeams.length}):`,
+                          ...activeTeams.slice(lockedPicksCount).map((team, i) => 
+                            `${lockedPicksCount + i + 1}. ${team.teamAbbr} (${team.wins}-${team.losses}) - ${team.owner}`
+                          ),
+                          '',
+                          contractedTeams.length > 0 ? `❌ Contracted: ${contractedTeams.join(', ')}` : '',
+                        ].filter(Boolean).join('\n');
+                        copyToClipboard(draftText, 'draft-order-text-tab');
+                      }}
+                      className="bg-blue-500 hover:bg-blue-400"
+                    >
+                      {copiedField === 'draft-order-text-tab' ? (
+                        <>
+                          <Check className="w-4 h-4 mr-2" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4 mr-2" />
+                          Copy Draft Order for Facebook
+                        </>
+                      )}
+                    </Button>
+                    {lotteryResults.length > 0 && discordWebhookUrl && (
+                      <Button
+                        onClick={async () => {
+                          setDiscordStatus({ type: 'sending', text: 'Posting draft order...' });
+                          const draftOrderData = lotteryResults.map((team, idx) => ({
+                            pick: idx + 1,
+                            teamAbbr: team.teamAbbr.toUpperCase(),
+                            teamName: team.teamName,
+                          }));
+                          const result = await postDraftOrder(discordWebhookUrl, draftOrderData, seasonNumber);
+                          if (result.success) {
+                            setDiscordStatus({ type: 'success', text: '✓ Draft order posted to Discord!' });
+                          } else {
+                            setDiscordStatus({ type: 'error', text: result.error || 'Failed to post' });
+                          }
+                        }}
+                        variant="secondary"
+                      >
+                        <Send className="w-4 h-4 mr-2" />
+                        Post to Discord
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

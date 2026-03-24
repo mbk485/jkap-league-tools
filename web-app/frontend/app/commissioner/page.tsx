@@ -62,6 +62,22 @@ const commissionerTools: CommissionerTool[] = [
     isPopular: true,
   },
   {
+    id: 'draft-lottery',
+    name: 'Draft Lottery',
+    description: 'Run weighted draft lotteries based on standings. Lock top picks for worst records, randomize the rest.',
+    icon: <Sparkles className="w-8 h-8" />,
+    href: '/offseason/admin?tab=draft',
+    tier: 'free',
+    category: 'draft',
+    features: [
+      'Weighted lottery system',
+      'Lock top picks to worst records',
+      'Exclude contracted teams',
+      'Post results to Discord',
+      'Copy for Facebook',
+    ],
+  },
+  {
     id: 'basic-recap',
     name: 'Game Recap (Basic)',
     description: 'Create simple game recaps with manual entry. Great for posting to your league channels.',

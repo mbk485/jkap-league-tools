@@ -67,6 +67,7 @@ import {
   Unlock,
   Trash2,
   X,
+  Dices,
 } from 'lucide-react';
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
 import { PlayerStatsCard, PlayerStatsPopover } from '@/components/players';
@@ -294,6 +295,9 @@ function OffSeasonContent() {
               </Link>
               <Link href="/offseason?tab=free-agents" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
                 <Users className="w-3 h-3" /> Free Agents
+              </Link>
+              <Link href="/draft" className="text-slate-400 hover:text-white text-xs flex items-center gap-1">
+                <Dices className="w-3 h-3" /> Draft
               </Link>
             </div>
           </div>
