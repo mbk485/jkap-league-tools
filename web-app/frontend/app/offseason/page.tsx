@@ -674,32 +674,50 @@ function OffSeasonContent() {
           <button
             onClick={() => setActiveTab('free-agents')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'free-agents'
+              ['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase)
+                ? 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
+                : activeTab === 'free-agents'
                 ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30'
                 : freeAgentsDeclared.length === 0
                 ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50 animate-pulse'
                 : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
             }`}
+            disabled={['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase)}
           >
-            <UserMinus className="w-4 h-4" />
-            Declare Free Agents
-            {freeAgentsDeclared.length === 0 && (
-              <span className="ml-1 px-2 py-0.5 text-xs bg-orange-500 text-white rounded-full">!</span>
+            {['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase) ? (
+              <Lock className="w-4 h-4" />
+            ) : (
+              <UserMinus className="w-4 h-4" />
             )}
-            {freeAgentsDeclared.length > 0 && (
+            Declare Free Agents
+            {['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase) ? (
+              <span className="ml-1 px-2 py-0.5 text-xs bg-slate-600 text-slate-400 rounded-full">DONE</span>
+            ) : freeAgentsDeclared.length === 0 ? (
+              <span className="ml-1 px-2 py-0.5 text-xs bg-orange-500 text-white rounded-full">!</span>
+            ) : (
               <span className="ml-1 px-2 py-0.5 text-xs bg-emerald-500 text-white rounded-full">{freeAgentsDeclared.length}</span>
             )}
           </button>
           <button
             onClick={() => setActiveTab('claims')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'claims'
+              ['processing', 'signings', 'complete'].includes(offseasonPhase)
+                ? 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
+                : activeTab === 'claims'
                 ? 'bg-cyan-500 text-white'
                 : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
             }`}
+            disabled={['processing', 'signings', 'complete'].includes(offseasonPhase)}
           >
-            <UserPlus className="w-4 h-4" />
+            {['processing', 'signings', 'complete'].includes(offseasonPhase) ? (
+              <Lock className="w-4 h-4" />
+            ) : (
+              <UserPlus className="w-4 h-4" />
+            )}
             Claim Players
+            {['processing', 'signings', 'complete'].includes(offseasonPhase) && (
+              <span className="ml-1 px-2 py-0.5 text-xs bg-slate-600 text-slate-400 rounded-full">DONE</span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('questionnaire')}
@@ -1031,7 +1049,7 @@ function OffSeasonContent() {
             <ClaimsSection
               claims={claimsSubmitted}
               onClaim={(claim) => setClaimsSubmitted([...claimsSubmitted, claim])}
-              currentUser={user && user.teamId ? { id: user.id, team_id: user.teamId, display_name: user.displayName || user.teamName || '' } : null}
+              currentUser={user && user.teamId ? { id: user.id, team_id: user.teamId, team_name: user.teamName || '', display_name: user.displayName || user.teamName || '' } : null}
             />
           )}
 
@@ -1300,7 +1318,7 @@ function FreeAgentSection({
   // Declaration period status - closed when claiming is open
   const [declarationsClosed, setDeclarationsClosed] = useState(false);
 
-  // Load master free agent list AND check if claiming is open
+  // Load master free agent list AND check if declarations should be locked
   useEffect(() => {
     const loadData = async () => {
       setLoadingMasterList(true);
@@ -1312,8 +1330,12 @@ function FreeAgentSection({
         ]);
         setMasterList(list as FreeAgentDeclaration[]);
         
-        // If claiming is open, declarations are closed
-        if (settings?.claiming_open) {
+        // Declarations are closed if:
+        // 1. Claiming is currently open, OR
+        // 2. We're past the declarations phase (claiming, processing, signings, complete)
+        const currentPhase = settings?.offseason_phase || 'declarations';
+        const pastDeclarations = ['claiming', 'processing', 'signings', 'complete'].includes(currentPhase);
+        if (settings?.claiming_open || pastDeclarations) {
           setDeclarationsClosed(true);
         }
       } catch (err) {
@@ -2003,10 +2025,10 @@ function FreeAgentSection({
 interface ClaimsSectionProps {
   claims: FreeAgentClaim[];
   onClaim: (claim: FreeAgentClaim) => void;
-  currentUser: { id: string; team_id: string; display_name: string } | null;
+  currentUser: { id: string; team_id: string; team_name: string; display_name: string } | null;
 }
 
-type CurrentUserProp = { id: string; team_id: string; display_name: string } | null;
+type CurrentUserProp = { id: string; team_id: string; team_name: string; display_name: string } | null;
 
 // Tier hierarchy for validation (higher index = higher tier)
 const TIER_HIERARCHY = ['common', 'bronze', 'silver', 'gold', 'diamond'];
@@ -2041,6 +2063,7 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
   const [submitting, setSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<FreeAgentDeclaration | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<string>('declarations');
 
   // Form state for 3 choices
   const [choice1, setChoice1] = useState('');
@@ -2062,6 +2085,7 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
         setAvailableFreeAgents(agents || []);
         setClaimingOpen(settings?.claiming_open || false);
         setClaimingClosesAt(settings?.claiming_closes_at || null);
+        setCurrentPhase(settings?.offseason_phase || 'declarations');
 
         // Check if user already submitted a claim
         if (currentUser?.id) {
@@ -2169,7 +2193,7 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
       const result = await submitClaimChoices({
         season_number: 4,
         claiming_team_id: currentUser.team_id,
-        claiming_team_name: currentUser.display_name,
+        claiming_team_name: currentUser.team_name,
         claiming_user_id: currentUser.id,
         choice_1_player: choice1,
         choice_1_classification: fa1?.classification || 'unknown',
@@ -2281,24 +2305,35 @@ function ClaimsSection({ claims, onClaim, currentUser }: ClaimsSectionProps) {
     );
   };
 
-  // CLOSED STATE
+  // Check if we're past the claiming phase
+  const claimingComplete = ['processing', 'signings', 'complete'].includes(currentPhase);
+
+  // CLOSED STATE - Either not open yet, or already complete
   if (!claimingOpen) {
     return (
       <div className="max-w-4xl mx-auto">
         {/* Free Agent Ticker */}
         <FreeAgentTicker />
         
-        <Card className="bg-slate-800/50 border-red-500/30">
+        <Card className={`bg-slate-800/50 ${claimingComplete ? 'border-emerald-500/30' : 'border-red-500/30'}`}>
           <CardContent className="py-12 text-center">
-            <div className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-6">
-              <Lock className="w-10 h-10 text-red-400" />
+            <div className={`w-20 h-20 rounded-full ${claimingComplete ? 'bg-emerald-500/20' : 'bg-red-500/20'} flex items-center justify-center mx-auto mb-6`}>
+              {claimingComplete ? (
+                <CheckCircle className="w-10 h-10 text-emerald-400" />
+              ) : (
+                <Lock className="w-10 h-10 text-red-400" />
+              )}
             </div>
-            <h3 className="text-2xl font-bold text-white mb-2">Claiming Period CLOSED</h3>
+            <h3 className="text-2xl font-bold text-white mb-2">
+              {claimingComplete ? 'Free Agency COMPLETE' : 'Claiming Period CLOSED'}
+            </h3>
             <p className="text-slate-400 mb-4">
-              The claiming window is not currently open. Check back when the commissioner opens it.
+              {claimingComplete 
+                ? 'All claims have been processed. Check the FA Signings tab for the master list of signings.'
+                : 'The claiming window is not currently open. Check back when the commissioner opens it.'}
             </p>
-            <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-lg px-4 py-2">
-              CLOSED
+            <Badge className={`${claimingComplete ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30'} text-lg px-4 py-2`}>
+              {claimingComplete ? '✅ COMPLETE' : 'CLOSED'}
             </Badge>
           </CardContent>
         </Card>
