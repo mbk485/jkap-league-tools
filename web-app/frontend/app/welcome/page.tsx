@@ -29,6 +29,7 @@ import {
   getUserOnboarding,
   updateUserOnboarding,
   acknowledgeRules,
+  markSmsRegistered,
   completeOnboarding,
   needsOnboarding,
   getWelcomePacket,
@@ -104,7 +105,10 @@ const LEAGUE_RULES = {
   ],
 };
 
-type OnboardingStep = 'welcome' | 'rules' | 'trading' | 'tools' | 'join-game' | 'checklist' | 'complete';
+type OnboardingStep = 'welcome' | 'sms-registration' | 'rules' | 'trading' | 'tools' | 'join-game' | 'checklist' | 'complete';
+
+// Easy Texting form URL for SMS registration
+const EASY_TEXTING_FORM_URL = 'https://storage.googleapis.com/cf-prod-widgets/433290282658963456-EZ/7406a3e5-35c8-4662-86ff-d4cf21a8bf6a/f8211439-8e42-46e2-91f4-9f230d9cd711-1746793700230.html';
 
 export default function WelcomePage() {
   const router = useRouter();
@@ -282,10 +286,146 @@ export default function WelcomePage() {
                 fullWidth
                 icon={<ArrowRight className="w-4 h-4" />}
                 iconPosition="right"
-                onClick={() => setCurrentStep('rules')}
+                onClick={() => setCurrentStep('sms-registration')}
               >
                 Let's Get Started
               </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // SMS Registration step - MANDATORY for all approved members
+  if (currentStep === 'sms-registration') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 py-8 px-4">
+        <div className="max-w-4xl mx-auto">
+          <Card className="bg-slate-800/50 border-slate-700">
+            <div className="p-6 border-b border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Register for SMS Updates</h2>
+                  <p className="text-sm text-slate-400">Required step for all league members</p>
+                </div>
+              </div>
+            </div>
+
+            <CardContent className="p-6">
+              {/* Mandatory Notice */}
+              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl mb-6">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-red-400">MANDATORY FOR ALL MEMBERS</p>
+                    <p className="text-red-300/80 text-sm mt-1">
+                      You <strong>MUST</strong> complete this registration to receive league updates.
+                      If you do not register, <strong>your games will NOT count</strong> and you may miss important deadlines.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Why SMS Registration */}
+              <div className="mb-6">
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <span className="text-2xl">📱</span>
+                  Why SMS Registration?
+                </h3>
+                <div className="grid gap-3">
+                  <div className="p-3 bg-slate-700/50 rounded-xl flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                      <Check className="w-4 h-4 text-green-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-white">Instant League Updates</p>
+                      <p className="text-sm text-slate-400">Get notified about roster updates, deadlines, and announcements</p>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-slate-700/50 rounded-xl flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                      <Check className="w-4 h-4 text-green-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-white">Never Miss a Deadline</p>
+                      <p className="text-sm text-slate-400">Free agency, draft, and trade deadline reminders sent directly to you</p>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-slate-700/50 rounded-xl flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                      <Check className="w-4 h-4 text-green-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-white">Active Member Verification</p>
+                      <p className="text-sm text-slate-400">Confirms you as an official league member (not just an applicant)</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Embedded Form */}
+              <div className="mb-6">
+                <div className="p-4 bg-gradient-to-r from-amber-500/10 to-amber-600/10 border border-amber-500/30 rounded-xl">
+                  <p className="text-amber-400 font-semibold text-center mb-4">
+                    Complete the form below to register:
+                  </p>
+                  <div className="bg-white rounded-lg overflow-hidden" style={{ minHeight: '500px' }}>
+                    <iframe
+                      src={EASY_TEXTING_FORM_URL}
+                      width="100%"
+                      height="500"
+                      frameBorder="0"
+                      style={{ border: 'none' }}
+                      title="SMS Registration Form"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Having trouble notice */}
+              <div className="p-3 bg-slate-700/30 rounded-xl mb-6">
+                <p className="text-slate-400 text-sm text-center">
+                  Having trouble with the form? 
+                  <button
+                    onClick={() => window.open(EASY_TEXTING_FORM_URL, '_blank')}
+                    className="text-amber-400 hover:text-amber-300 underline ml-1"
+                  >
+                    Open in new tab
+                  </button>
+                </p>
+              </div>
+
+              {/* Continue Button */}
+              <div className="flex gap-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => setCurrentStep('welcome')}
+                >
+                  Back
+                </Button>
+                <Button
+                  fullWidth
+                  icon={<ArrowRight className="w-4 h-4" />}
+                  iconPosition="right"
+                  onClick={async () => {
+                    localStorage.setItem('sms_registration_completed', 'true');
+                    if (user?.id) {
+                      await markSmsRegistered(user.id);
+                    }
+                    setCurrentStep('rules');
+                  }}
+                >
+                  I've Completed Registration - Continue
+                </Button>
+              </div>
+
+              <p className="text-xs text-slate-500 text-center mt-3">
+                By clicking continue, you confirm that you have completed the SMS registration form above.
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -371,7 +511,7 @@ export default function WelcomePage() {
               <div className="flex gap-4">
                 <Button
                   variant="secondary"
-                  onClick={() => setCurrentStep('welcome')}
+                  onClick={() => setCurrentStep('sms-registration')}
                 >
                   Back
                 </Button>

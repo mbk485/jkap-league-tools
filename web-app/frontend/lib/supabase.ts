@@ -2356,6 +2356,8 @@ export interface DBUserOnboarding {
   discord_joined: boolean;
   facebook_joined: boolean;
   psn_friends_added: boolean;
+  sms_registered: boolean;
+  sms_registered_at: string | null;
   onboarding_completed: boolean;
   onboarding_completed_at: string | null;
   created_at: string;
@@ -2396,6 +2398,7 @@ export async function initUserOnboarding(userId: string): Promise<DBUserOnboardi
         discord_joined: false,
         facebook_joined: false,
         psn_friends_added: false,
+        sms_registered: false,
         onboarding_completed: false,
       })
       .select()
@@ -2431,6 +2434,7 @@ export async function updateUserOnboarding(
         discord_joined: false,
         facebook_joined: false,
         psn_friends_added: false,
+        sms_registered: false,
         onboarding_completed: false,
         ...updates, // Apply the updates to the initial record
       };
@@ -2470,6 +2474,14 @@ export async function acknowledgeRules(userId: string): Promise<{ success: boole
   return updateUserOnboarding(userId, {
     rules_acknowledged: true,
     rules_acknowledged_at: new Date().toISOString(),
+  });
+}
+
+// Mark SMS registration as completed
+export async function markSmsRegistered(userId: string): Promise<{ success: boolean; error?: string }> {
+  return updateUserOnboarding(userId, {
+    sms_registered: true,
+    sms_registered_at: new Date().toISOString(),
   });
 }
 
