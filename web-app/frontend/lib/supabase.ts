@@ -634,6 +634,24 @@ export async function bulkUpdateGamertagsFromQuestionnaire(
 // LEAGUE SETTINGS (Central configuration for all users)
 // =============================================================================
 
+// Offseason phases in order
+export type OffseasonPhase = 
+  | 'pre_offseason'    // Season is still active
+  | 'declarations'     // Declarations period open
+  | 'claiming'         // Claiming period open
+  | 'processing'       // Claims being processed
+  | 'signings'         // Signings being finalized
+  | 'complete';        // Offseason complete
+
+export const OFFSEASON_PHASES: { id: OffseasonPhase; label: string; description: string }[] = [
+  { id: 'pre_offseason', label: 'Pre-Offseason', description: 'Season is still active' },
+  { id: 'declarations', label: 'Declarations', description: 'Teams are declaring free agents' },
+  { id: 'claiming', label: 'Claiming', description: 'Teams are submitting claims' },
+  { id: 'processing', label: 'Processing', description: 'Claims are being resolved' },
+  { id: 'signings', label: 'Signings', description: 'Finalizing player signings' },
+  { id: 'complete', label: 'Complete', description: 'Offseason is finished' },
+];
+
 export interface LeagueSettings {
   id?: string;
   discord_webhook_url: string | null;  // For IL Manager transactions
@@ -644,6 +662,8 @@ export interface LeagueSettings {
   claiming_open: boolean;  // Whether claiming period is open
   claiming_opened_at: string | null;  // When claiming was opened
   claiming_closes_at: string | null;  // When claiming will close
+  offseason_phase: OffseasonPhase;  // Current offseason phase
+  offseason_phase_updated_at: string | null;  // When phase was last changed
   updated_at?: string;
 }
 
@@ -656,6 +676,8 @@ const DEFAULT_SETTINGS: LeagueSettings = {
   claiming_open: false,
   claiming_opened_at: null,
   claiming_closes_at: null,
+  offseason_phase: 'declarations',
+  offseason_phase_updated_at: null,
 };
 
 export async function getLeagueSettings(): Promise<LeagueSettings> {
@@ -680,6 +702,8 @@ export async function getLeagueSettings(): Promise<LeagueSettings> {
       claiming_open: data.claiming_open ?? false,
       claiming_opened_at: data.claiming_opened_at ?? null,
       claiming_closes_at: data.claiming_closes_at ?? null,
+      offseason_phase: data.offseason_phase ?? 'declarations',
+      offseason_phase_updated_at: data.offseason_phase_updated_at ?? null,
       updated_at: data.updated_at,
     };
   } catch (err) {
@@ -776,6 +800,9 @@ export async function saveLeagueSettings(
       if (settings.claiming_open !== undefined) updateData.claiming_open = settings.claiming_open;
       if (settings.claiming_opened_at !== undefined) updateData.claiming_opened_at = settings.claiming_opened_at;
       if (settings.claiming_closes_at !== undefined) updateData.claiming_closes_at = settings.claiming_closes_at;
+      // Offseason phase fields
+      if (settings.offseason_phase !== undefined) updateData.offseason_phase = settings.offseason_phase;
+      if (settings.offseason_phase_updated_at !== undefined) updateData.offseason_phase_updated_at = settings.offseason_phase_updated_at;
 
       const { error } = await supabase
         .from('league_settings')
@@ -798,6 +825,8 @@ export async function saveLeagueSettings(
           claiming_open: settings.claiming_open ?? false,
           claiming_opened_at: settings.claiming_opened_at ?? null,
           claiming_closes_at: settings.claiming_closes_at ?? null,
+          offseason_phase: settings.offseason_phase ?? 'declarations',
+          offseason_phase_updated_at: settings.offseason_phase_updated_at ?? null,
         });
 
       if (error) {

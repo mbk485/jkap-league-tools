@@ -151,6 +151,9 @@ function OffSeasonContent() {
   // Claiming status from league settings
   const [claimingOpen, setClaimingOpen] = useState(false);
   const [claimingClosesAt, setClaimingClosesAt] = useState<string | null>(null);
+  
+  // Offseason phase tracking
+  const [offseasonPhase, setOffseasonPhase] = useState<string>('declarations');
 
   useEffect(() => {
     // Load season state and user progress from the database
@@ -177,9 +180,10 @@ function OffSeasonContent() {
           });
         }
 
-        // Set claiming status from league settings
+        // Set claiming status and phase from league settings
         setClaimingOpen(leagueSettings?.claiming_open || false);
         setClaimingClosesAt(leagueSettings?.claiming_closes_at || null);
+        setOffseasonPhase(leagueSettings?.offseason_phase || 'declarations');
         
         // Load user progress if logged in
         if (user?.id) {
@@ -476,69 +480,90 @@ function OffSeasonContent() {
               )}
             </div>
 
-            {/* Step 2: Declare */}
+            {/* Step 2: Declare - Shows CLOSED when past declarations phase */}
             <div 
-              className={`p-4 rounded-xl border-2 cursor-pointer transition-all hover:scale-102 ${
-                freeAgentsDeclared.length > 0 
-                  ? 'bg-emerald-500/10 border-emerald-500/50' 
-                  : 'bg-orange-500/10 border-orange-500/50 animate-pulse'
+              className={`p-4 rounded-xl border-2 transition-all ${
+                ['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase)
+                  ? freeAgentsDeclared.length > 0
+                    ? 'bg-emerald-500/10 border-emerald-500/50 cursor-pointer hover:scale-102'
+                    : 'bg-slate-800/30 border-slate-700 cursor-not-allowed'
+                  : freeAgentsDeclared.length > 0 
+                    ? 'bg-emerald-500/10 border-emerald-500/50 cursor-pointer hover:scale-102' 
+                    : 'bg-orange-500/10 border-orange-500/50 animate-pulse cursor-pointer hover:scale-102'
               }`}
-              onClick={() => setActiveTab('free-agents')}
+              onClick={() => {
+                if (!['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase) || freeAgentsDeclared.length > 0) {
+                  setActiveTab('free-agents');
+                }
+              }}
             >
               <div className="flex items-center gap-3 mb-2">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold ${
-                  freeAgentsDeclared.length > 0 ? 'bg-emerald-500 text-white' : 'bg-orange-500 text-white'
+                  freeAgentsDeclared.length > 0 ? 'bg-emerald-500 text-white' : 
+                  ['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase) ? 'bg-slate-600 text-slate-400' :
+                  'bg-orange-500 text-white'
                 }`}>
-                  {freeAgentsDeclared.length > 0 ? '✓' : '2'}
+                  {freeAgentsDeclared.length > 0 ? '✓' : ['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase) ? <Lock className="w-5 h-5" /> : '2'}
                 </div>
                 <div>
                   <p className="text-sm text-slate-400">Step 2</p>
-                  <p className="font-bold text-white">Declare Players</p>
+                  <p className={`font-bold ${['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase) && freeAgentsDeclared.length === 0 ? 'text-slate-500' : 'text-white'}`}>Declare Players</p>
                 </div>
               </div>
               {freeAgentsDeclared.length > 0 ? (
                 <p className="text-sm text-emerald-400">{freeAgentsDeclared.length} declared ✅</p>
+              ) : ['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase) ? (
+                <p className="text-sm text-slate-500">🔒 CLOSED</p>
               ) : (
                 <p className="text-sm text-orange-400 font-medium">⚠️ DO THIS NOW</p>
               )}
             </div>
 
-            {/* Step 3: Claim - Dynamic based on claiming status */}
+            {/* Step 3: Claim - Dynamic based on phase */}
             <div 
               className={`p-4 rounded-xl border-2 transition-all ${
-                claimingOpen || seasonState.phase === 'claiming_period'
+                offseasonPhase === 'claiming'
                   ? claimsSubmitted.length > 0
                     ? 'bg-emerald-500/10 border-emerald-500/50 cursor-pointer hover:scale-102'
                     : 'bg-cyan-500/10 border-cyan-500/50 animate-pulse cursor-pointer hover:scale-102'
-                  : 'bg-slate-800/30 border-slate-700 opacity-60 cursor-not-allowed'
+                  : offseasonPhase === 'processing'
+                    ? 'bg-orange-500/10 border-orange-500/50 cursor-pointer hover:scale-102'
+                    : ['signings', 'complete'].includes(offseasonPhase)
+                      ? 'bg-emerald-500/10 border-emerald-500/50 cursor-pointer hover:scale-102'
+                      : 'bg-slate-800/30 border-slate-700 opacity-60 cursor-not-allowed'
               }`}
               onClick={() => {
-                if (claimingOpen || seasonState.phase === 'claiming_period') {
+                if (['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase)) {
                   setActiveTab('claims');
                 }
               }}
             >
               <div className="flex items-center gap-3 mb-2">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold ${
-                  claimingOpen || seasonState.phase === 'claiming_period'
-                    ? claimsSubmitted.length > 0
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-cyan-500 text-white'
+                  offseasonPhase === 'claiming'
+                    ? claimsSubmitted.length > 0 ? 'bg-emerald-500 text-white' : 'bg-cyan-500 text-white'
+                    : offseasonPhase === 'processing' ? 'bg-orange-500 text-white'
+                    : ['signings', 'complete'].includes(offseasonPhase) ? 'bg-emerald-500 text-white'
                     : 'bg-slate-700 text-slate-400'
                 }`}>
-                  {claimsSubmitted.length > 0 ? '✓' : '3'}
+                  {['signings', 'complete'].includes(offseasonPhase) || claimsSubmitted.length > 0 ? '✓' : 
+                   offseasonPhase === 'processing' ? <Clock className="w-5 h-5" /> : '3'}
                 </div>
                 <div>
-                  <p className={`text-sm ${claimingOpen || seasonState.phase === 'claiming_period' ? 'text-slate-400' : 'text-slate-500'}`}>Step 3</p>
-                  <p className={`font-bold ${claimingOpen || seasonState.phase === 'claiming_period' ? 'text-white' : 'text-slate-400'}`}>Claim Players</p>
+                  <p className={`text-sm ${['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase) ? 'text-slate-400' : 'text-slate-500'}`}>Step 3</p>
+                  <p className={`font-bold ${['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase) ? 'text-white' : 'text-slate-400'}`}>Claim Players</p>
                 </div>
               </div>
-              {claimingOpen || seasonState.phase === 'claiming_period' ? (
+              {offseasonPhase === 'claiming' ? (
                 claimsSubmitted.length > 0 ? (
                   <p className="text-sm text-emerald-400">Claim submitted! ✅</p>
                 ) : (
                   <p className="text-sm text-cyan-400 font-medium">🎯 OPEN NOW</p>
                 )
+              ) : offseasonPhase === 'processing' ? (
+                <p className="text-sm text-orange-400 font-medium">⏳ PROCESSING</p>
+              ) : ['signings', 'complete'].includes(offseasonPhase) ? (
+                <p className="text-sm text-emerald-400">✅ COMPLETE</p>
               ) : (
                 <p className="text-sm text-slate-500">🔒 Opens after declarations close</p>
               )}

@@ -91,6 +91,8 @@ import {
   deleteSigning,
   DBSigning,
   DBClaimSubmission,
+  OffseasonPhase,
+  OFFSEASON_PHASES,
 } from '@/lib/supabase';
 import { MLB_TEAMS } from '@/types/league';
 import { checkQuestionnaireCompletions, getAllQuestionnaireCompletions } from '@/lib/typeform-api';
@@ -220,6 +222,11 @@ export default function OffSeasonAdminPage() {
   const [allClaims, setAllClaims] = useState<any[]>([]);
   const [claimingClosesAt, setClaimingClosesAt] = useState<string | null>(null);
 
+  // Offseason phase tracking
+  const [offseasonPhase, setOffseasonPhase] = useState<string>('declarations');
+  const [phaseNotification, setPhaseNotification] = useState<{ title: string; message: string; facebook: string } | null>(null);
+  const [showPhaseModal, setShowPhaseModal] = useState(false);
+
   // Free agent declarations management
   const [allDeclarations, setAllDeclarations] = useState<any[]>([]);
   const [deletingDeclaration, setDeletingDeclaration] = useState<string | null>(null);
@@ -266,6 +273,9 @@ export default function OffSeasonAdminPage() {
       // Load claiming period status
       setClaimingOpen(leagueSettings.claiming_open || false);
       setClaimingClosesAt(leagueSettings.claiming_closes_at || null);
+      
+      // Load offseason phase
+      setOffseasonPhase(leagueSettings.offseason_phase || 'declarations');
 
       // Load all claim submissions (commissioner view)
       const { getAllClaimSubmissions, getMasterFreeAgentList } = await import('@/lib/supabase');
@@ -534,6 +544,73 @@ export default function OffSeasonAdminPage() {
     navigator.clipboard.writeText(text);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  // Generate phase notification messages
+  const getPhaseNotification = (phase: OffseasonPhase): { title: string; discord: string; facebook: string } => {
+    const notifications: Record<OffseasonPhase, { title: string; discord: string; facebook: string }> = {
+      pre_offseason: {
+        title: 'Season Active',
+        discord: '⚾ **SEASON IN PROGRESS**\n\nThe regular season is still underway. Check back when the offseason begins!',
+        facebook: '⚾ SEASON IN PROGRESS\n\nThe regular season is still underway. Check back when the offseason begins!\n\n#JKAPLeague #MLBTheShow',
+      },
+      declarations: {
+        title: 'Declarations Open',
+        discord: '📢 **FREE AGENT DECLARATIONS NOW OPEN**\n\n🎯 **What to do:**\n• Go to jkapmemorialleague.com/offseason\n• Check your in-game roster\n• Declare players you\'re releasing\n\n⚠️ **Reminder:** You must declare at least 1 player to participate in claiming!\n\n🔗 https://jkapmemorialleague.com/offseason',
+        facebook: '📢 FREE AGENT DECLARATIONS NOW OPEN!\n\n🎯 What to do:\n• Go to jkapmemorialleague.com/offseason\n• Check your in-game roster in MLB The Show\n• Declare players you\'re releasing\n\n⚠️ Reminder: You must declare at least 1 player to participate in claiming!\n\n🔗 jkapmemorialleague.com/offseason\n\n#JKAPLeague #MLBTheShow #FreeAgency',
+      },
+      claiming: {
+        title: 'Claiming Open',
+        discord: '🎯 **CLAIMING PERIOD NOW OPEN**\n\n✅ **Declarations are CLOSED**\n🔓 **Claims are NOW OPEN**\n\n📋 **Submit your claims:**\n• Go to jkapmemorialleague.com/offseason\n• Click "Claim Players"\n• Select up to 3 players in order of preference\n\n⚠️ **Important:** Claims are LOCKED once submitted!\n\n🔗 https://jkapmemorialleague.com/offseason',
+        facebook: '🎯 CLAIMING PERIOD NOW OPEN!\n\n✅ Declarations are CLOSED\n🔓 Claims are NOW OPEN\n\n📋 Submit your claims:\n• Go to jkapmemorialleague.com/offseason\n• Click "Claim Players"\n• Select up to 3 players in order of preference\n\n⚠️ Claims are LOCKED once submitted!\n\n🔗 jkapmemorialleague.com/offseason\n\n#JKAPLeague #MLBTheShow #FreeAgency',
+      },
+      processing: {
+        title: 'Processing Claims',
+        discord: '⏳ **CLAIMS ARE BEING PROCESSED**\n\n🔒 **Claiming is now CLOSED**\n\nThe Commissioner is processing all submitted claims. Results will be announced soon!\n\nStay tuned for signing announcements! 📣',
+        facebook: '⏳ CLAIMS ARE BEING PROCESSED\n\n🔒 Claiming is now CLOSED\n\nThe Commissioner is processing all submitted claims. Results will be announced soon!\n\nStay tuned for signing announcements! 📣\n\n#JKAPLeague #MLBTheShow #FreeAgency',
+      },
+      signings: {
+        title: 'Signings Active',
+        discord: '✍️ **FREE AGENT SIGNINGS IN PROGRESS**\n\nClaims have been processed! Players are being assigned to their new teams.\n\nCheck the website for your signing results:\n🔗 https://jkapmemorialleague.com/offseason',
+        facebook: '✍️ FREE AGENT SIGNINGS IN PROGRESS\n\nClaims have been processed! Players are being assigned to their new teams.\n\nCheck the website for your signing results:\n🔗 jkapmemorialleague.com/offseason\n\n#JKAPLeague #MLBTheShow #FreeAgency',
+      },
+      complete: {
+        title: 'Offseason Complete',
+        discord: '🏆 **OFFSEASON COMPLETE**\n\nAll free agent signings have been finalized! Make sure to update your rosters in MLB The Show.\n\n📅 **Next:** Season 5 coming soon!\n\n🔗 https://jkapmemorialleague.com/offseason',
+        facebook: '🏆 OFFSEASON COMPLETE!\n\nAll free agent signings have been finalized! Make sure to update your rosters in MLB The Show.\n\n📅 Next: Season 5 coming soon!\n\n🔗 jkapmemorialleague.com/offseason\n\n#JKAPLeague #MLBTheShow #FreeAgency #Season5',
+      },
+    };
+    return notifications[phase];
+  };
+
+  // Change offseason phase
+  const changeOffseasonPhase = async (newPhase: OffseasonPhase) => {
+    try {
+      const result = await saveLeagueSettings({
+        offseason_phase: newPhase,
+        offseason_phase_updated_at: new Date().toISOString(),
+        // Auto-update claiming_open based on phase
+        claiming_open: newPhase === 'claiming',
+      });
+      
+      if (result.success) {
+        setOffseasonPhase(newPhase);
+        setClaimingOpen(newPhase === 'claiming');
+        
+        // Generate notification for copying
+        const notification = getPhaseNotification(newPhase);
+        setPhaseNotification({
+          title: notification.title,
+          message: notification.discord,
+          facebook: notification.facebook,
+        });
+        setShowPhaseModal(true);
+      } else {
+        alert('Failed to update phase: ' + result.error);
+      }
+    } catch (err: any) {
+      alert('Error updating phase: ' + err.message);
+    }
   };
 
   // Update a single team's standings
@@ -989,6 +1066,93 @@ export default function OffSeasonAdminPage() {
           {/* Overview Tab */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
+              {/* OFFSEASON PHASE CONTROL - TOP PRIORITY */}
+              <Card className="bg-gradient-to-br from-purple-900/40 to-indigo-900/30 border-purple-500/50 border-2">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-white flex items-center gap-3 text-xl">
+                      <Target className="w-7 h-7 text-purple-400" />
+                      Offseason Phase Control
+                    </CardTitle>
+                    <Badge className={`text-lg px-4 py-2 ${
+                      offseasonPhase === 'declarations' ? 'bg-amber-500/20 text-amber-400 border-amber-500/50' :
+                      offseasonPhase === 'claiming' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50' :
+                      offseasonPhase === 'processing' ? 'bg-orange-500/20 text-orange-400 border-orange-500/50' :
+                      offseasonPhase === 'signings' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' :
+                      offseasonPhase === 'complete' ? 'bg-green-500/20 text-green-400 border-green-500/50' :
+                      'bg-slate-500/20 text-slate-400 border-slate-500/50'
+                    }`}>
+                      {OFFSEASON_PHASES.find(p => p.id === offseasonPhase)?.label || offseasonPhase}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Phase Timeline */}
+                  <div className="flex items-center justify-between gap-2 p-4 bg-slate-800/50 rounded-xl">
+                    {OFFSEASON_PHASES.filter(p => p.id !== 'pre_offseason').map((phase, idx, arr) => {
+                      const isActive = phase.id === offseasonPhase;
+                      const isPast = OFFSEASON_PHASES.findIndex(p => p.id === offseasonPhase) > OFFSEASON_PHASES.findIndex(p => p.id === phase.id);
+                      return (
+                        <React.Fragment key={phase.id}>
+                          <div className="flex flex-col items-center flex-1">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                              isActive ? 'bg-purple-500 text-white ring-4 ring-purple-500/30' :
+                              isPast ? 'bg-emerald-500 text-white' :
+                              'bg-slate-700 text-slate-400'
+                            }`}>
+                              {isPast ? <CheckCircle className="w-5 h-5" /> : idx + 1}
+                            </div>
+                            <span className={`text-xs mt-2 text-center font-medium ${
+                              isActive ? 'text-purple-400' :
+                              isPast ? 'text-emerald-400' :
+                              'text-slate-500'
+                            }`}>
+                              {phase.label}
+                            </span>
+                          </div>
+                          {idx < arr.length - 1 && (
+                            <div className={`h-1 flex-1 rounded ${
+                              isPast ? 'bg-emerald-500' : 'bg-slate-700'
+                            }`} />
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+
+                  {/* Phase Description */}
+                  <div className="p-3 rounded-lg bg-slate-700/50 text-center">
+                    <p className="text-slate-300">
+                      <span className="font-bold text-purple-400">Current: </span>
+                      {OFFSEASON_PHASES.find(p => p.id === offseasonPhase)?.description}
+                    </p>
+                  </div>
+
+                  {/* Phase Control Buttons */}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    {OFFSEASON_PHASES.filter(p => p.id !== 'pre_offseason').map(phase => (
+                      <Button
+                        key={phase.id}
+                        onClick={() => changeOffseasonPhase(phase.id)}
+                        disabled={phase.id === offseasonPhase}
+                        className={`flex flex-col items-center gap-1 py-3 h-auto ${
+                          phase.id === offseasonPhase
+                            ? 'bg-purple-600 text-white cursor-not-allowed'
+                            : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                        }`}
+                      >
+                        <span className="text-xs font-bold">{phase.label}</span>
+                        {phase.id === offseasonPhase && <span className="text-[10px]">CURRENT</span>}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <p className="text-xs text-slate-500 text-center">
+                    Click a phase to advance. Notifications will be shown for Discord & Facebook posting.
+                  </p>
+                </CardContent>
+              </Card>
+
               {/* FA DECLARATION STATUS - PROMINENT TOP SECTION */}
               <Card className="bg-gradient-to-br from-orange-900/30 to-slate-800/50 border-orange-500/30 border-2">
                 <CardHeader className="pb-3">
@@ -3350,6 +3514,113 @@ Let's get this done! 💪`;
           )}
         </div>
       </main>
+
+      {/* Phase Notification Modal */}
+      {showPhaseModal && phaseNotification && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-800 border border-purple-500/50 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-700 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-purple-500/20">
+                  <Target className="w-6 h-6 text-purple-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Phase Updated: {phaseNotification.title}</h2>
+                  <p className="text-sm text-slate-400">Copy and paste notifications below</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPhaseModal(false)}
+                className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Discord Notification */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-purple-400 font-bold flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    Discord Notification
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => copyToClipboard(phaseNotification.message, 'discord')}
+                      className="bg-purple-600 hover:bg-purple-500"
+                    >
+                      {copiedField === 'discord' ? (
+                        <><Check className="w-4 h-4 mr-1" /> Copied!</>
+                      ) : (
+                        <><Copy className="w-4 h-4 mr-1" /> Copy</>
+                      )}
+                    </Button>
+                    {discordWebhookUrl && (
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          const { postCustomAnnouncement } = await import('@/lib/discord');
+                          const result = await postCustomAnnouncement(
+                            discordWebhookUrl,
+                            phaseNotification.title,
+                            phaseNotification.message.replace(/\*\*/g, '').replace(/\n/g, '\n')
+                          );
+                          if (result.success) {
+                            alert('✅ Posted to Discord!');
+                          } else {
+                            alert('❌ Failed: ' + result.error);
+                          }
+                        }}
+                        className="bg-indigo-600 hover:bg-indigo-500"
+                      >
+                        <Send className="w-4 h-4 mr-1" /> Post to Discord
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-600 font-mono text-sm whitespace-pre-wrap text-slate-300">
+                  {phaseNotification.message}
+                </div>
+              </div>
+
+              {/* Facebook Notification */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-blue-400 font-bold flex items-center gap-2">
+                    <Share2 className="w-4 h-4" />
+                    Facebook Copy/Paste
+                  </h3>
+                  <Button
+                    size="sm"
+                    onClick={() => copyToClipboard(phaseNotification.facebook, 'facebook')}
+                    className="bg-blue-600 hover:bg-blue-500"
+                  >
+                    {copiedField === 'facebook' ? (
+                      <><Check className="w-4 h-4 mr-1" /> Copied!</>
+                    ) : (
+                      <><Copy className="w-4 h-4 mr-1" /> Copy for Facebook</>
+                    )}
+                  </Button>
+                </div>
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-blue-500/30 font-sans text-sm whitespace-pre-wrap text-slate-300">
+                  {phaseNotification.facebook}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-700 flex justify-end">
+              <Button
+                onClick={() => setShowPhaseModal(false)}
+                className="bg-slate-700 hover:bg-slate-600"
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>
