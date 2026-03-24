@@ -105,9 +105,13 @@ import {
   getSeasonArchives,
   calculateDraftOrder,
   saveDraftOrder,
+  getContractedTeams,
+  saveContractedTeams,
+  DEFAULT_CONTRACTED_TEAMS,
   DBGameVersion,
   DBSeasonArchive,
   DraftOrderTeam,
+  DraftOrderResult,
 } from '@/lib/supabase';
 import { MLB_TEAMS } from '@/types/league';
 import { checkQuestionnaireCompletions, getAllQuestionnaireCompletions } from '@/lib/typeform-api';
@@ -188,9 +192,12 @@ export default function OffSeasonAdminPage() {
   const [newGameVersionName, setNewGameVersionName] = useState('');
   const [seasonActionMessage, setSeasonActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [calculatedDraftOrder, setCalculatedDraftOrder] = useState<DraftOrderTeam[]>([]);
-  const [draftOrderTiebreakers, setDraftOrderTiebreakers] = useState<{ teams: string[]; method: string; winner: string }[]>([]);
+  const [lotteryLog, setLotteryLog] = useState<string[]>([]);
+  const [showLotteryLog, setShowLotteryLog] = useState(false);
   const [isCalculatingDraft, setIsCalculatingDraft] = useState(false);
-  const [contractedTeamIds, setContractedTeamIds] = useState<string[]>([]);
+  const [contractedTeamIds, setContractedTeamIds] = useState<string[]>(DEFAULT_CONTRACTED_TEAMS);
+  const [newContractedTeam, setNewContractedTeam] = useState('');
+  const [isSavingContracted, setIsSavingContracted] = useState(false);
   
   const [progressSummary, setProgressSummary] = useState({
     totalMembers: 0,
@@ -321,14 +328,16 @@ export default function OffSeasonAdminPage() {
 
       // Load season/game version data
       try {
-        const [versions, currentVersion, archives] = await Promise.all([
+        const [versions, currentVersion, archives, contracted] = await Promise.all([
           getGameVersions(),
           getCurrentGameVersion(),
           getSeasonArchives(),
+          getContractedTeams(),
         ]);
         setGameVersions(versions);
         setCurrentGameVersion(currentVersion);
         setSeasonArchives(archives);
+        setContractedTeamIds(contracted);
       } catch (err) {
         console.error('Error loading season/game data:', err);
       }
@@ -3755,58 +3764,141 @@ Let's get this done! 💪`;
                 </div>
               )}
 
-              {/* Draft Order Calculator */}
+              {/* JKAP Memorial League Draft Lottery */}
               <Card className="bg-slate-800/50 border-cyan-500/30">
                 <CardHeader>
                   <CardTitle className="text-white flex items-center gap-2">
-                    <Target className="w-5 h-5 text-cyan-400" />
-                    Draft Order Calculator
+                    <Dices className="w-5 h-5 text-cyan-400" />
+                    JKAP Memorial League Draft Lottery
                   </CardTitle>
                   <p className="text-sm text-slate-400">
-                    Calculate draft order based on final standings (worst record picks first)
+                    Top 5 picks LOCKED (worst teams) | Picks 6+ by WEIGHTED LOTTERY
                   </p>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Contracted Teams Selection */}
-                  <div className="space-y-3">
-                    <label className="text-sm text-slate-400">Exclude Contracted Teams (optional)</label>
-                    <div className="flex flex-wrap gap-2">
-                      {standings.map((team) => (
-                        <button
-                          key={team.teamId}
-                          onClick={() => {
-                            if (contractedTeamIds.includes(team.teamId)) {
-                              setContractedTeamIds(contractedTeamIds.filter(id => id !== team.teamId));
-                            } else {
-                              setContractedTeamIds([...contractedTeamIds, team.teamId]);
-                            }
-                          }}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                            contractedTeamIds.includes(team.teamId)
-                              ? 'bg-red-500/20 text-red-400 border border-red-500/50'
-                              : 'bg-slate-700 text-slate-300 border border-slate-600 hover:border-slate-500'
-                          }`}
-                        >
-                          {team.teamAbbr}
-                          {contractedTeamIds.includes(team.teamId) && <X className="w-3 h-3 ml-1 inline" />}
-                        </button>
-                      ))}
+                <CardContent className="space-y-6">
+                  {/* Contracted Teams Management */}
+                  <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
+                    <h4 className="text-red-400 font-semibold mb-3 flex items-center gap-2">
+                      <UserMinus className="w-4 h-4" />
+                      Contracted Teams (Excluded from Draft)
+                    </h4>
+                    <p className="text-xs text-slate-400 mb-3">
+                      These teams are permanently contracted and won't appear in the draft order. This list is cumulative each year.
+                    </p>
+                    
+                    {/* Current Contracted Teams */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {contractedTeamIds.map((teamId) => {
+                        const team = MLB_TEAMS.find(t => t.abbreviation === teamId) || standings.find(s => s.teamAbbr === teamId || s.teamId === teamId);
+                        const displayName = team ? ('name' in team ? team.name : team.teamName) : teamId;
+                        const displayAbbr = team ? ('abbreviation' in team ? team.abbreviation : team.teamAbbr) : teamId;
+                        return (
+                          <span
+                            key={teamId}
+                            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/20 text-red-400 border border-red-500/50 flex items-center gap-2"
+                          >
+                            {displayAbbr}
+                            <button
+                              onClick={() => setContractedTeamIds(contractedTeamIds.filter(id => id !== teamId))}
+                              className="hover:text-red-300"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                      {contractedTeamIds.length === 0 && (
+                        <span className="text-slate-500 text-sm">No teams contracted</span>
+                      )}
                     </div>
-                    {contractedTeamIds.length > 0 && (
-                      <p className="text-xs text-red-400">{contractedTeamIds.length} team(s) will be excluded from draft</p>
-                    )}
+
+                    {/* Add New Contracted Team */}
+                    <div className="flex gap-2">
+                      <select
+                        value={newContractedTeam}
+                        onChange={(e) => setNewContractedTeam(e.target.value)}
+                        className="flex-1 px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"
+                      >
+                        <option value="">Add contracted team...</option>
+                        {MLB_TEAMS
+                          .filter(t => !contractedTeamIds.includes(t.abbreviation))
+                          .map(team => (
+                            <option key={team.abbreviation} value={team.abbreviation}>
+                              {team.abbreviation} - {team.name}
+                            </option>
+                          ))
+                        }
+                      </select>
+                      <button
+                        onClick={() => {
+                          if (newContractedTeam && !contractedTeamIds.includes(newContractedTeam)) {
+                            setContractedTeamIds([...contractedTeamIds, newContractedTeam]);
+                            setNewContractedTeam('');
+                          }
+                        }}
+                        disabled={!newContractedTeam}
+                        className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium disabled:opacity-50"
+                      >
+                        Add
+                      </button>
+                    </div>
+
+                    {/* Save Contracted Teams */}
+                    <button
+                      onClick={async () => {
+                        setIsSavingContracted(true);
+                        const result = await saveContractedTeams(contractedTeamIds);
+                        if (result.success) {
+                          setSeasonActionMessage({ type: 'success', text: '✓ Contracted teams saved!' });
+                        } else {
+                          setSeasonActionMessage({ type: 'error', text: result.error || 'Failed to save' });
+                        }
+                        setIsSavingContracted(false);
+                        setTimeout(() => setSeasonActionMessage(null), 3000);
+                      }}
+                      disabled={isSavingContracted}
+                      className="w-full mt-3 flex items-center justify-center gap-2 p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium"
+                    >
+                      {isSavingContracted ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Save Contracted Teams List
+                    </button>
                   </div>
 
+                  {/* Lottery Rules Info */}
+                  <div className="p-4 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
+                    <h4 className="text-cyan-400 font-semibold mb-2 flex items-center gap-2">
+                      <ListOrdered className="w-4 h-4" />
+                      Draft Lottery Rules
+                    </h4>
+                    <ul className="text-sm text-slate-300 space-y-1">
+                      <li className="flex items-center gap-2">
+                        <Lock className="w-3 h-3 text-amber-400" />
+                        <strong>Picks 1-5:</strong> LOCKED to the 5 worst teams (by record)
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Dices className="w-3 h-3 text-purple-400" />
+                        <strong>Picks 6+:</strong> WEIGHTED LOTTERY (worse record = higher odds)
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <UserMinus className="w-3 h-3 text-red-400" />
+                        <strong>Contracted teams:</strong> Excluded entirely from the draft
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Run Lottery Button */}
                   <button
                     onClick={async () => {
                       setIsCalculatingDraft(true);
+                      setCalculatedDraftOrder([]);
+                      setLotteryLog([]);
                       try {
                         const result = await calculateDraftOrder(seasonNumber, contractedTeamIds);
                         if (result.success && result.draftOrder) {
                           setCalculatedDraftOrder(result.draftOrder);
-                          setDraftOrderTiebreakers(result.tiebreakers || []);
+                          setLotteryLog(result.lotteryLog || []);
                         } else {
-                          alert(result.error || 'Failed to calculate draft order');
+                          alert(result.error || 'Failed to run lottery');
                         }
                       } catch (err: any) {
                         alert('Error: ' + err.message);
@@ -3815,62 +3907,107 @@ Let's get this done! 💪`;
                       }
                     }}
                     disabled={isCalculatingDraft || standings.length === 0}
-                    className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium transition-colors disabled:opacity-50"
+                    className="w-full flex items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-bold text-lg transition-all disabled:opacity-50"
                   >
                     {isCalculatingDraft ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <Loader2 className="w-6 h-6 animate-spin" />
                     ) : (
                       <>
-                        <Zap className="w-5 h-5" />
-                        Calculate Draft Order
+                        <Dices className="w-6 h-6" />
+                        🎲 RUN DRAFT LOTTERY
                       </>
                     )}
                   </button>
 
-                  {/* Calculated Draft Order Results */}
+                  {/* Lottery Results */}
                   {calculatedDraftOrder.length > 0 && (
                     <div className="space-y-4 pt-4 border-t border-slate-700">
-                      <h4 className="font-semibold text-white">Season {seasonNumber + 1} Draft Order</h4>
-                      
-                      {/* Tiebreaker Warnings */}
-                      {draftOrderTiebreakers.length > 0 && (
-                        <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                          <p className="text-amber-400 text-sm font-medium flex items-center gap-2">
-                            <AlertTriangle className="w-4 h-4" />
-                            Tiebreakers Applied
-                          </p>
-                          <ul className="text-xs text-amber-300 mt-2 space-y-1">
-                            {draftOrderTiebreakers.map((tb, i) => (
-                              <li key={i}>{tb.teams.join(' vs ')} - {tb.method}</li>
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-xl text-white">Season {seasonNumber + 1} Draft Order</h4>
+                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                          {calculatedDraftOrder.length} Teams
+                        </Badge>
+                      </div>
+
+                      {/* Locked Picks Section */}
+                      <div className="space-y-2">
+                        <h5 className="text-amber-400 font-semibold flex items-center gap-2">
+                          <Lock className="w-4 h-4" />
+                          LOCKED PICKS (1-5)
+                        </h5>
+                        <div className="space-y-2">
+                          {calculatedDraftOrder.filter(t => t.isLocked).map((team) => (
+                            <div key={team.teamId} className="flex items-center justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                              <div className="flex items-center gap-3">
+                                <span className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xl ${
+                                  team.draftPosition === 1 ? 'bg-amber-500 text-white' :
+                                  team.draftPosition === 2 ? 'bg-slate-400 text-slate-900' :
+                                  team.draftPosition === 3 ? 'bg-orange-600 text-white' :
+                                  'bg-amber-700 text-white'
+                                }`}>
+                                  {team.draftPosition}
+                                </span>
+                                <div>
+                                  <p className="font-semibold text-white">{team.teamName}</p>
+                                  <p className="text-xs text-slate-400">{team.wins}-{team.losses} ({(team.winPercentage * 100).toFixed(1)}%)</p>
+                                </div>
+                              </div>
+                              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
+                                <Lock className="w-3 h-3 mr-1 inline" /> LOCKED
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Lottery Picks Section */}
+                      {calculatedDraftOrder.filter(t => !t.isLocked).length > 0 && (
+                        <div className="space-y-2">
+                          <h5 className="text-purple-400 font-semibold flex items-center gap-2">
+                            <Dices className="w-4 h-4" />
+                            LOTTERY PICKS (6+)
+                          </h5>
+                          <div className="space-y-2">
+                            {calculatedDraftOrder.filter(t => !t.isLocked).map((team) => (
+                              <div key={team.teamId} className="flex items-center justify-between p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                                <div className="flex items-center gap-3">
+                                  <span className="w-10 h-10 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xl">
+                                    {team.draftPosition}
+                                  </span>
+                                  <div>
+                                    <p className="font-semibold text-white">{team.teamName}</p>
+                                    <p className="text-xs text-slate-400">
+                                      {team.wins}-{team.losses} ({(team.winPercentage * 100).toFixed(1)}%)
+                                      {team.lotteryOdds && <span className="text-purple-400 ml-2">Had {team.lotteryOdds.toFixed(1)}% odds</span>}
+                                    </p>
+                                  </div>
+                                </div>
+                                <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">
+                                  <Dices className="w-3 h-3 mr-1 inline" /> LOTTERY
+                                </Badge>
+                              </div>
                             ))}
-                          </ul>
+                          </div>
                         </div>
                       )}
 
-                      {/* Draft Order List */}
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {calculatedDraftOrder.map((team) => (
-                          <div key={team.teamId} className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50 border border-slate-600">
-                            <div className="flex items-center gap-3">
-                              <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg ${
-                                team.draftPosition === 1 ? 'bg-amber-500 text-white' :
-                                team.draftPosition === 2 ? 'bg-slate-400 text-slate-900' :
-                                team.draftPosition === 3 ? 'bg-orange-600 text-white' :
-                                'bg-slate-600 text-slate-300'
-                              }`}>
-                                {team.draftPosition}
-                              </span>
-                              <div>
-                                <p className="font-medium text-white">{team.teamName}</p>
-                                <p className="text-xs text-slate-400">{team.wins}-{team.losses} ({(team.winPercentage * 100).toFixed(1)}%)</p>
-                              </div>
-                            </div>
-                            <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
-                              Pick #{team.draftPosition}
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
+                      {/* Lottery Log Toggle */}
+                      <button
+                        onClick={() => setShowLotteryLog(!showLotteryLog)}
+                        className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-slate-700/50 hover:bg-slate-700 text-slate-300 text-sm"
+                      >
+                        {showLotteryLog ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        {showLotteryLog ? 'Hide' : 'Show'} Lottery Log
+                      </button>
+
+                      {/* Lottery Log */}
+                      {showLotteryLog && lotteryLog.length > 0 && (
+                        <div className="p-4 rounded-lg bg-slate-900 border border-slate-700 max-h-64 overflow-y-auto">
+                          <pre className="text-xs text-slate-400 font-mono whitespace-pre-wrap">
+                            {lotteryLog.join('\n')}
+                          </pre>
+                        </div>
+                      )}
 
                       {/* Save & Copy Buttons */}
                       <div className="flex gap-3">
@@ -3890,10 +4027,16 @@ Let's get this done! 💪`;
                         </button>
                         <button
                           onClick={() => {
-                            const text = calculatedDraftOrder
-                              .map(t => `${t.draftPosition}. ${t.teamAbbreviation} (${t.wins}-${t.losses})`)
+                            const lockedText = calculatedDraftOrder
+                              .filter(t => t.isLocked)
+                              .map(t => `${t.draftPosition}. ${t.teamAbbreviation} (${t.wins}-${t.losses}) [LOCKED]`)
                               .join('\n');
-                            navigator.clipboard.writeText(`Season ${seasonNumber + 1} Draft Order:\n\n${text}`);
+                            const lotteryText = calculatedDraftOrder
+                              .filter(t => !t.isLocked)
+                              .map(t => `${t.draftPosition}. ${t.teamAbbreviation} (${t.wins}-${t.losses}) [LOTTERY]`)
+                              .join('\n');
+                            const fullText = `🎲 JKAP Memorial League Season ${seasonNumber + 1} Draft Order\n\n🔒 LOCKED PICKS (1-5):\n${lockedText}\n\n🎰 LOTTERY PICKS (6+):\n${lotteryText}`;
+                            navigator.clipboard.writeText(fullText);
                             setCopiedField('draft-calc');
                             setTimeout(() => setCopiedField(null), 2000);
                           }}

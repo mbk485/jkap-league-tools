@@ -5054,8 +5054,12 @@ export async function getSeasonArchives(gameVersion?: string): Promise<DBSeasonA
 }
 
 // =============================================================================
-// DRAFT ORDER CALCULATION
+// DRAFT ORDER CALCULATION - JKAP MEMORIAL LEAGUE DRAFT LOTTERY
 // =============================================================================
+// Rules:
+// 1. Top 5 picks are LOCKED (worst 5 teams get picks 1-5 in order)
+// 2. Picks 6+ use WEIGHTED LOTTERY (worse record = higher odds)
+// 3. Contracted teams are excluded from the draft entirely
 
 export interface DraftOrderTeam {
   teamId: string;
@@ -5065,27 +5069,93 @@ export interface DraftOrderTeam {
   wins: number;
   losses: number;
   winPercentage: number;
-  // Tiebreaker fields (to be filled based on rules)
-  headToHeadRecord?: Record<string, { wins: number; losses: number }>;
-  runDifferential?: number;
-  lotteryNumber?: number;
+  standingsRank: number;  // Original position in standings (1 = worst)
+  isLocked: boolean;      // True for picks 1-5
+  lotteryOdds?: number;   // Percentage chance for lottery picks
+  lotteryNumber?: number; // Random number drawn in lottery
 }
 
 export interface DraftOrderResult {
   success: boolean;
   draftOrder?: DraftOrderTeam[];
-  tiebreakers?: { teams: string[]; method: string; winner: string }[];
+  lockedPicks?: DraftOrderTeam[];    // Picks 1-5
+  lotteryPicks?: DraftOrderTeam[];   // Picks 6+
+  lotteryLog?: string[];             // Log of lottery draws for transparency
+  excludedTeams?: string[];          // Teams that were excluded
   error?: string;
 }
 
-// Calculate draft order from standings (basic worst-to-first)
-// NOTE: Add your specific tiebreaker rules here
+// Default contracted teams (cumulative list)
+export const DEFAULT_CONTRACTED_TEAMS = ['LAD', 'CHC', 'ATL']; // Dodgers, Cubs, Braves
+
+// Get contracted teams from database
+export async function getContractedTeams(): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('league_settings')
+      .select('contracted_teams')
+      .single();
+
+    if (error || !data?.contracted_teams) {
+      return DEFAULT_CONTRACTED_TEAMS;
+    }
+    return data.contracted_teams;
+  } catch (err) {
+    console.error('Error fetching contracted teams:', err);
+    return DEFAULT_CONTRACTED_TEAMS;
+  }
+}
+
+// Save contracted teams to database
+export async function saveContractedTeams(teamAbbreviations: string[]): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: existing } = await supabase
+      .from('league_settings')
+      .select('id')
+      .single();
+
+    if (existing) {
+      const { error } = await supabase
+        .from('league_settings')
+        .update({
+          contracted_teams: teamAbbreviations,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from('league_settings')
+        .insert({
+          contracted_teams: teamAbbreviations,
+        });
+
+      if (error) throw error;
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error saving contracted teams:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * JKAP Memorial League Draft Lottery
+ * 
+ * Rules:
+ * - Top 5 picks are LOCKED to the 5 worst teams (by record)
+ * - Picks 6+ are determined by WEIGHTED LOTTERY
+ * - Worse record = higher lottery odds
+ * - Contracted teams are excluded entirely
+ */
 export async function calculateDraftOrder(
   seasonNumber: number,
   excludedTeamIds: string[] = []
 ): Promise<DraftOrderResult> {
   try {
-    // Get final standings
+    // Get final standings (sorted worst to best by win percentage)
     const { data: standings, error } = await supabase
       .from('final_standings')
       .select('*')
@@ -5097,74 +5167,138 @@ export async function calculateDraftOrder(
       return { success: false, error: 'No standings found for this season' };
     }
 
-    // Filter out excluded teams (contracted teams)
+    // Filter out excluded/contracted teams
     const activeStandings = standings.filter(
-      (s) => !excludedTeamIds.includes(s.team_id)
+      (s) => !excludedTeamIds.includes(s.team_id) && 
+             !excludedTeamIds.includes(s.team_abbreviation)
     );
 
-    const tiebreakers: { teams: string[]; method: string; winner: string }[] = [];
+    if (activeStandings.length === 0) {
+      return { success: false, error: 'No active teams after excluding contracted teams' };
+    }
+
+    const excludedTeamNames = standings
+      .filter(s => excludedTeamIds.includes(s.team_id) || excludedTeamIds.includes(s.team_abbreviation))
+      .map(s => s.team_name);
+
     const draftOrder: DraftOrderTeam[] = [];
+    const lockedPicks: DraftOrderTeam[] = [];
+    const lotteryPicks: DraftOrderTeam[] = [];
+    const lotteryLog: string[] = [];
 
-    // Group teams by win percentage for tiebreaker detection
-    const teamsGroupedByWinPct = new Map<number, typeof activeStandings>();
-    activeStandings.forEach((team) => {
-      const pct = team.win_percentage;
-      if (!teamsGroupedByWinPct.has(pct)) {
-        teamsGroupedByWinPct.set(pct, []);
-      }
-      teamsGroupedByWinPct.get(pct)!.push(team);
-    });
+    // =========================================================================
+    // STEP 1: LOCK TOP 5 PICKS (worst 5 teams get picks 1-5)
+    // =========================================================================
+    const numLockedPicks = Math.min(5, activeStandings.length);
+    
+    for (let i = 0; i < numLockedPicks; i++) {
+      const team = activeStandings[i];
+      const pick: DraftOrderTeam = {
+        teamId: team.team_id,
+        teamName: team.team_name,
+        teamAbbreviation: team.team_abbreviation,
+        draftPosition: i + 1,
+        wins: team.wins,
+        losses: team.losses,
+        winPercentage: team.win_percentage,
+        standingsRank: i + 1,
+        isLocked: true,
+      };
+      draftOrder.push(pick);
+      lockedPicks.push(pick);
+      lotteryLog.push(`Pick ${i + 1}: ${team.team_name} (${team.wins}-${team.losses}) - LOCKED`);
+    }
 
-    let draftPosition = 1;
+    // =========================================================================
+    // STEP 2: WEIGHTED LOTTERY FOR PICKS 6+
+    // =========================================================================
+    if (activeStandings.length > 5) {
+      const lotteryTeams = activeStandings.slice(5); // Teams 6 and beyond
+      
+      // Calculate weighted odds based on standings position
+      // Worse teams (lower in remaining standings) get higher odds
+      const totalWeight = lotteryTeams.reduce((sum, _, idx) => sum + (lotteryTeams.length - idx), 0);
+      
+      // Create lottery pool with odds
+      const lotteryPool = lotteryTeams.map((team, idx) => {
+        const weight = lotteryTeams.length - idx; // Worse teams get more weight
+        const odds = (weight / totalWeight) * 100;
+        return {
+          team,
+          weight,
+          odds,
+          standingsRank: idx + 6, // 6th worst, 7th worst, etc.
+        };
+      });
 
-    // Process in order of worst to best win percentage
-    const sortedPcts = Array.from(teamsGroupedByWinPct.keys()).sort((a, b) => a - b);
+      lotteryLog.push('');
+      lotteryLog.push('=== LOTTERY ODDS ===');
+      lotteryPool.forEach(entry => {
+        lotteryLog.push(`${entry.team.team_name} (${entry.team.wins}-${entry.team.losses}): ${entry.odds.toFixed(1)}% chance`);
+      });
+      lotteryLog.push('');
+      lotteryLog.push('=== LOTTERY DRAWS ===');
 
-    for (const pct of sortedPcts) {
-      const tiedTeams = teamsGroupedByWinPct.get(pct)!;
+      // Run the weighted lottery
+      const remainingTeams = [...lotteryPool];
+      let draftPosition = 6;
 
-      if (tiedTeams.length === 1) {
-        // No tie
-        const team = tiedTeams[0];
-        draftOrder.push({
-          teamId: team.team_id,
-          teamName: team.team_name,
-          teamAbbreviation: team.team_abbreviation,
-          draftPosition: draftPosition++,
-          wins: team.wins,
-          losses: team.losses,
-          winPercentage: team.win_percentage,
-        });
-      } else {
-        // TIEBREAKER NEEDED
-        // TODO: Replace this with your specific tiebreaker rules
-        // Current default: Random order for ties (placeholder)
-        const shuffled = [...tiedTeams].sort(() => Math.random() - 0.5);
-
-        tiebreakers.push({
-          teams: shuffled.map((t) => t.team_name),
-          method: 'Random (placeholder - add your tiebreaker rules)',
-          winner: shuffled[0].team_name,
-        });
-
-        for (const team of shuffled) {
-          draftOrder.push({
-            teamId: team.team_id,
-            teamName: team.team_name,
-            teamAbbreviation: team.team_abbreviation,
-            draftPosition: draftPosition++,
-            wins: team.wins,
-            losses: team.losses,
-            winPercentage: team.win_percentage,
-          });
+      while (remainingTeams.length > 0) {
+        // Calculate current total weight
+        const currentTotalWeight = remainingTeams.reduce((sum, entry) => sum + entry.weight, 0);
+        
+        // Generate random number
+        const randomNum = Math.random() * currentTotalWeight;
+        
+        // Find winner based on weighted selection
+        let cumulative = 0;
+        let winnerIdx = 0;
+        for (let i = 0; i < remainingTeams.length; i++) {
+          cumulative += remainingTeams[i].weight;
+          if (randomNum <= cumulative) {
+            winnerIdx = i;
+            break;
+          }
         }
+
+        const winner = remainingTeams[winnerIdx];
+        const pick: DraftOrderTeam = {
+          teamId: winner.team.team_id,
+          teamName: winner.team.team_name,
+          teamAbbreviation: winner.team.team_abbreviation,
+          draftPosition,
+          wins: winner.team.wins,
+          losses: winner.team.losses,
+          winPercentage: winner.team.win_percentage,
+          standingsRank: winner.standingsRank,
+          isLocked: false,
+          lotteryOdds: winner.odds,
+          lotteryNumber: randomNum,
+        };
+
+        draftOrder.push(pick);
+        lotteryPicks.push(pick);
+        lotteryLog.push(`Pick ${draftPosition}: ${winner.team.team_name} (${winner.team.wins}-${winner.team.losses}) - LOTTERY WINNER (had ${winner.odds.toFixed(1)}% odds)`);
+
+        // Remove winner from pool
+        remainingTeams.splice(winnerIdx, 1);
+        draftPosition++;
       }
     }
+
+    lotteryLog.push('');
+    lotteryLog.push('=== FINAL DRAFT ORDER ===');
+    draftOrder.forEach(pick => {
+      lotteryLog.push(`${pick.draftPosition}. ${pick.teamAbbreviation} - ${pick.teamName} (${pick.wins}-${pick.losses}) ${pick.isLocked ? '[LOCKED]' : '[LOTTERY]'}`);
+    });
 
     return {
       success: true,
       draftOrder,
-      tiebreakers: tiebreakers.length > 0 ? tiebreakers : undefined,
+      lockedPicks,
+      lotteryPicks,
+      lotteryLog,
+      excludedTeams: excludedTeamNames,
     };
   } catch (err: any) {
     console.error('Error calculating draft order:', err);

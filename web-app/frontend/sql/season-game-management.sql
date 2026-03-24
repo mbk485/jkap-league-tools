@@ -70,3 +70,11 @@ CREATE INDEX IF NOT EXISTS idx_season_archives_game_version ON season_archives(g
 UPDATE season_state 
 SET game_version = 'MLB The Show 25' 
 WHERE game_version IS NULL;
+
+-- Add contracted_teams array to league_settings
+ALTER TABLE league_settings
+ADD COLUMN IF NOT EXISTS contracted_teams TEXT[] DEFAULT ARRAY['LAD', 'CHC', 'ATL'];
+
+-- Add draft_position to final_standings if not exists
+ALTER TABLE final_standings
+ADD COLUMN IF NOT EXISTS draft_position INTEGER;

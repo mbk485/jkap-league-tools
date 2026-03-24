@@ -77,9 +77,11 @@ import { MLB_TEAMS } from '@/types/league';
 const DEFAULT_SEASON_STATE: SeasonState = {
   id: 'season-4',
   season_number: 4,
+  game_version: 'MLB The Show 25',
   phase: 'questionnaire',
   phase_started_at: new Date().toISOString(),
   phase_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  is_current: true,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 };
@@ -172,9 +174,11 @@ function OffSeasonContent() {
           setSeasonState({
             id: state.id,
             season_number: state.season_number,
+            game_version: state.game_version || 'MLB The Show 25',
             phase: state.phase as SeasonPhase,
             phase_started_at: state.phase_started_at,
             phase_deadline: state.phase_deadline,
+            is_current: state.is_current ?? true,
             created_at: state.created_at,
             updated_at: state.updated_at,
           });
@@ -346,8 +350,87 @@ function OffSeasonContent() {
             isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}
         >
-          {/* Dynamic Action Card based on current phase and claiming status */}
-          {claimingOpen || seasonState.phase === 'claiming_period' ? (
+          {/* Dynamic Action Card based on current offseason phase */}
+          {['signings', 'complete'].includes(offseasonPhase) ? (
+            /* SIGNINGS/COMPLETE HERO - Free Agency is done */
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600/30 via-emerald-500/20 to-green-500/30 border-2 border-emerald-500/50 p-6 sm:p-8">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 rounded-full blur-3xl" />
+              
+              <div className="relative z-10">
+                {/* Status Badge */}
+                <div className="flex items-center gap-3 mb-4">
+                  <Badge className="bg-emerald-500 text-white text-sm px-3 py-1">
+                    ✅ {offseasonPhase === 'complete' ? 'OFFSEASON COMPLETE' : 'FREE AGENCY COMPLETE'}
+                  </Badge>
+                </div>
+                
+                <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                  {offseasonPhase === 'complete' ? 'Offseason Complete!' : 'Free Agency Finished'}
+                </h1>
+                <p className="text-slate-200 text-lg mb-6 max-w-2xl">
+                  {offseasonPhase === 'complete' 
+                    ? 'All offseason activities are complete. Get ready for the new season!'
+                    : 'Declarations and claims are closed. The draft and signings are being finalized.'}
+                </p>
+                
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Link href="/freeagents">
+                    <button className="flex items-center justify-center gap-3 px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white text-xl font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-105">
+                      <Users className="w-6 h-6" />
+                      VIEW FREE AGENTS
+                      <ArrowRight className="w-6 h-6" />
+                    </button>
+                  </Link>
+                  
+                  <div className="flex items-center gap-2 px-4 py-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl">
+                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                    <span className="text-emerald-400 font-medium">
+                      {freeAgentsDeclared.length} declared • {claimsSubmitted.length} claims submitted
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : offseasonPhase === 'processing' ? (
+            /* PROCESSING HERO - Claims being resolved */
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-orange-600/30 via-amber-500/20 to-yellow-500/30 border-2 border-orange-500/50 p-6 sm:p-8">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/20 rounded-full blur-3xl" />
+              
+              <div className="relative z-10">
+                {/* Status Badge */}
+                <div className="flex items-center gap-3 mb-4">
+                  <Badge className="bg-orange-500 text-white text-sm px-3 py-1">
+                    ⏳ PROCESSING CLAIMS
+                  </Badge>
+                </div>
+                
+                <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                  Claims Being Processed
+                </h1>
+                <p className="text-slate-200 text-lg mb-6 max-w-2xl">
+                  The claiming period is closed. Commissioner is processing claims and determining winners.
+                </p>
+                
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex items-center gap-2 px-4 py-3 bg-orange-500/20 border border-orange-500/30 rounded-xl">
+                    <Clock className="w-5 h-5 text-orange-400 animate-spin" />
+                    <span className="text-orange-400 font-medium">
+                      Results coming soon...
+                    </span>
+                  </div>
+                  
+                  {claimsSubmitted.length > 0 && (
+                    <div className="flex items-center gap-2 px-4 py-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl">
+                      <CheckCircle className="w-5 h-5 text-emerald-400" />
+                      <span className="text-emerald-400 font-medium">
+                        Your claim submitted!
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : offseasonPhase === 'claiming' || claimingOpen ? (
             /* CLAIMING PERIOD HERO */
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-cyan-600/30 via-cyan-500/20 to-blue-500/30 border-2 border-cyan-500/50 p-6 sm:p-8">
               <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/20 rounded-full blur-3xl" />
@@ -396,7 +479,7 @@ function OffSeasonContent() {
               </div>
             </div>
           ) : (
-            /* DECLARATION PERIOD HERO (default) */
+            /* DECLARATION PERIOD HERO (default) - Also shown when phase is 'declarations' */
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-orange-600/30 via-orange-500/20 to-amber-500/30 border-2 border-orange-500/50 p-6 sm:p-8">
               <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/20 rounded-full blur-3xl" />
               
