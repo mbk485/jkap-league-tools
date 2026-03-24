@@ -71,6 +71,11 @@ import {
   UserMinus,
   UserPlus,
   Trash2,
+  Calendar,
+  FastForward,
+  SkipForward,
+  Archive,
+  Zap,
 } from 'lucide-react';
 import {
   getLeagueStandings,
@@ -93,6 +98,16 @@ import {
   DBClaimSubmission,
   OffseasonPhase,
   OFFSEASON_PHASES,
+  getGameVersions,
+  getCurrentGameVersion,
+  advanceToNextSeason,
+  advanceToNewGame,
+  getSeasonArchives,
+  calculateDraftOrder,
+  saveDraftOrder,
+  DBGameVersion,
+  DBSeasonArchive,
+  DraftOrderTeam,
 } from '@/lib/supabase';
 import { MLB_TEAMS } from '@/types/league';
 import { checkQuestionnaireCompletions, getAllQuestionnaireCompletions } from '@/lib/typeform-api';
@@ -145,7 +160,7 @@ export default function OffSeasonAdminPage() {
   const router = useRouter();
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'voting' | 'standings' | 'phases' | 'free-agency'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'voting' | 'standings' | 'phases' | 'free-agency' | 'seasons'>('overview');
   const [faSection, setFaSection] = useState<'declarations' | 'claims' | 'signings'>('declarations');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   
@@ -163,6 +178,20 @@ export default function OffSeasonAdminPage() {
   const [standingsMessage, setStandingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [draftOrder, setDraftOrder] = useState<StandingsData[]>([]);
   const [hasSavedStandings, setHasSavedStandings] = useState(false);
+  
+  // Season & Game Management State
+  const [gameVersions, setGameVersions] = useState<DBGameVersion[]>([]);
+  const [currentGameVersion, setCurrentGameVersion] = useState<DBGameVersion | null>(null);
+  const [seasonArchives, setSeasonArchives] = useState<DBSeasonArchive[]>([]);
+  const [isAdvancingSeason, setIsAdvancingSeason] = useState(false);
+  const [isAdvancingGame, setIsAdvancingGame] = useState(false);
+  const [newGameVersionName, setNewGameVersionName] = useState('');
+  const [seasonActionMessage, setSeasonActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [calculatedDraftOrder, setCalculatedDraftOrder] = useState<DraftOrderTeam[]>([]);
+  const [draftOrderTiebreakers, setDraftOrderTiebreakers] = useState<{ teams: string[]; method: string; winner: string }[]>([]);
+  const [isCalculatingDraft, setIsCalculatingDraft] = useState(false);
+  const [contractedTeamIds, setContractedTeamIds] = useState<string[]>([]);
+  
   const [progressSummary, setProgressSummary] = useState({
     totalMembers: 0,
     questionnaireCompleted: 0,
@@ -289,6 +318,20 @@ export default function OffSeasonAdminPage() {
       // Load signings
       const signingsData = await getSignings(currentSeasonNum);
       setSignings(signingsData || []);
+
+      // Load season/game version data
+      try {
+        const [versions, currentVersion, archives] = await Promise.all([
+          getGameVersions(),
+          getCurrentGameVersion(),
+          getSeasonArchives(),
+        ]);
+        setGameVersions(versions);
+        setCurrentGameVersion(currentVersion);
+        setSeasonArchives(archives);
+      } catch (err) {
+        console.error('Error loading season/game data:', err);
+      }
 
       // Set season info
       setSeasonNumber(currentSeasonNum);
@@ -1036,6 +1079,7 @@ export default function OffSeasonAdminPage() {
             { id: 'voting', label: 'Awards Voting', icon: Trophy },
             { id: 'standings', label: 'Standings', icon: Target },
             { id: 'phases', label: 'Phase Control', icon: Settings },
+            { id: 'seasons', label: 'Season Management', icon: Calendar },
           ].map(tab => (
             <button
               key={tab.id}
@@ -3510,6 +3554,425 @@ Let's get this done! 💪`;
                   setCopiedAnnouncement={setCopiedAnnouncement}
                 />
               )}
+            </div>
+          )}
+
+          {/* Seasons Tab - Season & Game Management */}
+          {activeTab === 'seasons' && (
+            <div className="space-y-6">
+              {/* Current Status Banner */}
+              <Card className="bg-gradient-to-br from-amber-900/40 to-orange-900/30 border-amber-500/50 border-2">
+                <CardContent className="py-6">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center">
+                        <Gamepad2 className="w-8 h-8 text-amber-400" />
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-sm">Currently Playing</p>
+                        <h2 className="text-2xl font-bold text-white">
+                          {currentGameVersion?.version_name || 'MLB The Show 25'} - Season {seasonNumber}
+                        </h2>
+                        <p className="text-amber-400 text-sm mt-1">
+                          Phase: {getPhaseLabel(currentPhase)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-lg px-4 py-2">
+                        S{seasonNumber}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Action Cards */}
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Advance to Next Season */}
+                <Card className="bg-slate-800/50 border-emerald-500/30">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <FastForward className="w-5 h-5 text-emerald-400" />
+                      Advance to Next Season
+                    </CardTitle>
+                    <p className="text-sm text-slate-400">
+                      Start Season {seasonNumber + 1} of {currentGameVersion?.version_name || 'MLB The Show 25'}
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="p-4 rounded-lg bg-slate-700/50 border border-slate-600">
+                      <p className="text-slate-300 text-sm mb-3">
+                        This will:
+                      </p>
+                      <ul className="text-sm text-slate-400 space-y-1">
+                        <li className="flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-400" />
+                          Archive current season data
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-400" />
+                          Create Season {seasonNumber + 1}
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-400" />
+                          Reset phase to Pre-Season
+                        </li>
+                      </ul>
+                    </div>
+                    
+                    <button
+                      onClick={async () => {
+                        if (confirm(`Are you sure you want to advance to Season ${seasonNumber + 1}?\n\nThis will archive the current season and cannot be undone.`)) {
+                          setIsAdvancingSeason(true);
+                          setSeasonActionMessage(null);
+                          try {
+                            const result = await advanceToNextSeason({
+                              season_ended_at: new Date().toISOString(),
+                              notes: `Advanced from Season ${seasonNumber} to Season ${seasonNumber + 1}`,
+                            });
+                            if (result.success) {
+                              setSeasonActionMessage({ type: 'success', text: `✓ Advanced to Season ${seasonNumber + 1}!` });
+                              setSeasonNumber(seasonNumber + 1);
+                              // Refresh archives
+                              const archives = await getSeasonArchives();
+                              setSeasonArchives(archives);
+                            } else {
+                              setSeasonActionMessage({ type: 'error', text: result.error || 'Failed to advance season' });
+                            }
+                          } catch (err: any) {
+                            setSeasonActionMessage({ type: 'error', text: err.message });
+                          } finally {
+                            setIsAdvancingSeason(false);
+                          }
+                        }
+                      }}
+                      disabled={isAdvancingSeason}
+                      className="w-full flex items-center justify-center gap-2 p-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors disabled:opacity-50"
+                    >
+                      {isAdvancingSeason ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          <FastForward className="w-5 h-5" />
+                          Advance to Season {seasonNumber + 1}
+                        </>
+                      )}
+                    </button>
+                  </CardContent>
+                </Card>
+
+                {/* Advance to New Game */}
+                <Card className="bg-slate-800/50 border-purple-500/30">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <SkipForward className="w-5 h-5 text-purple-400" />
+                      New Game Release
+                    </CardTitle>
+                    <p className="text-sm text-slate-400">
+                      Start a new MLB The Show game (e.g., MLB The Show 26)
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-3">
+                      <label className="text-sm text-slate-400">New Game Version Name</label>
+                      <input
+                        type="text"
+                        value={newGameVersionName}
+                        onChange={(e) => setNewGameVersionName(e.target.value)}
+                        placeholder="e.g., MLB The Show 26"
+                        className="w-full px-4 py-3 rounded-lg bg-slate-700 border border-slate-600 text-white placeholder-slate-500 focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                      />
+                    </div>
+                    
+                    <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                      <p className="text-purple-300 text-sm">
+                        This will archive ALL seasons from the current game and start fresh with Season 1.
+                      </p>
+                    </div>
+                    
+                    <button
+                      onClick={async () => {
+                        if (!newGameVersionName.trim()) {
+                          alert('Please enter a game version name');
+                          return;
+                        }
+                        if (confirm(`Are you sure you want to start "${newGameVersionName}" - Season 1?\n\nThis will archive ${currentGameVersion?.version_name || 'MLB The Show 25'} and cannot be undone.`)) {
+                          setIsAdvancingGame(true);
+                          setSeasonActionMessage(null);
+                          try {
+                            const result = await advanceToNewGame(newGameVersionName.trim(), {
+                              season_ended_at: new Date().toISOString(),
+                              notes: `Game version change: ${currentGameVersion?.version_name || 'MLB The Show 25'} → ${newGameVersionName.trim()}`,
+                            });
+                            if (result.success) {
+                              setSeasonActionMessage({ type: 'success', text: `✓ Started ${newGameVersionName} - Season 1!` });
+                              setSeasonNumber(1);
+                              setNewGameVersionName('');
+                              // Refresh data
+                              const [versions, current, archives] = await Promise.all([
+                                getGameVersions(),
+                                getCurrentGameVersion(),
+                                getSeasonArchives(),
+                              ]);
+                              setGameVersions(versions);
+                              setCurrentGameVersion(current);
+                              setSeasonArchives(archives);
+                            } else {
+                              setSeasonActionMessage({ type: 'error', text: result.error || 'Failed to advance game' });
+                            }
+                          } catch (err: any) {
+                            setSeasonActionMessage({ type: 'error', text: err.message });
+                          } finally {
+                            setIsAdvancingGame(false);
+                          }
+                        }
+                      }}
+                      disabled={isAdvancingGame || !newGameVersionName.trim()}
+                      className="w-full flex items-center justify-center gap-2 p-4 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold transition-colors disabled:opacity-50"
+                    >
+                      {isAdvancingGame ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          <SkipForward className="w-5 h-5" />
+                          Start New Game
+                        </>
+                      )}
+                    </button>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Action Message */}
+              {seasonActionMessage && (
+                <div className={`p-4 rounded-lg border ${
+                  seasonActionMessage.type === 'success' 
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                    : 'bg-red-500/10 border-red-500/30 text-red-400'
+                }`}>
+                  {seasonActionMessage.text}
+                </div>
+              )}
+
+              {/* Draft Order Calculator */}
+              <Card className="bg-slate-800/50 border-cyan-500/30">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Target className="w-5 h-5 text-cyan-400" />
+                    Draft Order Calculator
+                  </CardTitle>
+                  <p className="text-sm text-slate-400">
+                    Calculate draft order based on final standings (worst record picks first)
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Contracted Teams Selection */}
+                  <div className="space-y-3">
+                    <label className="text-sm text-slate-400">Exclude Contracted Teams (optional)</label>
+                    <div className="flex flex-wrap gap-2">
+                      {standings.map((team) => (
+                        <button
+                          key={team.teamId}
+                          onClick={() => {
+                            if (contractedTeamIds.includes(team.teamId)) {
+                              setContractedTeamIds(contractedTeamIds.filter(id => id !== team.teamId));
+                            } else {
+                              setContractedTeamIds([...contractedTeamIds, team.teamId]);
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                            contractedTeamIds.includes(team.teamId)
+                              ? 'bg-red-500/20 text-red-400 border border-red-500/50'
+                              : 'bg-slate-700 text-slate-300 border border-slate-600 hover:border-slate-500'
+                          }`}
+                        >
+                          {team.teamAbbr}
+                          {contractedTeamIds.includes(team.teamId) && <X className="w-3 h-3 ml-1 inline" />}
+                        </button>
+                      ))}
+                    </div>
+                    {contractedTeamIds.length > 0 && (
+                      <p className="text-xs text-red-400">{contractedTeamIds.length} team(s) will be excluded from draft</p>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      setIsCalculatingDraft(true);
+                      try {
+                        const result = await calculateDraftOrder(seasonNumber, contractedTeamIds);
+                        if (result.success && result.draftOrder) {
+                          setCalculatedDraftOrder(result.draftOrder);
+                          setDraftOrderTiebreakers(result.tiebreakers || []);
+                        } else {
+                          alert(result.error || 'Failed to calculate draft order');
+                        }
+                      } catch (err: any) {
+                        alert('Error: ' + err.message);
+                      } finally {
+                        setIsCalculatingDraft(false);
+                      }
+                    }}
+                    disabled={isCalculatingDraft || standings.length === 0}
+                    className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium transition-colors disabled:opacity-50"
+                  >
+                    {isCalculatingDraft ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Zap className="w-5 h-5" />
+                        Calculate Draft Order
+                      </>
+                    )}
+                  </button>
+
+                  {/* Calculated Draft Order Results */}
+                  {calculatedDraftOrder.length > 0 && (
+                    <div className="space-y-4 pt-4 border-t border-slate-700">
+                      <h4 className="font-semibold text-white">Season {seasonNumber + 1} Draft Order</h4>
+                      
+                      {/* Tiebreaker Warnings */}
+                      {draftOrderTiebreakers.length > 0 && (
+                        <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                          <p className="text-amber-400 text-sm font-medium flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4" />
+                            Tiebreakers Applied
+                          </p>
+                          <ul className="text-xs text-amber-300 mt-2 space-y-1">
+                            {draftOrderTiebreakers.map((tb, i) => (
+                              <li key={i}>{tb.teams.join(' vs ')} - {tb.method}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Draft Order List */}
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {calculatedDraftOrder.map((team) => (
+                          <div key={team.teamId} className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50 border border-slate-600">
+                            <div className="flex items-center gap-3">
+                              <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg ${
+                                team.draftPosition === 1 ? 'bg-amber-500 text-white' :
+                                team.draftPosition === 2 ? 'bg-slate-400 text-slate-900' :
+                                team.draftPosition === 3 ? 'bg-orange-600 text-white' :
+                                'bg-slate-600 text-slate-300'
+                              }`}>
+                                {team.draftPosition}
+                              </span>
+                              <div>
+                                <p className="font-medium text-white">{team.teamName}</p>
+                                <p className="text-xs text-slate-400">{team.wins}-{team.losses} ({(team.winPercentage * 100).toFixed(1)}%)</p>
+                              </div>
+                            </div>
+                            <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
+                              Pick #{team.draftPosition}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Save & Copy Buttons */}
+                      <div className="flex gap-3">
+                        <button
+                          onClick={async () => {
+                            const result = await saveDraftOrder(seasonNumber, calculatedDraftOrder);
+                            if (result.success) {
+                              setSeasonActionMessage({ type: 'success', text: '✓ Draft order saved!' });
+                            } else {
+                              setSeasonActionMessage({ type: 'error', text: result.error || 'Failed to save' });
+                            }
+                          }}
+                          className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
+                        >
+                          <Save className="w-4 h-4" />
+                          Save Draft Order
+                        </button>
+                        <button
+                          onClick={() => {
+                            const text = calculatedDraftOrder
+                              .map(t => `${t.draftPosition}. ${t.teamAbbreviation} (${t.wins}-${t.losses})`)
+                              .join('\n');
+                            navigator.clipboard.writeText(`Season ${seasonNumber + 1} Draft Order:\n\n${text}`);
+                            setCopiedField('draft-calc');
+                            setTimeout(() => setCopiedField(null), 2000);
+                          }}
+                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-medium"
+                        >
+                          {copiedField === 'draft-calc' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Link to Draft Tool */}
+                  <div className="pt-4 border-t border-slate-700">
+                    <Link
+                      href="/draft"
+                      className="flex items-center justify-center gap-2 p-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-medium transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Open Draft Tool
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Season Archives */}
+              <Card className="bg-slate-800/50 border-slate-700">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <Archive className="w-5 h-5 text-slate-400" />
+                      Season Archives
+                    </CardTitle>
+                    <button
+                      onClick={async () => {
+                        const archives = await getSeasonArchives();
+                        setSeasonArchives(archives);
+                      }}
+                      className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {seasonArchives.length > 0 ? (
+                    <div className="space-y-3">
+                      {seasonArchives.map((archive) => (
+                        <div key={archive.id} className="p-4 rounded-lg bg-slate-700/50 border border-slate-600">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-white">
+                                {archive.game_version} - Season {archive.season_number}
+                              </p>
+                              {archive.champion_team_name && (
+                                <p className="text-sm text-amber-400">
+                                  🏆 Champion: {archive.champion_team_name}
+                                </p>
+                              )}
+                              <p className="text-xs text-slate-400 mt-1">
+                                Archived: {new Date(archive.archived_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <Badge className="bg-slate-600 text-slate-300">
+                              Archived
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-400">
+                      <Archive className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                      <p>No archived seasons yet</p>
+                      <p className="text-sm">Previous seasons will appear here after advancing</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           )}
         </div>

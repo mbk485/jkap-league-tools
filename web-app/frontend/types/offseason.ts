@@ -22,6 +22,7 @@ export type SeasonPhase =
 export interface SeasonState {
   id: string;
   season_number: number;
+  game_version: string;  // e.g., "MLB The Show 25"
   phase: SeasonPhase;
   phase_started_at: string;
   phase_deadline?: string;
@@ -29,8 +30,47 @@ export interface SeasonState {
   world_series_end?: string;
   claiming_deadline?: string;
   notes?: string;
+  is_current: boolean;
+  archived_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface GameVersion {
+  id: string;
+  version_name: string;      // e.g., "MLB The Show 25"
+  short_name: string;        // e.g., "MTS25"
+  release_year: number;
+  is_current: boolean;
+  started_at?: string;
+  ended_at?: string;
+  total_seasons: number;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SeasonArchive {
+  id: string;
+  game_version: string;
+  season_number: number;
+  champion_team_id?: string;
+  champion_team_name?: string;
+  champion_user_id?: string;
+  champion_user_name?: string;
+  mvp_player_name?: string;
+  mvp_team?: string;
+  cy_young_player_name?: string;
+  cy_young_team?: string;
+  total_games_played?: number;
+  total_teams?: number;
+  draft_order?: string[];
+  draft_pool?: any[];
+  season_started_at?: string;
+  season_ended_at?: string;
+  archived_at: string;
+  archived_by?: string;
+  notes?: string;
 }
 
 // =============================================================================

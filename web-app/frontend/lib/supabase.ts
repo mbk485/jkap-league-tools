@@ -4667,6 +4667,7 @@ import type {
 export interface DBSeasonState {
   id: string;
   season_number: number;
+  game_version?: string;  // e.g., "MLB The Show 25"
   phase: SeasonPhase;
   phase_started_at: string;
   phase_deadline?: string;
@@ -4674,6 +4675,8 @@ export interface DBSeasonState {
   world_series_end?: string;
   claiming_deadline?: string;
   notes?: string;
+  is_current?: boolean;
+  archived_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -4781,14 +4784,25 @@ export async function updateSeasonPhase(
 }
 
 // Create new season
-export async function createNewSeason(seasonNumber: number): Promise<{ success: boolean; season?: DBSeasonState; error?: string }> {
+export async function createNewSeason(
+  seasonNumber: number,
+  gameVersion?: string
+): Promise<{ success: boolean; season?: DBSeasonState; error?: string }> {
   try {
+    // Mark all previous seasons as not current
+    await supabase
+      .from('season_state')
+      .update({ is_current: false })
+      .eq('is_current', true);
+
     const { data, error } = await supabase
       .from('season_state')
       .insert({
         season_number: seasonNumber,
+        game_version: gameVersion || 'MLB The Show 25',
         phase: 'pre_season',
         phase_started_at: new Date().toISOString(),
+        is_current: true,
       })
       .select()
       .single();
@@ -4797,6 +4811,388 @@ export async function createNewSeason(seasonNumber: number): Promise<{ success: 
     return { success: true, season: data };
   } catch (err: any) {
     console.error('Error creating new season:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// =============================================================================
+// GAME VERSION MANAGEMENT
+// =============================================================================
+
+export interface DBGameVersion {
+  id: string;
+  version_name: string;
+  short_name: string;
+  release_year: number;
+  is_current: boolean;
+  started_at?: string;
+  ended_at?: string;
+  total_seasons: number;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DBSeasonArchive {
+  id: string;
+  game_version: string;
+  season_number: number;
+  champion_team_id?: string;
+  champion_team_name?: string;
+  champion_user_id?: string;
+  champion_user_name?: string;
+  mvp_player_name?: string;
+  mvp_team?: string;
+  cy_young_player_name?: string;
+  cy_young_team?: string;
+  total_games_played?: number;
+  total_teams?: number;
+  draft_order?: string[];
+  draft_pool?: any[];
+  season_started_at?: string;
+  season_ended_at?: string;
+  archived_at: string;
+  archived_by?: string;
+  notes?: string;
+}
+
+// Get all game versions
+export async function getGameVersions(): Promise<DBGameVersion[]> {
+  try {
+    const { data, error } = await supabase
+      .from('game_versions')
+      .select('*')
+      .order('release_year', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching game versions:', err);
+    return [];
+  }
+}
+
+// Get current game version
+export async function getCurrentGameVersion(): Promise<DBGameVersion | null> {
+  try {
+    const { data, error } = await supabase
+      .from('game_versions')
+      .select('*')
+      .eq('is_current', true)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.error('Error fetching current game version:', err);
+    return null;
+  }
+}
+
+// Create new game version (for when new MLB The Show releases)
+export async function createGameVersion(
+  versionName: string,
+  shortName: string,
+  releaseYear: number
+): Promise<{ success: boolean; gameVersion?: DBGameVersion; error?: string }> {
+  try {
+    // Mark current game version as ended
+    await supabase
+      .from('game_versions')
+      .update({
+        is_current: false,
+        ended_at: new Date().toISOString(),
+      })
+      .eq('is_current', true);
+
+    const { data, error } = await supabase
+      .from('game_versions')
+      .insert({
+        version_name: versionName,
+        short_name: shortName,
+        release_year: releaseYear,
+        is_current: true,
+        started_at: new Date().toISOString(),
+        total_seasons: 0,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, gameVersion: data };
+  } catch (err: any) {
+    console.error('Error creating game version:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Advance to next season within current game
+export async function advanceToNextSeason(
+  archiveData?: Partial<DBSeasonArchive>
+): Promise<{ success: boolean; newSeason?: DBSeasonState; error?: string }> {
+  try {
+    // Get current season
+    const currentSeason = await getCurrentSeasonState();
+    if (!currentSeason) {
+      return { success: false, error: 'No current season found' };
+    }
+
+    // Archive current season if archive data provided
+    if (archiveData) {
+      await supabase.from('season_archives').insert({
+        game_version: currentSeason.game_version || 'MLB The Show 25',
+        season_number: currentSeason.season_number,
+        ...archiveData,
+        archived_at: new Date().toISOString(),
+      });
+    }
+
+    // Mark current season as archived
+    await supabase
+      .from('season_state')
+      .update({
+        is_current: false,
+        archived_at: new Date().toISOString(),
+      })
+      .eq('id', currentSeason.id);
+
+    // Update game version's season count
+    await supabase
+      .from('game_versions')
+      .update({
+        total_seasons: currentSeason.season_number,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('version_name', currentSeason.game_version || 'MLB The Show 25');
+
+    // Create new season
+    const newSeasonNumber = currentSeason.season_number + 1;
+    const result = await createNewSeason(newSeasonNumber, currentSeason.game_version);
+
+    return result;
+  } catch (err: any) {
+    console.error('Error advancing season:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Advance to new game version (e.g., MLB The Show 25 -> MLB The Show 26)
+export async function advanceToNewGame(
+  newVersionName: string,
+  archiveData?: Partial<DBSeasonArchive>
+): Promise<{ success: boolean; newSeason?: DBSeasonState; newGameVersion?: DBGameVersion; error?: string }> {
+  try {
+    // Get current season
+    const currentSeason = await getCurrentSeasonState();
+    
+    // Archive current season if exists
+    if (currentSeason && archiveData) {
+      await supabase.from('season_archives').insert({
+        game_version: currentSeason.game_version || 'MLB The Show 25',
+        season_number: currentSeason.season_number,
+        ...archiveData,
+        archived_at: new Date().toISOString(),
+      });
+
+      // Mark current season as archived
+      await supabase
+        .from('season_state')
+        .update({
+          is_current: false,
+          archived_at: new Date().toISOString(),
+        })
+        .eq('id', currentSeason.id);
+    }
+
+    // Parse year from version name (e.g., "MLB The Show 26" -> 2026)
+    const yearMatch = newVersionName.match(/\d{2}$/);
+    const releaseYear = yearMatch ? 2000 + parseInt(yearMatch[0]) : new Date().getFullYear();
+    const shortName = `MTS${yearMatch?.[0] || releaseYear.toString().slice(-2)}`;
+
+    // Create new game version
+    const versionResult = await createGameVersion(newVersionName, shortName, releaseYear);
+    if (!versionResult.success) {
+      return { success: false, error: versionResult.error };
+    }
+
+    // Create Season 1 of new game
+    const seasonResult = await createNewSeason(1, newVersionName);
+
+    return {
+      success: seasonResult.success,
+      newSeason: seasonResult.season,
+      newGameVersion: versionResult.gameVersion,
+      error: seasonResult.error,
+    };
+  } catch (err: any) {
+    console.error('Error advancing to new game:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Get season archives
+export async function getSeasonArchives(gameVersion?: string): Promise<DBSeasonArchive[]> {
+  try {
+    let query = supabase
+      .from('season_archives')
+      .select('*')
+      .order('game_version', { ascending: false })
+      .order('season_number', { ascending: false });
+
+    if (gameVersion) {
+      query = query.eq('game_version', gameVersion);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching season archives:', err);
+    return [];
+  }
+}
+
+// =============================================================================
+// DRAFT ORDER CALCULATION
+// =============================================================================
+
+export interface DraftOrderTeam {
+  teamId: string;
+  teamName: string;
+  teamAbbreviation: string;
+  draftPosition: number;
+  wins: number;
+  losses: number;
+  winPercentage: number;
+  // Tiebreaker fields (to be filled based on rules)
+  headToHeadRecord?: Record<string, { wins: number; losses: number }>;
+  runDifferential?: number;
+  lotteryNumber?: number;
+}
+
+export interface DraftOrderResult {
+  success: boolean;
+  draftOrder?: DraftOrderTeam[];
+  tiebreakers?: { teams: string[]; method: string; winner: string }[];
+  error?: string;
+}
+
+// Calculate draft order from standings (basic worst-to-first)
+// NOTE: Add your specific tiebreaker rules here
+export async function calculateDraftOrder(
+  seasonNumber: number,
+  excludedTeamIds: string[] = []
+): Promise<DraftOrderResult> {
+  try {
+    // Get final standings
+    const { data: standings, error } = await supabase
+      .from('final_standings')
+      .select('*')
+      .eq('season_number', seasonNumber)
+      .order('win_percentage', { ascending: true }); // Worst first
+
+    if (error) throw error;
+    if (!standings || standings.length === 0) {
+      return { success: false, error: 'No standings found for this season' };
+    }
+
+    // Filter out excluded teams (contracted teams)
+    const activeStandings = standings.filter(
+      (s) => !excludedTeamIds.includes(s.team_id)
+    );
+
+    const tiebreakers: { teams: string[]; method: string; winner: string }[] = [];
+    const draftOrder: DraftOrderTeam[] = [];
+
+    // Group teams by win percentage for tiebreaker detection
+    const teamsGroupedByWinPct = new Map<number, typeof activeStandings>();
+    activeStandings.forEach((team) => {
+      const pct = team.win_percentage;
+      if (!teamsGroupedByWinPct.has(pct)) {
+        teamsGroupedByWinPct.set(pct, []);
+      }
+      teamsGroupedByWinPct.get(pct)!.push(team);
+    });
+
+    let draftPosition = 1;
+
+    // Process in order of worst to best win percentage
+    const sortedPcts = Array.from(teamsGroupedByWinPct.keys()).sort((a, b) => a - b);
+
+    for (const pct of sortedPcts) {
+      const tiedTeams = teamsGroupedByWinPct.get(pct)!;
+
+      if (tiedTeams.length === 1) {
+        // No tie
+        const team = tiedTeams[0];
+        draftOrder.push({
+          teamId: team.team_id,
+          teamName: team.team_name,
+          teamAbbreviation: team.team_abbreviation,
+          draftPosition: draftPosition++,
+          wins: team.wins,
+          losses: team.losses,
+          winPercentage: team.win_percentage,
+        });
+      } else {
+        // TIEBREAKER NEEDED
+        // TODO: Replace this with your specific tiebreaker rules
+        // Current default: Random order for ties (placeholder)
+        const shuffled = [...tiedTeams].sort(() => Math.random() - 0.5);
+
+        tiebreakers.push({
+          teams: shuffled.map((t) => t.team_name),
+          method: 'Random (placeholder - add your tiebreaker rules)',
+          winner: shuffled[0].team_name,
+        });
+
+        for (const team of shuffled) {
+          draftOrder.push({
+            teamId: team.team_id,
+            teamName: team.team_name,
+            teamAbbreviation: team.team_abbreviation,
+            draftPosition: draftPosition++,
+            wins: team.wins,
+            losses: team.losses,
+            winPercentage: team.win_percentage,
+          });
+        }
+      }
+    }
+
+    return {
+      success: true,
+      draftOrder,
+      tiebreakers: tiebreakers.length > 0 ? tiebreakers : undefined,
+    };
+  } catch (err: any) {
+    console.error('Error calculating draft order:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Save calculated draft order
+export async function saveDraftOrder(
+  seasonNumber: number,
+  draftOrder: DraftOrderTeam[]
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Update final standings with draft position
+    for (const team of draftOrder) {
+      await supabase
+        .from('final_standings')
+        .update({
+          draft_position: team.draftPosition,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('season_number', seasonNumber)
+        .eq('team_id', team.teamId);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error saving draft order:', err);
     return { success: false, error: err.message };
   }
 }
