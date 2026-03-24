@@ -779,8 +779,42 @@ function OffSeasonContent() {
           {/* Overview Tab - Simplified */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
-              {/* DYNAMIC ACTION CARD - based on current phase */}
-              {claimingOpen || seasonState.phase === 'claiming_period' ? (
+              {/* PHASE-BASED CONTENT - Show different content based on offseason phase */}
+              {['signings', 'complete'].includes(offseasonPhase) ? (
+                /* FREE AGENCY COMPLETE - Show summary */
+                <Card className="bg-gradient-to-br from-emerald-500/20 to-green-500/10 border-2 border-emerald-500/40">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col lg:flex-row items-start lg:items-center gap-6">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-3xl">✅</span>
+                          <h2 className="text-2xl font-bold text-white">Free Agency Complete</h2>
+                          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 ml-2">
+                            FINISHED
+                          </Badge>
+                        </div>
+                        <p className="text-slate-300 text-lg mb-4">
+                          All declarations and claims have been processed. View the FA Signings tab for the complete list of player movements.
+                        </p>
+                        <div className="flex items-center gap-4 text-sm">
+                          <div className="flex items-center gap-2 text-emerald-400">
+                            <CheckCircle className="w-4 h-4" />
+                            <span>{freeAgentsDeclared.length} players declared • {claimsSubmitted.length} claims submitted</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab('signings')}
+                        className="flex items-center gap-3 px-6 py-4 bg-emerald-600 hover:bg-emerald-500 text-white text-lg font-bold rounded-xl transition-all shadow-lg hover:shadow-emerald-500/30"
+                      >
+                        <Scroll className="w-5 h-5" />
+                        View FA Signings
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : claimingOpen || seasonState.phase === 'claiming_period' || offseasonPhase === 'claiming' ? (
                 /* CLAIMING PERIOD CARD */
                 <Card className="bg-gradient-to-br from-cyan-500/20 to-blue-500/10 border-2 border-cyan-500/40">
                   <CardContent className="p-6">
@@ -816,8 +850,32 @@ function OffSeasonContent() {
                     </div>
                   </CardContent>
                 </Card>
+              ) : offseasonPhase === 'processing' ? (
+                /* PROCESSING CLAIMS CARD */
+                <Card className="bg-gradient-to-br from-amber-500/20 to-orange-500/10 border-2 border-amber-500/40">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col lg:flex-row items-start lg:items-center gap-6">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-3xl">⏳</span>
+                          <h2 className="text-2xl font-bold text-white">Processing Claims</h2>
+                          <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 ml-2">
+                            IN PROGRESS
+                          </Badge>
+                        </div>
+                        <p className="text-slate-300 text-lg mb-4">
+                          All claims have been submitted. The commissioner is now processing claims and determining winners.
+                        </p>
+                        <div className="flex items-center gap-4 text-sm text-amber-400">
+                          <Clock className="w-4 h-4 animate-spin" />
+                          <span>Results coming soon...</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               ) : (
-                /* DECLARATION PERIOD CARD (default) */
+                /* DECLARATION PERIOD CARD (default - only when phase is 'declarations') */
                 <Card className="bg-gradient-to-br from-orange-500/20 to-amber-500/10 border-2 border-orange-500/40">
                   <CardContent className="p-6">
                     <div className="flex flex-col lg:flex-row items-start lg:items-center gap-6">
@@ -854,97 +912,103 @@ function OffSeasonContent() {
                 </Card>
               )}
 
-              {/* HOW IT WORKS - Super Simple Explainer */}
-              <Card className="bg-slate-800/50 border-slate-700">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
-                    <HelpCircle className="w-5 h-5 text-blue-400" />
-                    How Free Agents Work (Simple Version)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid md:grid-cols-3 gap-4">
-                    {/* Step 1 */}
-                    <div className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30">
-                      <div className="w-12 h-12 rounded-full bg-orange-500 text-white text-xl font-bold flex items-center justify-center mb-3">
-                        1
-                      </div>
-                      <h3 className="font-bold text-orange-400 mb-2">DFA Your Players</h3>
-                      <p className="text-sm text-slate-400">
-                        Open MLB The Show, check your roster, and pick players <span className="text-orange-300 font-semibold">from YOUR team in the game</span>.
-                      </p>
-                    </div>
-                    
-                    {/* Step 2 */}
-                    <div className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
-                      <div className="w-12 h-12 rounded-full bg-cyan-500 text-white text-xl font-bold flex items-center justify-center mb-3">
-                        2
-                      </div>
-                      <h3 className="font-bold text-cyan-400 mb-2">Put In Claims</h3>
-                      <p className="text-sm text-slate-400">
-                        Claim players of equal or lesser tier from other teams' DFA list.
-                      </p>
-                    </div>
-                    
-                    {/* Step 3 */}
-                    <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
-                      <div className="w-12 h-12 rounded-full bg-emerald-500 text-white text-xl font-bold flex items-center justify-center mb-3">
-                        3
-                      </div>
-                      <h3 className="font-bold text-emerald-400 mb-2">Claims Process</h3>
-                      <p className="text-sm text-slate-400">
-                        Commissioner processes all claims. You acquire the players you claimed - think waiver wire pickups.
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* Important Rules */}
-                  <div className="mt-4 space-y-3">
-                    <div className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">🎮</span>
-                        <div>
-                          <p className="font-bold text-orange-400">Check Your In-Game Roster First!</p>
-                          <p className="text-sm text-slate-300">
-                            Open MLB The Show → Go to your team roster → Only declare players that are <span className="font-bold text-white">actually on your team in the game</span>. Don't enter random players!
-                          </p>
+              {/* HOW IT WORKS - Only show during active phases, hide when complete */}
+              {!['signings', 'complete'].includes(offseasonPhase) && (
+                <Card className="bg-slate-800/50 border-slate-700">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <HelpCircle className="w-5 h-5 text-blue-400" />
+                      How Free Agents Work (Simple Version)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid md:grid-cols-3 gap-4">
+                      {/* Step 1 */}
+                      <div className={`p-4 rounded-xl ${['claiming', 'processing'].includes(offseasonPhase) ? 'bg-slate-700/50 border border-slate-600' : 'bg-orange-500/10 border border-orange-500/30'}`}>
+                        <div className={`w-12 h-12 rounded-full ${['claiming', 'processing'].includes(offseasonPhase) ? 'bg-emerald-500' : 'bg-orange-500'} text-white text-xl font-bold flex items-center justify-center mb-3`}>
+                          {['claiming', 'processing'].includes(offseasonPhase) ? '✓' : '1'}
                         </div>
+                        <h3 className={`font-bold mb-2 ${['claiming', 'processing'].includes(offseasonPhase) ? 'text-slate-400' : 'text-orange-400'}`}>
+                          {['claiming', 'processing'].includes(offseasonPhase) ? 'Declarations Done' : 'Declare Players'}
+                        </h3>
+                        <p className="text-sm text-slate-400">
+                          {['claiming', 'processing'].includes(offseasonPhase) 
+                            ? 'Declaration period is closed.'
+                            : 'Open MLB The Show, check your roster, and designate players from YOUR team.'}
+                        </p>
                       </div>
-                    </div>
-                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
-                      <div className="flex items-center gap-3">
-                        <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0" />
-                        <div>
-                          <p className="font-bold text-red-400">Must Declare to Claim:</p>
-                          <p className="text-sm text-slate-300">
-                            You MUST declare at least 1 player to participate in claiming. No declarations = you can't claim anyone!
-                          </p>
+                      
+                      {/* Step 2 */}
+                      <div className={`p-4 rounded-xl ${offseasonPhase === 'processing' ? 'bg-slate-700/50 border border-slate-600' : 'bg-cyan-500/10 border border-cyan-500/30'}`}>
+                        <div className={`w-12 h-12 rounded-full ${offseasonPhase === 'processing' ? 'bg-emerald-500' : 'bg-cyan-500'} text-white text-xl font-bold flex items-center justify-center mb-3`}>
+                          {offseasonPhase === 'processing' ? '✓' : '2'}
                         </div>
+                        <h3 className={`font-bold mb-2 ${offseasonPhase === 'processing' ? 'text-slate-400' : 'text-cyan-400'}`}>
+                          {offseasonPhase === 'processing' ? 'Claims Submitted' : 'Submit Claims'}
+                        </h3>
+                        <p className="text-sm text-slate-400">
+                          {offseasonPhase === 'processing'
+                            ? 'Claiming period is closed.'
+                            : 'Claim players of equal or lesser tier from other teams.'}
+                        </p>
+                      </div>
+                      
+                      {/* Step 3 */}
+                      <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                        <div className={`w-12 h-12 rounded-full ${offseasonPhase === 'processing' ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'} text-white text-xl font-bold flex items-center justify-center mb-3`}>
+                          {offseasonPhase === 'processing' ? '⏳' : '3'}
+                        </div>
+                        <h3 className="font-bold text-emerald-400 mb-2">
+                          {offseasonPhase === 'processing' ? 'Processing...' : 'Claims Resolved'}
+                        </h3>
+                        <p className="text-sm text-slate-400">
+                          {offseasonPhase === 'processing'
+                            ? 'Commissioner is processing claims now.'
+                            : 'Commissioner processes all claims and assigns players.'}
+                        </p>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
 
-              {/* Quick Actions Grid */}
+              {/* Quick Actions Grid - Phase-aware */}
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <button
-                  onClick={() => setActiveTab('free-agents')}
-                  className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20 transition-all text-left"
-                >
-                  <UserMinus className="w-8 h-8 text-orange-400 mb-2" />
-                  <p className="font-bold text-white">Declare Players</p>
-                  <p className="text-sm text-slate-400">DFA players from your roster</p>
-                </button>
+                {/* View Signings - Always show when phase is complete */}
+                {['signings', 'complete'].includes(offseasonPhase) && (
+                  <button
+                    onClick={() => setActiveTab('signings')}
+                    className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 transition-all text-left"
+                  >
+                    <Scroll className="w-8 h-8 text-purple-400 mb-2" />
+                    <p className="font-bold text-white">FA Signings</p>
+                    <p className="text-sm text-slate-400">View all player movements</p>
+                  </button>
+                )}
                 
-                <button
-                  onClick={() => setActiveTab('claims')}
-                  className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 transition-all text-left"
-                >
-                  <UserPlus className="w-8 h-8 text-cyan-400 mb-2" />
-                  <p className="font-bold text-white">Claim Players</p>
-                  <p className="text-sm text-slate-400">Claim off the waiver wire</p>
-                </button>
+                {/* Declare Players - Only during declarations phase */}
+                {offseasonPhase === 'declarations' && (
+                  <button
+                    onClick={() => setActiveTab('free-agents')}
+                    className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20 transition-all text-left"
+                  >
+                    <UserMinus className="w-8 h-8 text-orange-400 mb-2" />
+                    <p className="font-bold text-white">Declare Players</p>
+                    <p className="text-sm text-slate-400">Designate free agents</p>
+                  </button>
+                )}
+                
+                {/* Claim Players - Only during claiming phase */}
+                {offseasonPhase === 'claiming' && (
+                  <button
+                    onClick={() => setActiveTab('claims')}
+                    className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 transition-all text-left"
+                  >
+                    <UserPlus className="w-8 h-8 text-cyan-400 mb-2" />
+                    <p className="font-bold text-white">Claim Players</p>
+                    <p className="text-sm text-slate-400">Submit your claims</p>
+                  </button>
+                )}
                 
                 <button
                   onClick={() => setActiveTab('questionnaire')}
@@ -964,6 +1028,15 @@ function OffSeasonContent() {
                   <BarChart3 className="w-8 h-8 text-emerald-400 mb-2" />
                   <p className="font-bold text-white">Standings</p>
                   <p className="text-sm text-slate-400">View league rankings</p>
+                </button>
+                
+                <button
+                  onClick={() => setActiveTab('draft')}
+                  className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-all text-left"
+                >
+                  <Users className="w-8 h-8 text-amber-400 mb-2" />
+                  <p className="font-bold text-white">Draft Pool</p>
+                  <p className="text-sm text-slate-400">View available players</p>
                 </button>
               </div>
 

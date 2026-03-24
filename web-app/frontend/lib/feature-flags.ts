@@ -47,7 +47,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   showDashboard: false,        // Hide for now - full franchise dashboard
   showTools: true,             // Show - main feature
   showDocuments: false,        // Hide for now
-  showFreeAgents: false,       // Hide for now
+  showFreeAgents: true,        // Show - Free Agents in navbar
   showStandings: false,        // Hide for now
   showAnnouncements: false,    // Hide for now - not ready
   showComingSoon: false,       // Hide for now - not ready
