@@ -147,7 +147,7 @@ function DashboardContent() {
   // Use actual user team data, not mock data
   const userTeamName = user?.teamName || 'Your Team';
   const userTeamAbbr = user?.teamAbbreviation || 'TM';
-  const userName = user?.displayName || 'Manager';
+  const userName = String(user?.displayName || user?.username || 'Manager');
   
   // Check if user is admin (admins see everything)
   const isAdmin = user?.isAdmin || false;

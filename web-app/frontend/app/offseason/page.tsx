@@ -123,7 +123,7 @@ const PHASE_COLORS: Record<SeasonPhase, string> = {
   pre_season: 'teal',
 };
 
-type TabType = 'overview' | 'questionnaire' | 'free-agents' | 'claims' | 'standings' | 'draft' | 'signings' | 'winter-league';
+type TabType = 'overview' | 'questionnaire' | 'free-agents' | 'claims' | 'standings' | 'draft' | 'signings' | 'draft-results' | 'winter-league';
 
 function OffSeasonContent() {
   const { user } = useAuth();
@@ -135,7 +135,7 @@ function OffSeasonContent() {
   // Read initial tab from URL query parameter
   const getInitialTab = (): TabType => {
     const tabParam = searchParams.get('tab');
-    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'signings', 'winter-league'];
+    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'signings', 'draft-results', 'winter-league'];
     if (tabParam && validTabs.includes(tabParam as TabType)) {
       return tabParam as TabType;
     }
@@ -148,7 +148,7 @@ function OffSeasonContent() {
   const tabFromUrl = searchParams.get('tab');
   useEffect(() => {
     if (!tabFromUrl) return;
-    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'signings', 'winter-league'];
+    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'signings', 'draft-results', 'winter-league'];
     if (validTabs.includes(tabFromUrl as TabType)) {
       setActiveTab(tabFromUrl as TabType);
     }

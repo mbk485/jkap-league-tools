@@ -275,7 +275,7 @@ export default function WelcomePage() {
               {welcomePacket && (
                 <div className="p-4 bg-slate-700/50 rounded-xl mb-6">
                   <p className="text-slate-300 whitespace-pre-line text-sm">
-                    {welcomePacket.welcome_message
+                    {String(welcomePacket.welcome_message ?? '')
                       .replace('{{name}}', user?.displayName || user?.username || 'New Member')
                       .replace('{{team}}', userTeam?.name || 'Your Team')}
                   </p>

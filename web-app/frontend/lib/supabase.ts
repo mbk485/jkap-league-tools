@@ -1807,7 +1807,8 @@ export async function getActivitySummary(
 export interface DBWelcomePacket {
   id: string;
   title: string;
-  welcome_message: string;
+  /** May be null in DB even when a row exists */
+  welcome_message: string | null;
   rules_link?: string;
   discord_link?: string;
   facebook_link?: string;

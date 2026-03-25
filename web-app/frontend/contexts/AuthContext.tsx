@@ -131,7 +131,7 @@ function dbUserToAuthUser(dbUser: DBUser): AuthUser {
     isLeagueDirector: extendedUser.is_league_director || false,
     managedLeagueId: extendedUser.managed_league_id,
     directorTitle: extendedUser.director_title,
-    createdAt: dbUser.created_at.split('T')[0],
+    createdAt: dbUser.created_at?.split('T')[0] ?? '',
   };
 }
 
@@ -272,7 +272,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: userType === 'external_commissioner' ? email : undefined,
           phone: userType === 'external_commissioner' ? phone : undefined,
           isAdmin: false,
-          createdAt: result.user.created_at.split('T')[0],
+          createdAt: result.user.created_at?.split('T')[0] ?? '',
         };
         
         // Send to Zapier webhook for external commissioners

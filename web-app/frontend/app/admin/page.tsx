@@ -359,7 +359,7 @@ export default function AdminPage() {
         if (packet) {
           setWelcomePacketForm({
             title: packet.title,
-            welcome_message: packet.welcome_message,
+            welcome_message: packet.welcome_message ?? '',
             rules_link: packet.rules_link || '',
             discord_link: packet.discord_link || '',
             facebook_link: packet.facebook_link || '',
