@@ -69,6 +69,7 @@ import {
   X,
   Dices,
   ListOrdered,
+  Sun,
 } from 'lucide-react';
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
 import { PlayerStatsCard, PlayerStatsPopover } from '@/components/players';
@@ -101,6 +102,7 @@ const PHASE_ICONS: Record<SeasonPhase, React.ReactNode> = {
   roster_finalization: <ListChecks className="w-5 h-5" />,
   draft_prep: <FileText className="w-5 h-5" />,
   draft: <Users className="w-5 h-5" />,
+  spring_training: <Sun className="w-5 h-5" />,
   pre_season: <Sparkles className="w-5 h-5" />,
 };
 
@@ -117,6 +119,7 @@ const PHASE_COLORS: Record<SeasonPhase, string> = {
   roster_finalization: 'green',
   draft_prep: 'yellow',
   draft: 'pink',
+  spring_training: 'sky',
   pre_season: 'teal',
 };
 
