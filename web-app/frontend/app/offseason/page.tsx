@@ -814,7 +814,8 @@ function OffSeasonContent() {
             <Trophy className="w-4 h-4" />
             Draft Results
           </button>
-          {/* Cache bust: 2026-03-25-v2 */}
+          {/* Version indicator for deployment verification */}
+          <span className="text-xs text-slate-600 ml-auto">v3.25</span>
         </div>
 
         {/* Tab Content */}
