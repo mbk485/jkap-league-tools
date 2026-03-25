@@ -1,5 +1,5 @@
-import type { Metadata } from 'next';
-import Link from 'next/link';
+'use client';
+
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -11,12 +11,7 @@ import {
 } from '@/lib/data/published-season-draft';
 import { ArrowRight, ClipboardList, ListOrdered } from 'lucide-react';
 
-export const metadata: Metadata = {
-  title: `Draft Order | ${PUBLISHED_DRAFT_META.seasonLabel} | JKAP`,
-  description: 'Official published draft order for the JKAP Memorial League.',
-};
-
-export default function PublishedDraftOrderPage() {
+export function PublishedDraftOrderView() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />

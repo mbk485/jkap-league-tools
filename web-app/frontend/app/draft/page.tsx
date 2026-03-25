@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { PublishedDraftOrderView } from '@/components/draft/PublishedDraftOrderView';
+import { PublishedDraftResultsView } from '@/components/draft/PublishedDraftResultsView';
 import { PlayerStatsPopover } from '@/components/players';
 import { searchPlayers, PlayerSearchResult } from '@/lib/mlb-theshow-api';
 
@@ -128,7 +131,7 @@ const getRatingColor = (rating: number) => {
   return '#d97706'; // Bronze
 };
 
-export default function DraftPage() {
+function DraftBoard() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [draftOrder, setDraftOrder] = useState<string[]>([]);
@@ -1224,6 +1227,31 @@ export default function DraftPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function DraftPublishedRouter() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const pub = searchParams.get('published');
+  if (pathname === '/draft/order' || pub === 'order') {
+    return <PublishedDraftOrderView />;
+  }
+  if (pathname === '/draft/results' || pub === 'results') {
+    return <PublishedDraftResultsView />;
+  }
+  return <DraftBoard />;
+}
+
+export default function DraftPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
+      }
+    >
+      <DraftPublishedRouter />
+    </Suspense>
   );
 }
 

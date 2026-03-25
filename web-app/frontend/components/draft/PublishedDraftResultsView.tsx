@@ -13,7 +13,7 @@ import {
 } from '@/lib/data/published-season-draft';
 import { ArrowLeft, ClipboardList, Search } from 'lucide-react';
 
-export default function PublishedDraftResultsPage() {
+export function PublishedDraftResultsView() {
   const [teamFilter, setTeamFilter] = useState<string>('all');
   const [query, setQuery] = useState('');
 
