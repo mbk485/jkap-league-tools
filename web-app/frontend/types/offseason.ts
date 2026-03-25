@@ -14,10 +14,11 @@ export type SeasonPhase =
   | 'world_series'        // World Series in progress
   | 'claiming_period'     // 48-hour claiming window (after World Series)
   | 'claim_resolution'    // Processing claims by record priority
-  | 'roster_finalization' // Final roster updates
-  | 'draft_prep'          // Preparing for the draft
+  | 'draft_prep'          // Preparing for the draft (draft order, eligible players)
   | 'draft'               // Draft in progress
-  | 'pre_season';         // Getting ready for new season
+  | 'roster_finalization' // Final roster updates after draft
+  | 'spring_training'     // 3 games in spring training jerseys/stadiums, limited trading
+  | 'pre_season';         // Getting ready for new season (deprecated - kept for compatibility)
 
 export interface SeasonState {
   id: string;
@@ -380,9 +381,10 @@ export function getPhaseLabel(phase: SeasonPhase): string {
     world_series: 'World Series',
     claiming_period: 'Claiming Period',
     claim_resolution: 'Claim Resolution',
-    roster_finalization: 'Roster Finalization',
     draft_prep: 'Draft Preparation',
     draft: 'Draft',
+    roster_finalization: 'Roster Finalization',
+    spring_training: 'Spring Training',
     pre_season: 'Pre-Season',
   };
   return labels[phase];
@@ -401,9 +403,10 @@ export function getPhaseDescription(phase: SeasonPhase): string {
     world_series: 'The World Series is in progress. Non-playoff teams: Winter League is open!',
     claiming_period: '48-hour window to submit free agent claims.',
     claim_resolution: 'Processing claims. Priority goes to teams with worst records.',
-    roster_finalization: 'Final roster adjustments before the draft.',
-    draft_prep: 'Prepare your draft strategy for the upcoming season.',
+    draft_prep: 'Draft order is set. Prepare your draft strategy!',
     draft: 'The draft is in progress!',
+    roster_finalization: 'Final roster adjustments after the draft. Make any last changes.',
+    spring_training: 'Play 3 games in spring training jerseys/stadiums. Limited trading window (48 hours or 3 games, whichever first).',
     pre_season: 'Get ready for the new season!',
   };
   return descriptions[phase];

@@ -6,6 +6,8 @@ import { SeasonPhase } from '@/types/offseason';
 import { postCustomAnnouncement, postQuestionnaireReminder } from './discord';
 
 // Phase order for automatic transitions
+// Note: Draft Prep comes BEFORE Roster Finalization (swapped per user request)
+// Spring Training added after draft, before regular season
 export const PHASE_ORDER: SeasonPhase[] = [
   'regular_season',
   'postseason_sim',
@@ -15,10 +17,11 @@ export const PHASE_ORDER: SeasonPhase[] = [
   'world_series',
   'claiming_period',
   'claim_resolution',
-  'roster_finalization',
-  'draft_prep',
-  'draft',
-  'pre_season',
+  'draft_prep',           // Draft preparation comes after claims
+  'draft',                // The draft
+  'roster_finalization',  // Final roster adjustments after draft
+  'spring_training',      // 3 games, limited trading (48hrs or 3 games)
+  // 'pre_season',        // Deprecated - goes straight to regular season
 ];
 
 // Phase configuration with deadlines and requirements
@@ -139,19 +142,6 @@ export const PHASE_CONFIGS: Record<SeasonPhase, PhaseConfig> = {
       message: '⚙️ **Claims are being processed.**\n\nPriority goes to teams with the worst records. Results will be announced soon!',
     },
   },
-  roster_finalization: {
-    phase: 'roster_finalization',
-    name: 'Roster Finalization',
-    defaultDurationHours: 24,
-    requiresApproval: true,
-    autoReminders: true,
-    reminderHoursBefore: [12],
-    canSkip: true,
-    discordAnnouncement: {
-      title: 'Finalize Your Rosters',
-      message: '📝 **Last chance to make roster adjustments!**\n\nReview your roster and make any final changes before the draft.',
-    },
-  },
   draft_prep: {
     phase: 'draft_prep',
     name: 'Draft Preparation',
@@ -179,6 +169,33 @@ export const PHASE_CONFIGS: Record<SeasonPhase, PhaseConfig> = {
       message: '🏈 **IT\'S DRAFT DAY!**\n\nHead to the Draft Tool to participate. Good luck!',
     },
   },
+  roster_finalization: {
+    phase: 'roster_finalization',
+    name: 'Roster Finalization',
+    defaultDurationHours: 24,
+    requiresApproval: true,
+    autoReminders: true,
+    reminderHoursBefore: [12],
+    canSkip: true,
+    discordAnnouncement: {
+      title: 'Finalize Your Rosters',
+      message: '📝 **Last chance to make roster adjustments!**\n\nThe draft is complete. Review your roster and make any final changes before Spring Training.',
+    },
+  },
+  spring_training: {
+    phase: 'spring_training',
+    name: 'Spring Training',
+    defaultDurationHours: 48, // 48 hours OR 3 games, whichever first
+    requiresApproval: true,
+    autoReminders: true,
+    reminderHoursBefore: [24, 12],
+    canSkip: false,
+    requirements: ['Play 3 games', 'Use spring training jerseys', 'Use spring training/minor league stadiums'],
+    discordAnnouncement: {
+      title: '⚾ SPRING TRAINING BEGINS!',
+      message: '🌴 **Spring Training is here!**\n\n**RULES:**\n• Play **3 games** in spring training\n• Must use **spring training jerseys**\n• Must use **spring training or minor league stadiums**\n\n**LIMITED TRADING:**\n• Trading is open during Spring Training\n• Trading window closes after **3 games** OR **48 hours** (whichever comes first)\n\nGet your final moves in and let\'s get ready for the season! ⚾',
+    },
+  },
   pre_season: {
     phase: 'pre_season',
     name: 'Pre-Season',
@@ -186,7 +203,7 @@ export const PHASE_CONFIGS: Record<SeasonPhase, PhaseConfig> = {
     requiresApproval: true,
     autoReminders: false,
     reminderHoursBefore: [],
-    canSkip: false,
+    canSkip: true, // Can skip since spring training is the real start
     discordAnnouncement: {
       title: 'Welcome to the New Season!',
       message: '🌟 **A new season begins!**\n\nRosters are set, schedules are ready. Let\'s play ball! ⚾',
