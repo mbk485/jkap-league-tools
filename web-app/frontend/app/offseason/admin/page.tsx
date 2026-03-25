@@ -762,13 +762,30 @@ export default function OffSeasonAdminPage() {
 
   // Run the draft lottery
   const runDraftLottery = () => {
-    // Get active teams (not contracted) sorted by standings (worst first)
-    const activeTeams = standings
-      .filter(team => !contractedTeams.includes(team.teamId))
-      .sort((a, b) => b.rank - a.rank); // Worst record first (highest rank number = worst)
+    // Use CLAIM_PRIORITY_ORDER (worst to best from free agency) as the source of truth
+    // This is the exact standings order used for free agency claim priority
+    const activeTeams: StandingsData[] = CLAIM_PRIORITY_ORDER
+      .filter(teamId => !contractedTeams.includes(teamId))
+      .map((teamId, index) => {
+        const mlbTeam = MLB_TEAMS.find(t => t.abbreviation.toLowerCase() === teamId.toLowerCase());
+        const member = members.find(m => m.teamId.toLowerCase() === teamId.toLowerCase());
+        const teamName = TEAM_NAMES[teamId] || mlbTeam?.name || teamId.toUpperCase();
+        return {
+          rank: index + 1, // Position in standings (1 = worst)
+          teamId: teamId,
+          teamName: teamName,
+          teamAbbr: teamId.toUpperCase(),
+          wins: 0,
+          losses: 0,
+          pct: 0,
+          gb: '-',
+          madePlayoffs: false,
+          owner: member?.displayName || 'Unknown',
+        };
+      });
 
     if (activeTeams.length === 0) {
-      setStandingsMessage({ type: 'error', text: 'No active teams to run lottery!' });
+      setStandingsMessage({ type: 'error', text: 'No active teams found! Check CLAIM_PRIORITY_ORDER.' });
       return;
     }
 
@@ -822,11 +839,26 @@ export default function OffSeasonAdminPage() {
   const resetLottery = () => {
     setLotteryRun(false);
     setLotteryResults([]);
-    // Reset to reverse standings
-    const activeTeams = standings
-      .filter(team => !contractedTeams.includes(team.teamId))
-      .sort((a, b) => b.rank - a.rank)
-      .map((team, index) => ({ ...team, rank: index + 1 }));
+    // Reset draft order using CLAIM_PRIORITY_ORDER (worst to best)
+    const activeTeams: StandingsData[] = CLAIM_PRIORITY_ORDER
+      .filter(teamId => !contractedTeams.includes(teamId))
+      .map((teamId, index) => {
+        const mlbTeam = MLB_TEAMS.find(t => t.abbreviation.toLowerCase() === teamId.toLowerCase());
+        const member = members.find(m => m.teamId.toLowerCase() === teamId.toLowerCase());
+        const teamName = TEAM_NAMES[teamId] || mlbTeam?.name || teamId.toUpperCase();
+        return {
+          rank: index + 1,
+          teamId: teamId,
+          teamName: teamName,
+          teamAbbr: teamId.toUpperCase(),
+          wins: 0,
+          losses: 0,
+          pct: 0,
+          gb: '-',
+          madePlayoffs: false,
+          owner: member?.displayName || 'Unknown',
+        };
+      });
     setDraftOrder(activeTeams);
   };
 
@@ -2480,163 +2512,27 @@ Let's get this done! 💪`;
                 </CardContent>
               </Card>
 
-              {/* JKAP Draft Lottery */}
+              {/* Draft Lottery Link */}
               <Card className="bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-blue-500/10 border-purple-500/30">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
-                    <Dices className="w-5 h-5 text-purple-400" />
-                    JKAP Draft Lottery - Season {seasonNumber + 1}
-                  </CardTitle>
-                  <p className="text-slate-400 text-sm mt-1">
-                    Top {lockedPicksCount} picks are locked to worst records. Remaining picks determined by weighted lottery.
-                  </p>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Lottery Settings */}
-                  <div className="grid md:grid-cols-2 gap-4">
-                    {/* Locked Picks Setting */}
-                    <div className="p-4 rounded-xl bg-slate-700/30 border border-slate-600">
-                      <label className="text-white font-medium flex items-center gap-2 mb-3">
-                        <Lock className="w-4 h-4 text-amber-400" />
-                        Locked Picks (Non-Lottery)
-                      </label>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="number"
-                          min={0}
-                          max={standings.length - contractedTeams.length}
-                          value={lockedPicksCount}
-                          onChange={(e) => {
-                            setLockedPicksCount(parseInt(e.target.value) || 0);
-                            setLotteryRun(false);
-                          }}
-                          className="w-20 px-3 py-2 rounded bg-slate-800 border border-slate-600 text-white text-center"
-                        />
-                        <span className="text-slate-400 text-sm">
-                          worst teams get picks 1-{lockedPicksCount} automatically
-                        </span>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                        <Dices className="w-6 h-6 text-purple-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white">Draft Lottery</h3>
+                        <p className="text-slate-400 text-sm">Run the weighted draft lottery for Season {seasonNumber + 1}</p>
                       </div>
                     </div>
-
-                    {/* Run Lottery Button */}
-                    <div className="p-4 rounded-xl bg-slate-700/30 border border-slate-600">
-                      <label className="text-white font-medium flex items-center gap-2 mb-3">
-                        <Shuffle className="w-4 h-4 text-purple-400" />
-                        Lottery Actions
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          onClick={runDraftLottery}
-                          className="bg-purple-600 hover:bg-purple-500"
-                        >
-                          <Dices className="w-4 h-4 mr-2" />
-                          {lotteryRun ? 'Re-Run Lottery' : 'Run Draft Lottery'}
-                        </Button>
-                        {lotteryRun && (
-                          <Button
-                            variant="secondary"
-                            onClick={resetLottery}
-                          >
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                            Reset
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Contracted/Omitted Teams */}
-                  <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
-                    <label className="text-white font-medium flex items-center gap-2 mb-3">
-                      <XCircle className="w-4 h-4 text-red-400" />
-                      Contracted Teams (Omit from Draft)
-                    </label>
-                    <p className="text-slate-400 text-sm mb-3">
-                      Select teams that have been contracted this season. They will be excluded from the draft order.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {standings.map(team => (
-                        <button
-                          key={team.teamId}
-                          onClick={() => toggleContractedTeam(team.teamId)}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                            contractedTeams.includes(team.teamId)
-                              ? 'bg-red-500/30 text-red-400 border border-red-500/50 line-through'
-                              : 'bg-slate-600/50 text-slate-300 border border-slate-500/30 hover:bg-slate-600'
-                          }`}
-                        >
-                          {team.teamAbbr}
-                        </button>
-                      ))}
-                    </div>
-                    {contractedTeams.length > 0 && (
-                      <p className="text-red-400 text-sm mt-2">
-                        {contractedTeams.length} team(s) contracted: {contractedTeams.join(', ')}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Draft Order Results */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <h3 className="text-white font-medium">Draft Order</h3>
-                      {lotteryRun && (
-                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                          Lottery Complete
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {draftOrder.map((team, index) => {
-                        const isLocked = index < lockedPicksCount;
-                        const isContracted = contractedTeams.includes(team.teamId);
-                        
-                        if (isContracted) return null;
-                        
-                        return (
-                          <div
-                            key={team.teamId}
-                            className={`flex items-center gap-3 p-3 rounded-xl border ${
-                              isLocked 
-                                ? 'bg-amber-500/10 border-amber-500/30' 
-                                : lotteryRun 
-                                  ? 'bg-purple-500/10 border-purple-500/30'
-                                  : 'bg-slate-700/30 border-slate-600'
-                            }`}
-                          >
-                            <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                              index === 0 ? 'bg-amber-500 text-black' :
-                              index === 1 ? 'bg-slate-400 text-black' :
-                              index === 2 ? 'bg-orange-600 text-white' :
-                              isLocked ? 'bg-amber-600/80 text-white' :
-                              'bg-slate-600 text-white'
-                            }`}>
-                              {index + 1}
-                            </span>
-                            <div className="flex-1">
-                              <p className="text-white font-medium">{team.teamName}</p>
-                              <p className="text-slate-400 text-xs">
-                                {team.owner} • {team.wins}-{team.losses}
-                              </p>
-                            </div>
-                            {isLocked ? (
-                              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
-                                <Lock className="w-3 h-3 mr-1" />
-                                Locked
-                              </Badge>
-                            ) : lotteryRun ? (
-                              <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
-                                <Shuffle className="w-3 h-3 mr-1" />
-                                Lottery
-                              </Badge>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <p className="text-slate-500 text-xs mt-3">
-                      {standings.length - contractedTeams.length} active teams • {lockedPicksCount} locked picks • {Math.max(0, standings.length - contractedTeams.length - lockedPicksCount)} lottery picks
-                    </p>
+                    <Button
+                      onClick={() => setActiveTab('draft')}
+                      className="bg-purple-600 hover:bg-purple-500"
+                    >
+                      <Dices className="w-4 h-4 mr-2" />
+                      Go to Draft Tab
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -2715,7 +2611,30 @@ Let's get this done! 💪`;
           )}
 
           {/* Draft Tab */}
-          {activeTab === 'draft' && (
+          {activeTab === 'draft' && (() => {
+            // Use CLAIM_PRIORITY_ORDER (worst to best from free agency) for lottery teams
+            const lotteryTeams: StandingsData[] = CLAIM_PRIORITY_ORDER.map((teamId, index) => {
+              const mlbTeam = MLB_TEAMS.find(t => t.abbreviation.toLowerCase() === teamId.toLowerCase());
+              const member = members.find(m => m.teamId.toLowerCase() === teamId.toLowerCase());
+              const teamName = TEAM_NAMES[teamId] || mlbTeam?.name || teamId.toUpperCase();
+              return {
+                rank: index + 1, // Position 1 = worst team
+                teamId: teamId,
+                teamName: teamName,
+                teamAbbr: teamId.toUpperCase(),
+                wins: 0,
+                losses: 0,
+                pct: 0,
+                gb: '-',
+                madePlayoffs: false,
+                owner: member?.displayName || 'Unknown',
+              };
+            });
+            
+            const activeLotteryTeams = lotteryTeams.filter(t => !contractedTeams.includes(t.teamId));
+            const hasStandings = true; // Using CLAIM_PRIORITY_ORDER as standings
+            
+            return (
             <div className="space-y-6">
               {/* Quick Access Tools */}
               <div className="grid md:grid-cols-2 gap-4">
@@ -2791,7 +2710,7 @@ Let's get this done! 💪`;
                         <input
                           type="number"
                           min={0}
-                          max={standings.length - contractedTeams.length}
+                          max={CLAIM_PRIORITY_ORDER.length - contractedTeams.length}
                           value={lockedPicksCount}
                           onChange={(e) => {
                             setLockedPicksCount(parseInt(e.target.value) || 0);
@@ -2842,7 +2761,8 @@ Let's get this done! 💪`;
                       Select teams that have been contracted this season. They will be excluded from the draft order.
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {standings.map(team => (
+                      {/* Use lotteryTeams from CLAIM_PRIORITY_ORDER */}
+                      {lotteryTeams.map(team => (
                         <button
                           key={team.teamId}
                           onClick={() => toggleContractedTeam(team.teamId)}
@@ -2872,7 +2792,8 @@ Let's get this done! 💪`;
                       )}
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                      {draftOrder.filter(t => !contractedTeams.includes(t.teamId)).map((team, index) => {
+                      {/* Use activeLotteryTeams (from CLAIM_PRIORITY_ORDER) before lottery, draftOrder after */}
+                      {(lotteryRun ? draftOrder : activeLotteryTeams).map((team, index) => {
                         const isLocked = index < lockedPicksCount;
                         return (
                           <div
@@ -2902,14 +2823,16 @@ Let's get this done! 💪`;
                                   <Shuffle className="w-3 h-3 mr-1" />
                                   Lottery
                                 </Badge>
-                              ) : null}
+                              ) : (
+                                <span className="text-slate-500 text-xs">Pending</span>
+                              )}
                             </div>
                           </div>
                         );
                       })}
                     </div>
                     <p className="text-slate-500 text-xs mt-3">
-                      {standings.length - contractedTeams.length} active teams • {lockedPicksCount} locked picks • {Math.max(0, standings.length - contractedTeams.length - lockedPicksCount)} lottery picks
+                      {lotteryRun ? draftOrder.length : activeLotteryTeams.length} active teams • {Math.min(lockedPicksCount, lotteryRun ? draftOrder.length : activeLotteryTeams.length)} locked picks • {Math.max(0, (lotteryRun ? draftOrder.length : activeLotteryTeams.length) - lockedPicksCount)} lottery picks
                     </p>
                   </div>
 
@@ -2976,7 +2899,8 @@ Let's get this done! 💪`;
                 </CardContent>
               </Card>
             </div>
-          )}
+            );
+          })()}
 
           {/* Phase Control Tab */}
           {activeTab === 'phases' && (
@@ -4517,62 +4441,66 @@ Let's get this done! 💪`;
 // =============================================================================
 
 // Priority Order: Worst record gets first pick (index 0 = highest priority)
+// SEASON 4 FINAL STANDINGS - WORST TO BEST (for draft order - worst picks first)
+// This is the REVERSE of the regular season standings where Angels finished 1st
 const CLAIM_PRIORITY_ORDER = [
-  'min', // Twins - worst record
-  'mil', // Brewers
-  'cin', // Reds
-  'ari', // Diamondbacks
-  'nym', // Mets
-  'cle', // Guardians
-  'det', // Tigers
-  'sd',  // Padres
-  'tor', // Blue Jays
-  'tex', // Rangers
-  'nyy', // Yankees
-  'sf',  // Giants
-  'kc',  // Royals
-  'hou', // Astros
-  'tb',  // Rays
-  'cws', // White Sox
-  'col', // Rockies
-  'oak', // Athletics
-  'mia', // Marlins
-  'phi', // Phillies
+  'sea', // Mariners - WORST record (Pick 1)
+  'stl', // Cardinals (Pick 2)
+  'bal', // Orioles (Pick 3)
+  'bos', // Red Sox (Pick 4)
+  'wsh', // Nationals (Pick 5)
   'pit', // Pirates
-  'wsh', // Nationals
-  'bos', // Red Sox
-  'bal', // Orioles
-  'stl', // Cardinals
-  'sea', // Mariners - best record
+  'phi', // Phillies
+  'mia', // Marlins
+  'oak', // Athletics
+  'col', // Rockies
+  'cws', // White Sox
+  'tb',  // Rays
+  'hou', // Astros
+  'kc',  // Royals
+  'sf',  // Giants
+  'nyy', // Yankees
+  'tex', // Rangers
+  'tor', // Blue Jays
+  'sd',  // Padres
+  'det', // Tigers
+  'cle', // Guardians
+  'nym', // Mets
+  'ari', // Diamondbacks
+  'cin', // Reds
+  'mil', // Brewers
+  'min', // Twins
+  'laa', // Angels - BEST record (Pick 27)
 ] as const;
 
 const TEAM_NAMES: Record<string, string> = {
-  min: 'Minnesota Twins',
-  mil: 'Milwaukee Brewers',
-  cin: 'Cincinnati Reds',
-  ari: 'Arizona Diamondbacks',
-  nym: 'New York Mets',
-  cle: 'Cleveland Guardians',
-  det: 'Detroit Tigers',
-  sd: 'San Diego Padres',
-  tor: 'Toronto Blue Jays',
-  tex: 'Texas Rangers',
-  nyy: 'New York Yankees',
-  sf: 'San Francisco Giants',
-  kc: 'Kansas City Royals',
-  hou: 'Houston Astros',
-  tb: 'Tampa Bay Rays',
-  cws: 'Chicago White Sox',
-  col: 'Colorado Rockies',
-  oak: 'Oakland Athletics',
-  mia: 'Miami Marlins',
-  phi: 'Philadelphia Phillies',
-  pit: 'Pittsburgh Pirates',
-  wsh: 'Washington Nationals',
-  bos: 'Boston Red Sox',
-  bal: 'Baltimore Orioles',
-  stl: 'St. Louis Cardinals',
   sea: 'Seattle Mariners',
+  stl: 'St. Louis Cardinals',
+  bal: 'Baltimore Orioles',
+  bos: 'Boston Red Sox',
+  wsh: 'Washington Nationals',
+  pit: 'Pittsburgh Pirates',
+  phi: 'Philadelphia Phillies',
+  mia: 'Miami Marlins',
+  oak: 'Oakland Athletics',
+  col: 'Colorado Rockies',
+  cws: 'Chicago White Sox',
+  tb: 'Tampa Bay Rays',
+  hou: 'Houston Astros',
+  kc: 'Kansas City Royals',
+  sf: 'San Francisco Giants',
+  nyy: 'New York Yankees',
+  tex: 'Texas Rangers',
+  tor: 'Toronto Blue Jays',
+  sd: 'San Diego Padres',
+  det: 'Detroit Tigers',
+  cle: 'Cleveland Guardians',
+  nym: 'New York Mets',
+  ari: 'Arizona Diamondbacks',
+  cin: 'Cincinnati Reds',
+  mil: 'Milwaukee Brewers',
+  min: 'Minnesota Twins',
+  laa: 'Los Angeles Angels',
 };
 
 // Contract generation based on player classification

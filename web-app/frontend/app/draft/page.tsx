@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import { PlayerStatsPopover } from '@/components/players';
 import { searchPlayers, PlayerSearchResult } from '@/lib/mlb-theshow-api';
 
@@ -22,6 +23,38 @@ interface Team {
 }
 
 // Card type colors
+// Season Draft Pool - Pre-configured players for the current season draft
+// SEASON 5 DRAFT ORDER - Based on Season 4 Final Standings (worst to best picks first)
+const DRAFT_ORDER_TEAMS = [
+  { teamId: 'sea', name: 'Seattle Mariners', owner: 'Pick 1 - Worst Record' },
+  { teamId: 'stl', name: 'St. Louis Cardinals', owner: 'Pick 2' },
+  { teamId: 'bal', name: 'Baltimore Orioles', owner: 'Pick 3' },
+  { teamId: 'bos', name: 'Boston Red Sox', owner: 'Pick 4' },
+  { teamId: 'wsh', name: 'Washington Nationals', owner: 'Pick 5' },
+  { teamId: 'pit', name: 'Pittsburgh Pirates', owner: 'Pick 6' },
+  { teamId: 'phi', name: 'Philadelphia Phillies', owner: 'Pick 7' },
+  { teamId: 'mia', name: 'Miami Marlins', owner: 'Pick 8' },
+  { teamId: 'oak', name: 'Oakland Athletics', owner: 'Pick 9' },
+  { teamId: 'col', name: 'Colorado Rockies', owner: 'Pick 10' },
+  { teamId: 'cws', name: 'Chicago White Sox', owner: 'Pick 11' },
+  { teamId: 'tb', name: 'Tampa Bay Rays', owner: 'Pick 12' },
+  { teamId: 'hou', name: 'Houston Astros', owner: 'Pick 13' },
+  { teamId: 'kc', name: 'Kansas City Royals', owner: 'Pick 14' },
+  { teamId: 'sf', name: 'San Francisco Giants', owner: 'Pick 15' },
+  { teamId: 'nyy', name: 'New York Yankees', owner: 'Pick 16' },
+  { teamId: 'tex', name: 'Texas Rangers', owner: 'Pick 17' },
+  { teamId: 'tor', name: 'Toronto Blue Jays', owner: 'Pick 18' },
+  { teamId: 'sd', name: 'San Diego Padres', owner: 'Pick 19' },
+  { teamId: 'det', name: 'Detroit Tigers', owner: 'Pick 20' },
+  { teamId: 'cle', name: 'Cleveland Guardians', owner: 'Pick 21' },
+  { teamId: 'nym', name: 'New York Mets', owner: 'Pick 22' },
+  { teamId: 'ari', name: 'Arizona Diamondbacks', owner: 'Pick 23' },
+  { teamId: 'cin', name: 'Cincinnati Reds', owner: 'Pick 24' },
+  { teamId: 'mil', name: 'Milwaukee Brewers', owner: 'Pick 25' },
+  { teamId: 'min', name: 'Minnesota Twins', owner: 'Pick 26' },
+  { teamId: 'laa', name: 'Los Angeles Angels', owner: 'Pick 27 - Best Record' },
+];
+
 // Season Draft Pool - Pre-configured players for the current season draft
 const SEASON_DRAFT_POOL: Omit<Player, 'id'>[] = [
   // Diamond Tier 💎
@@ -103,10 +136,13 @@ export default function DraftPage() {
   const [timer, setTimer] = useState(60);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [draftStarted, setDraftStarted] = useState(false);
+  const [draftCompleted, setDraftCompleted] = useState(false);
+  const [draftEndTime, setDraftEndTime] = useState<Date | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [positionFilter, setPositionFilter] = useState('All');
   const [draftHistory, setDraftHistory] = useState<Player[]>([]);
   const [showSetup, setShowSetup] = useState(true);
+  const [showDraftOrder, setShowDraftOrder] = useState(false);
   const [teamInput, setTeamInput] = useState('');
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -267,6 +303,25 @@ export default function DraftPage() {
     setIsTimerRunning(true);
   };
 
+  // End draft manually or when all players are picked
+  const endDraft = () => {
+    setDraftCompleted(true);
+    setDraftStarted(false);
+    setIsTimerRunning(false);
+    setDraftEndTime(new Date());
+  };
+
+  // Auto-complete detection: check if all players are drafted
+  useEffect(() => {
+    if (draftStarted && players.length > 0) {
+      const availableCount = players.filter(p => !p.pickedBy).length;
+      if (availableCount === 0) {
+        // All players have been drafted!
+        endDraft();
+      }
+    }
+  }, [players, draftStarted]);
+
   const downloadResults = () => {
     // Create CSV content with original format + Drafted By filled in
     const headers = ['Player', 'Position', 'Overall', 'Drafted By'];
@@ -308,6 +363,13 @@ export default function DraftPage() {
       ...p,
     }));
     setPlayers(draftPoolPlayers);
+  };
+
+  // Load official JKAP draft order from lottery results
+  const loadOfficialDraftOrder = () => {
+    const teamNames = DRAFT_ORDER_TEAMS.map(t => t.name);
+    setDraftOrder(teamNames);
+    setTeams(teamNames.map(name => ({ name, picks: [] })));
   };
 
   // Load sample data for quick testing
@@ -388,6 +450,176 @@ export default function DraftPage() {
   const timerColor = timer <= 10 ? '#ef4444' : timer <= 30 ? '#f59e0b' : '#22c55e';
   const timerPercent = (timer / 60) * 100;
 
+  // Draft Completed Screen
+  if (draftCompleted) {
+    const totalPicks = draftHistory.filter(p => p.id !== -1).length;
+    const skippedPicks = draftHistory.filter(p => p.id === -1).length;
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
+        <div className="max-w-5xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-12">
+            <div className="text-6xl mb-4">🏆</div>
+            <h1 className="font-display text-5xl text-white mb-2 tracking-wide">
+              DRAFT COMPLETE
+            </h1>
+            <p className="text-slate-400 text-lg">
+              {draftEndTime && `Ended ${draftEndTime.toLocaleString()}`}
+            </p>
+          </div>
+
+          {/* Stats Summary */}
+          <div className="grid grid-cols-4 gap-4 mb-8">
+            <div className="glass-card p-6 text-center">
+              <p className="text-4xl font-display text-white">{totalPicks}</p>
+              <p className="text-slate-400 text-sm">Players Drafted</p>
+            </div>
+            <div className="glass-card p-6 text-center">
+              <p className="text-4xl font-display text-white">{teams.length}</p>
+              <p className="text-slate-400 text-sm">Teams</p>
+            </div>
+            <div className="glass-card p-6 text-center">
+              <p className="text-4xl font-display text-white">{Math.ceil(totalPicks / teams.length)}</p>
+              <p className="text-slate-400 text-sm">Rounds</p>
+            </div>
+            <div className="glass-card p-6 text-center">
+              <p className="text-4xl font-display text-amber-400">{skippedPicks}</p>
+              <p className="text-slate-400 text-sm">Skipped Picks</p>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-center gap-4 mb-8">
+            <button
+              onClick={downloadResults}
+              className="px-8 py-4 rounded-xl font-semibold bg-green-500/20 text-green-400 border border-green-500/50 hover:bg-green-500/30 text-lg flex items-center gap-2"
+            >
+              📥 Download Results CSV
+            </button>
+            <button
+              onClick={() => {
+                const resultsText = draftHistory
+                  .filter(p => p.id !== -1)
+                  .map(p => `Pick ${p.pickNumber}: ${p.name} (${p.position}, ${p.rating}) → ${p.pickedBy}`)
+                  .join('\n');
+                navigator.clipboard.writeText(resultsText);
+                alert('Draft results copied to clipboard!');
+              }}
+              className="px-8 py-4 rounded-xl font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/30 text-lg flex items-center gap-2"
+            >
+              📋 Copy to Clipboard
+            </button>
+            <button
+              onClick={() => {
+                setDraftCompleted(false);
+                setShowSetup(true);
+                setPlayers([]);
+                setTeams([]);
+                setDraftOrder([]);
+                setDraftHistory([]);
+                setCurrentPick(0);
+              }}
+              className="px-8 py-4 rounded-xl font-semibold bg-slate-700/50 text-slate-300 border border-slate-600 hover:bg-slate-700 text-lg"
+            >
+              🔄 New Draft
+            </button>
+          </div>
+
+          {/* Full Draft Results Table */}
+          <div className="glass-card p-6">
+            <h2 className="font-display text-2xl text-white mb-6 flex items-center gap-3">
+              <span className="text-3xl">📋</span>
+              FINAL DRAFT RESULTS
+            </h2>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-700">
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Pick</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Team</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Player</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Position</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Rating</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Card Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {draftHistory.map((pick, idx) => (
+                    <tr 
+                      key={idx} 
+                      className={`border-b border-slate-800 ${pick.id === -1 ? 'opacity-50' : 'hover:bg-slate-800/30'}`}
+                    >
+                      <td className="py-3 px-4">
+                        <span className="w-8 h-8 rounded-full bg-slate-700 inline-flex items-center justify-center text-white font-semibold">
+                          {pick.pickNumber}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-red-400 font-semibold">{pick.pickedBy}</td>
+                      <td className="py-3 px-4 text-white font-medium">{pick.name}</td>
+                      <td className="py-3 px-4 text-slate-400">{pick.position}</td>
+                      <td className="py-3 px-4">
+                        <span style={{ color: getRatingColor(pick.rating) }} className="font-display text-lg">
+                          {pick.rating || '-'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        {pick.cardType && (
+                          <span 
+                            className="px-3 py-1 rounded-full text-xs font-semibold"
+                            style={{ 
+                              backgroundColor: getCardTypeStyle(pick.cardType).bg,
+                              color: getCardTypeStyle(pick.cardType).text,
+                              border: `1px solid ${getCardTypeStyle(pick.cardType).border}`
+                            }}
+                          >
+                            {pick.cardType}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Team Summaries */}
+          <div className="mt-8 glass-card p-6">
+            <h2 className="font-display text-2xl text-white mb-6 flex items-center gap-3">
+              <span className="text-3xl">👥</span>
+              TEAM ROSTERS
+            </h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {teams.map((team, idx) => (
+                <div key={team.name} className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-6 h-6 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center text-sm font-bold">
+                      {idx + 1}
+                    </span>
+                    <h3 className="font-semibold text-white">{team.name}</h3>
+                    <span className="text-slate-500 text-sm ml-auto">{team.picks.length} picks</span>
+                  </div>
+                  <div className="space-y-1">
+                    {team.picks.map((pick, pickIdx) => (
+                      <div key={pickIdx} className="flex items-center justify-between text-sm py-1 px-2 rounded bg-slate-900/50">
+                        <span className="text-slate-300 truncate">{pick.name}</span>
+                        <span style={{ color: getRatingColor(pick.rating) }} className="font-mono text-xs">
+                          {pick.rating}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (showSetup) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
@@ -401,8 +633,129 @@ export default function DraftPage() {
               DRAFT BOARD
             </h2>
             <p className="text-slate-400 mt-4 text-lg">Snake Draft • 1 Minute Timer</p>
+            <p className="text-slate-500 text-sm mt-3">
+              <Link href="/draft/order" className="text-red-400/90 hover:text-red-300 underline underline-offset-2">
+                Published draft order
+              </Link>
+              <span className="mx-2 text-slate-600">·</span>
+              <Link href="/draft/results" className="text-red-400/90 hover:text-red-300 underline underline-offset-2">
+                Draft results
+              </Link>
+            </p>
+            
+            {/* Toggle Draft Order View */}
+            <div className="flex justify-center gap-4 mt-6">
+              <button
+                onClick={() => setShowDraftOrder(false)}
+                className={`px-6 py-3 rounded-xl font-semibold transition-all ${
+                  !showDraftOrder 
+                    ? 'bg-red-500 text-white' 
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                Draft Board Setup
+              </button>
+              <button
+                onClick={() => setShowDraftOrder(true)}
+                className={`px-6 py-3 rounded-xl font-semibold transition-all ${
+                  showDraftOrder 
+                    ? 'bg-red-500 text-white' 
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                View Draft Order
+              </button>
+            </div>
           </div>
 
+          {/* Draft Order View */}
+          {showDraftOrder && (
+            <div className="max-w-3xl mx-auto">
+              <div className="glass-card p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="font-display text-2xl text-white flex items-center gap-3">
+                    <span className="text-3xl">📋</span>
+                    SEASON 5 DRAFT ORDER
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm border border-purple-500/30">
+                      {DRAFT_ORDER_TEAMS.length} Teams
+                    </span>
+                    <span className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-sm border border-amber-500/30">
+                      Snake Draft
+                    </span>
+                  </div>
+                </div>
+                
+                <p className="text-slate-400 text-sm mb-6">
+                  Based on Season 4 Final Standings. Worst record picks first. Top 5 picks are locked, remaining picks determined by weighted lottery.
+                </p>
+
+                {/* Draft Order List */}
+                <div className="space-y-2">
+                  {DRAFT_ORDER_TEAMS.map((team, index) => {
+                    const isLocked = index < 5;
+                    return (
+                      <div 
+                        key={team.teamId}
+                        className={`flex items-center justify-between p-4 rounded-xl transition-all ${
+                          isLocked 
+                            ? 'bg-gradient-to-r from-amber-500/10 to-orange-500/5 border border-amber-500/30' 
+                            : 'bg-slate-800/50 border border-slate-700/50 hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+                            isLocked 
+                              ? 'bg-amber-500/20 text-amber-400 border-2 border-amber-500/50' 
+                              : 'bg-slate-700 text-slate-300'
+                          }`}>
+                            {index + 1}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-white">{team.name}</p>
+                            <p className="text-xs text-slate-500 uppercase">{team.teamId}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {isLocked && (
+                            <span className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded text-xs font-semibold flex items-center gap-1">
+                              🔒 LOCKED
+                            </span>
+                          )}
+                          {index === 0 && (
+                            <span className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs">
+                              1st Overall
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Load Draft Order Button */}
+                <div className="mt-8 pt-6 border-t border-slate-700">
+                  <button
+                    onClick={() => {
+                      loadOfficialDraftOrder();
+                      setShowDraftOrder(false);
+                    }}
+                    className="btn btn-primary w-full text-lg py-4 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400"
+                  >
+                    ✓ USE THIS DRAFT ORDER
+                  </button>
+                  <p className="text-center text-slate-500 text-sm mt-3">
+                    This will set the draft order for your draft board
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Draft Board Setup View */}
+          {!showDraftOrder && (
+          <>
           <div className="grid md:grid-cols-2 gap-8">
             {/* Upload Players */}
             <div className="glass-card p-8">
@@ -574,6 +927,8 @@ export default function DraftPage() {
               START DRAFT 🎮
             </button>
           </div>
+          </>
+          )}
         </div>
       </div>
     );
@@ -673,6 +1028,12 @@ export default function DraftPage() {
                 className="px-6 py-3 rounded-lg font-semibold bg-green-500/20 text-green-400 border border-green-500/50 hover:bg-green-500/30"
               >
                 📥 DOWNLOAD
+              </button>
+              <button
+                onClick={endDraft}
+                className="px-6 py-3 rounded-lg font-semibold bg-purple-500/20 text-purple-400 border border-purple-500/50 hover:bg-purple-500/30"
+              >
+                🏁 END DRAFT
               </button>
             </div>
           </div>

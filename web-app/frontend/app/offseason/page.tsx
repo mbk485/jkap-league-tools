@@ -68,6 +68,7 @@ import {
   Trash2,
   X,
   Dices,
+  ListOrdered,
 } from 'lucide-react';
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
 import { PlayerStatsCard, PlayerStatsPopover } from '@/components/players';
@@ -3154,6 +3155,30 @@ function DraftPoolSection() {
 
   return (
     <div className="space-y-6">
+      <Card className="bg-gradient-to-r from-purple-500/15 to-indigo-500/10 border-purple-500/30">
+        <CardContent className="p-5 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <ListOrdered className="w-5 h-5 text-purple-400" />
+                Published draft order & results
+              </h3>
+              <p className="text-slate-400 text-sm mt-1">
+                Official league postings — same info shared in announcements.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button as="link" href="/draft/order" size="sm" className="bg-purple-600 hover:bg-purple-500 border-0">
+                Draft order
+              </Button>
+              <Button as="link" href="/draft/results" size="sm" variant="secondary">
+                Draft results
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Header */}
       <Card className="bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border-2 border-amber-500/40">
         <CardContent className="p-6">

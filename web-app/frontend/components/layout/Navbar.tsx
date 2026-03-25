@@ -24,6 +24,7 @@ const navLinks: NavLink[] = [
   { label: 'The Ballyard', href: '/dashboard', adminOnly: true, featureFlag: 'showDashboard' },
   { label: 'League Tools', href: '/tools', featureFlag: 'showTools', forUserType: 'jkap_member' },
   { label: 'Off-Season', href: '/offseason', forUserType: 'jkap_member', featureFlag: 'showOffSeason' }, // Off-season hub
+  { label: 'Season draft', href: '/draft/order', forUserType: 'jkap_member', featureFlag: 'showOffSeason' }, // Published order & results
   { label: 'Leaderboard', href: '/leaderboard', forUserType: 'jkap_member', featureFlag: 'showRewards' }, // Rankings & stats
   { label: 'Road to the Show', href: '/league-levels', forUserType: 'jkap_member', featureFlag: 'showLeagueHierarchy' }, // League hierarchy - HIDDEN until rollout
   { label: 'My Wallet', href: '/wallet', forUserType: 'jkap_member', featureFlag: 'showTokenEconomy' }, // Token wallet - HIDDEN until rollout
@@ -135,7 +136,8 @@ export function Navbar() {
             {visibleLinks.map((link) => {
               const isActive = pathname === link.href || 
                 (link.href === '/dashboard' && pathname === '/ballyard') ||
-                (link.href === '/tools' && pathname.startsWith('/tools'));
+                (link.href === '/tools' && pathname.startsWith('/tools')) ||
+                (link.href === '/draft/order' && (pathname.startsWith('/draft/order') || pathname.startsWith('/draft/results')));
               
               return (
                 <Link
@@ -342,7 +344,8 @@ export function Navbar() {
             <div className="flex flex-col gap-1">
               {visibleLinks.map((link) => {
                 const isActive = pathname === link.href || 
-                  (link.href === '/tools' && pathname.startsWith('/tools'));
+                  (link.href === '/tools' && pathname.startsWith('/tools')) ||
+                  (link.href === '/draft/order' && (pathname.startsWith('/draft/order') || pathname.startsWith('/draft/results')));
                 
                 return (
                   <Link

@@ -31,6 +31,8 @@ import {
   Bell,
   Swords,
   Trophy,
+  ListOrdered,
+  ClipboardList,
 } from 'lucide-react';
 
 interface LeagueTool {
@@ -119,6 +121,30 @@ const leagueTools: LeagueTool[] = [
     isNew: true,
     isFree: true,
     featureFlag: 'showPlayerDatabase',
+  },
+  {
+    id: 'published-draft-order',
+    name: 'Published draft order',
+    description: 'Official pick order as posted by the league (including trade notes).',
+    icon: <ListOrdered className="w-7 h-7" />,
+    href: '/draft/order',
+    status: 'available',
+    category: 'draft',
+    isFree: true,
+    forUserType: 'jkap_member',
+    featureFlag: 'showOffSeason',
+  },
+  {
+    id: 'published-draft-results',
+    name: 'Draft results',
+    description: 'Final draft picks: player, position, OVR, and drafting team. Search and filter by team.',
+    icon: <ClipboardList className="w-7 h-7" />,
+    href: '/draft/results',
+    status: 'available',
+    category: 'draft',
+    isFree: true,
+    forUserType: 'jkap_member',
+    featureFlag: 'showOffSeason',
   },
   {
     id: 'my-team',
