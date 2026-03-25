@@ -10,6 +10,8 @@ const footerLinks = {
     { label: 'About', href: '/about' },
     { label: 'Rules', href: '/documents' },
     { label: 'Standings', href: '/standings' },
+    { label: 'Draft order', href: '/draft/order' },
+    { label: 'Draft results', href: '/draft/results' },
     { label: 'Free Agents', href: '/offseason?tab=free-agents' },
     { label: 'Documents', href: '/documents' },
   ],

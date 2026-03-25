@@ -132,7 +132,7 @@ const leagueTools: LeagueTool[] = [
     category: 'draft',
     isFree: true,
     forUserType: 'jkap_member',
-    featureFlag: 'showOffSeason',
+    featureFlag: 'showTools',
   },
   {
     id: 'published-draft-results',
@@ -144,7 +144,7 @@ const leagueTools: LeagueTool[] = [
     category: 'draft',
     isFree: true,
     forUserType: 'jkap_member',
-    featureFlag: 'showOffSeason',
+    featureFlag: 'showTools',
   },
   {
     id: 'my-team',
