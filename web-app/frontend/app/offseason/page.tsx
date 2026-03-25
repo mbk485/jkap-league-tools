@@ -128,6 +128,7 @@ type TabType = 'overview' | 'questionnaire' | 'free-agents' | 'claims' | 'standi
 function OffSeasonContent() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [isLoaded, setIsLoaded] = useState(false);
   const [seasonState, setSeasonState] = useState<SeasonState>(DEFAULT_SEASON_STATE);
   
@@ -142,6 +143,32 @@ function OffSeasonContent() {
   };
   
   const [activeTab, setActiveTab] = useState<TabType>(getInitialTab());
+
+  /** Keep tab in sync with ?tab= when using links or after login redirect (client nav does not remount). */
+  const tabFromUrl = searchParams.get('tab');
+  useEffect(() => {
+    if (!tabFromUrl) return;
+    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'signings', 'winter-league'];
+    if (validTabs.includes(tabFromUrl as TabType)) {
+      setActiveTab(tabFromUrl as TabType);
+    }
+  }, [tabFromUrl]);
+
+  const navigateToOffseasonTab = (t: TabType) => {
+    setActiveTab(t);
+    const p = new URLSearchParams(searchParams.toString());
+    p.set('tab', t);
+    if (t !== 'draft') p.delete('draftView');
+    router.replace(`/offseason?${p.toString()}`, { scroll: false });
+  };
+
+  const navigateToDraftResults = () => {
+    setActiveTab('draft');
+    const p = new URLSearchParams(searchParams.toString());
+    p.set('tab', 'draft');
+    p.set('draftView', 'results');
+    router.replace(`/offseason?${p.toString()}`, { scroll: false });
+  };
   
   // User progress tracking
   const [questionnaireCompleted, setQuestionnaireCompleted] = useState(false);
@@ -669,7 +696,7 @@ function OffSeasonContent() {
           }`}
         >
           <button
-            onClick={() => setActiveTab('overview')}
+            onClick={() => navigateToOffseasonTab('overview')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'overview'
                 ? 'bg-slate-700 text-white'
@@ -680,7 +707,7 @@ function OffSeasonContent() {
             Home
           </button>
           <button
-            onClick={() => setActiveTab('free-agents')}
+            onClick={() => navigateToOffseasonTab('free-agents')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               ['claiming', 'processing', 'signings', 'complete'].includes(offseasonPhase)
                 ? 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
@@ -707,7 +734,7 @@ function OffSeasonContent() {
             )}
           </button>
           <button
-            onClick={() => setActiveTab('claims')}
+            onClick={() => navigateToOffseasonTab('claims')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               ['processing', 'signings', 'complete'].includes(offseasonPhase)
                 ? 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
@@ -728,7 +755,7 @@ function OffSeasonContent() {
             )}
           </button>
           <button
-            onClick={() => setActiveTab('questionnaire')}
+            onClick={() => navigateToOffseasonTab('questionnaire')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'questionnaire'
                 ? 'bg-purple-500 text-white'
@@ -744,7 +771,7 @@ function OffSeasonContent() {
             )}
           </button>
           <button
-            onClick={() => setActiveTab('standings')}
+            onClick={() => navigateToOffseasonTab('standings')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'standings'
                 ? 'bg-emerald-500 text-white'
@@ -755,7 +782,7 @@ function OffSeasonContent() {
             Standings
           </button>
           <button
-            onClick={() => setActiveTab('draft')}
+            onClick={() => navigateToOffseasonTab('draft')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'draft'
                 ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
@@ -763,10 +790,10 @@ function OffSeasonContent() {
             }`}
           >
             <Users className="w-4 h-4" />
-            Draft Pool
+            Draft
           </button>
           <button
-            onClick={() => setActiveTab('signings')}
+            onClick={() => navigateToOffseasonTab('signings')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'signings'
                 ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
@@ -787,6 +814,27 @@ function OffSeasonContent() {
           {/* Overview Tab - Simplified */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
+              <Card className="bg-gradient-to-r from-emerald-950/80 to-slate-900/80 border border-emerald-500/35">
+                <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <ClipboardList className="w-8 h-8 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <h2 className="text-lg font-bold text-white">Season draft results</h2>
+                      <p className="text-sm text-slate-400 mt-1">
+                        Official picks from the league draft. Open the full table with search and team filter.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={navigateToDraftResults}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 w-full sm:w-auto"
+                  >
+                    View draft results
+                  </Button>
+                </CardContent>
+              </Card>
+
               {/* PHASE-BASED CONTENT - Show different content based on offseason phase */}
               {['signings', 'complete'].includes(offseasonPhase) ? (
                 /* FREE AGENCY COMPLETE - Show summary */
@@ -1039,12 +1087,22 @@ function OffSeasonContent() {
                 </button>
                 
                 <button
-                  onClick={() => setActiveTab('draft')}
+                  type="button"
+                  onClick={() => navigateToOffseasonTab('draft')}
                   className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-all text-left"
                 >
                   <Users className="w-8 h-8 text-amber-400 mb-2" />
-                  <p className="font-bold text-white">Draft Pool</p>
-                  <p className="text-sm text-slate-400">View available players</p>
+                  <p className="font-bold text-white">Draft pool</p>
+                  <p className="text-sm text-slate-400">Eligible players and tiers</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={navigateToDraftResults}
+                  className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all text-left"
+                >
+                  <ClipboardList className="w-8 h-8 text-emerald-400 mb-2" />
+                  <p className="font-bold text-white">Draft results</p>
+                  <p className="text-sm text-slate-400">Who drafted whom</p>
                 </button>
               </div>
 

@@ -24,9 +24,9 @@ export function ProtectedRoute({
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      // Redirect to login with return URL
-      const currentPath = window.location.pathname;
-      router.push(`/login?redirect=${encodeURIComponent(currentPath)}`);
+      // Preserve query string (e.g. ?tab=draft&draftView=results) so post-login lands on the right tab
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      router.push(`/login?redirect=${encodeURIComponent(returnTo)}`);
     }
     
     if (!isLoading && isAuthenticated && requireAdmin && !user?.isAdmin) {
