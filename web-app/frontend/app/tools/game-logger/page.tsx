@@ -24,6 +24,7 @@ import type { SeasonPhase } from '@/types/offseason';
 import { SpringTrainingBanner } from '@/components/SpringTrainingBanner';
 import { analyzeImageWithAI, isOpenAIConfiguredAsync, initializeApiKey } from '@/lib/openai';
 import { MLB_TEAMS } from '@/types/league';
+import { CURRENT_SEASON_GAME_MIN_DATE, CURRENT_SEASON_GAME_MIN_DATE_LABEL } from '@/config/season-games';
 import {
   Gamepad2,
   Trophy,
@@ -114,8 +115,12 @@ export default function GameLoggerPage() {
 
   const springGamesPlayed = useMemo(() => {
     if (seasonPhase !== 'spring_training' || !phaseStartedAt) return 0;
-    const start = new Date(phaseStartedAt).getTime();
-    return gameLogs.filter((g) => new Date(g.created_at).getTime() >= start).length;
+    const phaseStartMs = new Date(phaseStartedAt).getTime();
+    return gameLogs.filter((g) => {
+      const gd = (g.game_date || '').slice(0, 10);
+      if (gd < CURRENT_SEASON_GAME_MIN_DATE) return false;
+      return new Date(g.created_at).getTime() >= phaseStartMs;
+    }).length;
   }, [seasonPhase, phaseStartedAt, gameLogs]);
 
   useEffect(() => {
@@ -976,10 +981,14 @@ If you cannot read certain fields, use null or 0. Make your best effort to read 
         {activeTab === 'history' && (
           <div className={`transition-all duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}>
             <Card className="p-6">
-              <h2 className="text-xl font-semibold text-foreground mb-6 flex items-center gap-2">
+              <h2 className="text-xl font-semibold text-foreground mb-2 flex items-center gap-2">
                 <History className="w-5 h-5 text-jkap-red-500" />
                 Game History
               </h2>
+              <p className="text-sm text-muted-foreground mb-6">
+                Showing games on or after <strong className="text-foreground">{CURRENT_SEASON_GAME_MIN_DATE_LABEL}</strong>{' '}
+                (current season). Older logs stay in the database but are not counted toward stats or leaderboards.
+              </p>
 
               {gameLogs.length === 0 ? (
                 <div className="text-center py-12">
@@ -1053,7 +1062,12 @@ If you cannot read certain fields, use null or 0. Make your best effort to read 
         )}
 
         {activeTab === 'leaderboards' && (
-          <div className={`grid md:grid-cols-2 gap-6 transition-all duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}>
+          <div className={`space-y-4 transition-all duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}>
+            <p className="text-sm text-muted-foreground px-1">
+              Rankings include only games logged with game date on or after{' '}
+              <strong className="text-foreground">{CURRENT_SEASON_GAME_MIN_DATE_LABEL}</strong>.
+            </p>
+            <div className="grid md:grid-cols-2 gap-6">
             {/* Home Run Leaders */}
             <Card className="p-6">
               <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
@@ -1098,6 +1112,7 @@ If you cannot read certain fields, use null or 0. Make your best effort to read 
               </h3>
               <LeaderboardList entries={leaderboards?.gamesPlayed || []} statLabel="Games" horizontal />
             </Card>
+            </div>
           </div>
         )}
       </main>

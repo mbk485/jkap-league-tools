@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { CURRENT_SEASON_GAME_MIN_DATE } from '@/config/season-games';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://zroiqbyswhawjbblpmwm.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpyb2lxYnlzd2hhd2piYmxwbXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3Nzc2MTAsImV4cCI6MjA4MzM1MzYxMH0.Cxx2Q3_TKs1g3onePunW1NK1ys7Ai_qMN4MPCcEyYIA';
@@ -1755,7 +1756,8 @@ export async function getActivitySummary(
       .from('game_logs')
       .select('user_id, is_win, created_at')
       .gte('created_at', startDate)
-      .lte('created_at', endDate);
+      .lte('created_at', endDate)
+      .gte('game_date', CURRENT_SEASON_GAME_MIN_DATE);
 
     if (gameError) {
       console.error('Error fetching game_logs:', gameError);
@@ -2954,10 +2956,11 @@ async function updatePlayerStat(
   }
 }
 
-// Get game logs for a user or all users
+// Get game logs for a user or all users (default: current season only — see config/season-games.ts)
 export async function getGameLogs(
   userId?: string,
-  limit: number = 50
+  limit: number = 50,
+  options?: { includePriorSeasons?: boolean }
 ): Promise<DBGameLog[]> {
   try {
     let query = supabase
@@ -2966,6 +2969,10 @@ export async function getGameLogs(
       .order('game_date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limit);
+
+    if (!options?.includePriorSeasons) {
+      query = query.gte('game_date', CURRENT_SEASON_GAME_MIN_DATE);
+    }
 
     if (userId) {
       query = query.eq('user_id', userId);
@@ -3005,8 +3012,11 @@ export async function getUserGameStats(userId: string): Promise<{
   try {
     const { data: logs } = await supabase
       .from('game_logs')
-      .select('is_win, total_home_runs, user_strikeouts')
-      .eq('user_id', userId);
+      .select('is_win, total_home_runs, user_strikeouts, game_date, created_at')
+      .eq('user_id', userId)
+      .gte('game_date', CURRENT_SEASON_GAME_MIN_DATE)
+      .order('game_date', { ascending: false })
+      .order('created_at', { ascending: false });
 
     const { data: rewards } = await supabase
       .from('player_rewards')
@@ -3020,6 +3030,12 @@ export async function getUserGameStats(userId: string): Promise<{
     const totalHRs = games.reduce((sum, g) => sum + (g.total_home_runs || 0), 0);
     const totalKs = games.reduce((sum, g) => sum + (g.user_strikeouts || 0), 0);
 
+    let currentWinStreak = 0;
+    for (const g of games) {
+      if (g.is_win) currentWinStreak++;
+      else break;
+    }
+
     return {
       gamesPlayed: games.length,
       wins,
@@ -3027,7 +3043,7 @@ export async function getUserGameStats(userId: string): Promise<{
       winPct: games.length > 0 ? (wins / games.length * 100).toFixed(1) : '0.0',
       totalHomeRuns: totalHRs,
       totalStrikeouts: totalKs,
-      currentWinStreak: rewards?.win_streak || 0,
+      currentWinStreak,
       tokens: rewards?.tokens || 0,
     };
   } catch (err) {
@@ -3054,10 +3070,11 @@ export async function getLeaderboards(): Promise<{
   gamesPlayed: LeaderboardEntry[];
 }> {
   try {
-    // Get all game logs aggregated by user
+    // Get all game logs aggregated by user (current season only)
     const { data: logs } = await supabase
       .from('game_logs')
-      .select('user_id, user_team_id, is_win, total_home_runs, user_strikeouts, save_pitcher');
+      .select('user_id, user_team_id, is_win, total_home_runs, user_strikeouts, save_pitcher')
+      .gte('game_date', CURRENT_SEASON_GAME_MIN_DATE);
 
     const { data: users } = await supabase
       .from('users')

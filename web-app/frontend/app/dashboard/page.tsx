@@ -30,6 +30,7 @@ import {
   DBUserWallet,
   getCurrentSeasonState,
   getGameLogs,
+  getUserGameStats,
 } from '@/lib/supabase';
 import type { SeasonPhase } from '@/types/offseason';
 import {
@@ -37,6 +38,7 @@ import {
   hideOffseasonTaskWidget,
 } from '@/lib/season-phase-ui';
 import { SpringTrainingBanner } from '@/components/SpringTrainingBanner';
+import { CURRENT_SEASON_GAME_MIN_DATE } from '@/config/season-games';
 import {
   Trophy,
   BarChart3,
@@ -97,6 +99,10 @@ function DashboardContent() {
   const [stPhaseDeadline, setStPhaseDeadline] = useState<string | null>(null);
   const [stPhaseStartedAt, setStPhaseStartedAt] = useState<string | null>(null);
   const [springGamesLogged, setSpringGamesLogged] = useState(0);
+  const [seasonGameStats, setSeasonGameStats] = useState<{
+    gamesPlayed: number;
+    currentWinStreak: number;
+  } | null>(null);
 
   const searchParams = useSearchParams();
   
@@ -130,25 +136,36 @@ function DashboardContent() {
       setFeatureFlags(getFeatureFlags());
       // Load rewards data and notifications
       if (user?.id) {
-        const [rewardsData, walletData, notifs, reads, season] = await Promise.all([
+        const [rewardsData, walletData, notifs, reads, season, gameStats] = await Promise.all([
           getPlayerRewards(user.id),
           getUserWallet(user.id),
           getNotifications(),
           getUserNotificationReads(user.id),
           getCurrentSeasonState(),
+          getUserGameStats(user.id),
         ]);
         setRewards(rewardsData);
         setWallet(walletData);
         setNotifications(notifs);
         setReadNotificationIds(reads);
+        setSeasonGameStats({
+          gamesPlayed: gameStats.gamesPlayed,
+          currentWinStreak: gameStats.currentWinStreak,
+        });
         const phase = (season?.phase as SeasonPhase) ?? null;
         setSeasonPhase(phase);
         setStPhaseDeadline(season?.phase_deadline ?? null);
         setStPhaseStartedAt(season?.phase_started_at ?? null);
         if (phase === 'spring_training' && season?.phase_started_at) {
           const logs = await getGameLogs(user.id, 100);
-          const start = new Date(season.phase_started_at).getTime();
-          setSpringGamesLogged(logs.filter((l) => new Date(l.created_at).getTime() >= start).length);
+          const phaseStartMs = new Date(season.phase_started_at).getTime();
+          setSpringGamesLogged(
+            logs.filter((l) => {
+              const gd = (l.game_date || '').slice(0, 10);
+              if (gd < CURRENT_SEASON_GAME_MIN_DATE) return false;
+              return new Date(l.created_at).getTime() >= phaseStartMs;
+            }).length
+          );
         } else {
           setSpringGamesLogged(0);
         }
@@ -329,9 +346,9 @@ function DashboardContent() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-blue-500">
-                      {rewards?.games_played || 0}
+                      {seasonGameStats?.gamesPlayed ?? rewards?.games_played ?? 0}
                     </p>
-                    <p className="text-xs text-muted-foreground">Games Played</p>
+                    <p className="text-xs text-muted-foreground">Games Played (2026 season)</p>
                   </div>
                 </div>
               </Card>
@@ -344,9 +361,9 @@ function DashboardContent() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-orange-500">
-                      {rewards?.current_streak || 0}
+                      {seasonGameStats?.currentWinStreak ?? rewards?.current_streak ?? 0}
                     </p>
-                    <p className="text-xs text-muted-foreground">Win Streak 🔥</p>
+                    <p className="text-xs text-muted-foreground">Win Streak 🔥 (2026 season)</p>
                   </div>
                 </div>
               </Card>
