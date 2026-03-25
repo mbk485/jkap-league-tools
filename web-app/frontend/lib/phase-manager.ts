@@ -20,7 +20,7 @@ export const PHASE_ORDER: SeasonPhase[] = [
   'draft_prep',           // Draft preparation comes after claims
   'draft',                // The draft
   'roster_finalization',  // Final roster adjustments after draft
-  'spring_training',      // 3 games, limited trading (48hrs or 3 games)
+  'spring_training',      // 3 games; unlimited approved trades (48hrs or 3 games)
   // 'pre_season',        // Deprecated - goes straight to regular season
 ];
 
@@ -190,10 +190,15 @@ export const PHASE_CONFIGS: Record<SeasonPhase, PhaseConfig> = {
     autoReminders: true,
     reminderHoursBefore: [24, 12],
     canSkip: false,
-    requirements: ['Play 3 games', 'Use spring training jerseys', 'Use spring training/minor league stadiums'],
+    requirements: [
+      'Play 3 games',
+      'Spring training or alternate jerseys',
+      'Spring training or minor league stadiums',
+    ],
     discordAnnouncement: {
       title: '⚾ SPRING TRAINING BEGINS!',
-      message: '🌴 **Spring Training is here!**\n\n**RULES:**\n• Play **3 games** in spring training\n• Must use **spring training jerseys**\n• Must use **spring training or minor league stadiums**\n\n**LIMITED TRADING:**\n• Trading is open during Spring Training\n• Trading window closes after **3 games** OR **48 hours** (whichever comes first)\n\nGet your final moves in and let\'s get ready for the season! ⚾',
+      message:
+        '🌴 **Spring Training is here!**\n\n**GAMES:**\n• Play **3** spring training games (regular season starts after).\n\n**UNIFORMS & STADIUMS:**\n• Use **spring training** or **alternate** jerseys.\n• Play in **spring training** or **minor league** stadiums only.\n\n**TRADING:**\n• **Unlimited** trades during the window (all trades still need **commissioner approval**).\n• Window ends after **3 games** OR **48 hours** from the league start of ST—**whichever comes first**.\n\nGood luck—see you on Opening Day! ⚾',
     },
   },
   pre_season: {

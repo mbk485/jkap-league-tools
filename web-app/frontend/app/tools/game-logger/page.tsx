@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Card } from '@/components/ui/Card';
@@ -12,6 +12,7 @@ import {
   getGameLogs, 
   getUserGameStats, 
   getLeaderboards,
+  getCurrentSeasonState,
   DBGameLog,
   LeaderboardEntry,
   saveRecentGame,
@@ -19,6 +20,8 @@ import {
   getSavedPlayers,
   SavedPlayers,
 } from '@/lib/supabase';
+import type { SeasonPhase } from '@/types/offseason';
+import { SpringTrainingBanner } from '@/components/SpringTrainingBanner';
 import { analyzeImageWithAI, isOpenAIConfiguredAsync, initializeApiKey } from '@/lib/openai';
 import { MLB_TEAMS } from '@/types/league';
 import {
@@ -105,6 +108,16 @@ export default function GameLoggerPage() {
   const [boxScoreError, setBoxScoreError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  const [seasonPhase, setSeasonPhase] = useState<SeasonPhase | null>(null);
+  const [phaseDeadline, setPhaseDeadline] = useState<string | null>(null);
+  const [phaseStartedAt, setPhaseStartedAt] = useState<string | null>(null);
+
+  const springGamesPlayed = useMemo(() => {
+    if (seasonPhase !== 'spring_training' || !phaseStartedAt) return 0;
+    const start = new Date(phaseStartedAt).getTime();
+    return gameLogs.filter((g) => new Date(g.created_at).getTime() >= start).length;
+  }, [seasonPhase, phaseStartedAt, gameLogs]);
+
   useEffect(() => {
     setIsLoaded(true);
     if (user?.id) {
@@ -117,15 +130,19 @@ export default function GameLoggerPage() {
   const loadData = async () => {
     if (!user?.id) return;
     
-    const [logs, stats, boards] = await Promise.all([
-      getGameLogs(user.id, 20),
+    const [logs, stats, boards, season] = await Promise.all([
+      getGameLogs(user.id, 100),
       getUserGameStats(user.id),
       getLeaderboards(),
+      getCurrentSeasonState(),
     ]);
     
     setGameLogs(logs);
     setUserStats(stats);
     setLeaderboards(boards);
+    setSeasonPhase((season?.phase as SeasonPhase) ?? null);
+    setPhaseDeadline(season?.phase_deadline ?? null);
+    setPhaseStartedAt(season?.phase_started_at ?? null);
   };
 
   const handleAddHomeRun = () => {
@@ -419,6 +436,14 @@ If you cannot read certain fields, use null or 0. Make your best effort to read 
             </div>
           </div>
         </div>
+
+        {seasonPhase === 'spring_training' && (
+          <SpringTrainingBanner
+            phaseDeadline={phaseDeadline}
+            phaseStartedAt={phaseStartedAt}
+            springGamesPlayed={springGamesPlayed}
+          />
+        )}
 
         {/* Stats Bar */}
         {userStats && (

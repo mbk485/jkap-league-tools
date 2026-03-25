@@ -30,21 +30,35 @@ export function FreeAgentTicker() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState<FreeAgent | null>(null);
   const [isPaused, setIsPaused] = useState(false);
+  const [showTicker, setShowTicker] = useState(false);
 
   useEffect(() => {
-    const loadFreeAgents = async () => {
+    const load = async () => {
       try {
-        const { getMasterFreeAgentList } = await import('@/lib/supabase');
-        const agents = await getMasterFreeAgentList(4); // Season 4
-        setFreeAgents(agents.filter(a => !a.is_claimed));
+        const { getCurrentSeasonState, getMasterFreeAgentList } = await import('@/lib/supabase');
+        const { shouldShowFreeAgentTicker } = await import('@/lib/season-phase-ui');
+        const season = await getCurrentSeasonState();
+        const phase = season?.phase;
+        if (!shouldShowFreeAgentTicker(phase)) {
+          setShowTicker(false);
+          setFreeAgents([]);
+          return;
+        }
+        setShowTicker(true);
+        const agents = await getMasterFreeAgentList(season?.season_number ?? 4);
+        setFreeAgents(agents.filter((a) => !a.is_claimed));
       } catch (err) {
         console.error('Failed to load free agents:', err);
       } finally {
         setIsLoading(false);
       }
     };
-    loadFreeAgents();
+    load();
   }, []);
+
+  if (!showTicker && !isLoading) {
+    return null;
+  }
 
   if (isLoading) {
     return (

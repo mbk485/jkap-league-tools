@@ -74,6 +74,7 @@ import {
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
 import { PlayerStatsCard, PlayerStatsPopover } from '@/components/players';
 import { FreeAgentTicker } from '@/components/FreeAgentTicker';
+import { SpringTrainingBanner } from '@/components/SpringTrainingBanner';
 import { MLB_TEAMS } from '@/types/league';
 
 // Default season state (will be replaced by API data)
@@ -385,8 +386,25 @@ function OffSeasonContent() {
             isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
           }`}
         >
-          {/* Dynamic Action Card based on current offseason phase */}
-          {['signings', 'complete'].includes(offseasonPhase) ? (
+          {seasonState.phase === 'spring_training' && (
+            <div className="mb-6">
+              <SpringTrainingBanner
+                compact
+                phaseDeadline={seasonState.phase_deadline}
+                phaseStartedAt={seasonState.phase_started_at}
+                springGamesPlayed={0}
+              />
+              <p className="text-xs text-slate-500 text-center -mt-2 mb-4">
+                Your spring games count updates on the{' '}
+                <Link href="/tools/game-logger" className="text-sky-400 hover:underline">
+                  Game Logger
+                </Link>{' '}
+                after you log.
+              </p>
+            </div>
+          )}
+          {/* Dynamic Action Card based on current offseason phase (hidden during spring training — banner above) */}
+          {seasonState.phase === 'spring_training' ? null : ['signings', 'complete'].includes(offseasonPhase) ? (
             /* SIGNINGS/COMPLETE HERO - Free Agency is done */
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600/30 via-emerald-500/20 to-green-500/30 border-2 border-emerald-500/50 p-6 sm:p-8">
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 rounded-full blur-3xl" />

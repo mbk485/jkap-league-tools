@@ -28,7 +28,15 @@ import {
   getUserWallet,
   DBPlayerRewards,
   DBUserWallet,
+  getCurrentSeasonState,
+  getGameLogs,
 } from '@/lib/supabase';
+import type { SeasonPhase } from '@/types/offseason';
+import {
+  filterNotificationsForSeasonPhase,
+  hideOffseasonTaskWidget,
+} from '@/lib/season-phase-ui';
+import { SpringTrainingBanner } from '@/components/SpringTrainingBanner';
 import {
   Trophy,
   BarChart3,
@@ -85,6 +93,10 @@ function DashboardContent() {
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags | null>(null);
   const [rewards, setRewards] = useState<DBPlayerRewards | null>(null);
   const [wallet, setWallet] = useState<DBUserWallet | null>(null);
+  const [seasonPhase, setSeasonPhase] = useState<SeasonPhase | null>(null);
+  const [stPhaseDeadline, setStPhaseDeadline] = useState<string | null>(null);
+  const [stPhaseStartedAt, setStPhaseStartedAt] = useState<string | null>(null);
+  const [springGamesLogged, setSpringGamesLogged] = useState(0);
 
   const searchParams = useSearchParams();
   
@@ -118,16 +130,28 @@ function DashboardContent() {
       setFeatureFlags(getFeatureFlags());
       // Load rewards data and notifications
       if (user?.id) {
-        const [rewardsData, walletData, notifs, reads] = await Promise.all([
+        const [rewardsData, walletData, notifs, reads, season] = await Promise.all([
           getPlayerRewards(user.id),
           getUserWallet(user.id),
           getNotifications(),
           getUserNotificationReads(user.id),
+          getCurrentSeasonState(),
         ]);
         setRewards(rewardsData);
         setWallet(walletData);
         setNotifications(notifs);
         setReadNotificationIds(reads);
+        const phase = (season?.phase as SeasonPhase) ?? null;
+        setSeasonPhase(phase);
+        setStPhaseDeadline(season?.phase_deadline ?? null);
+        setStPhaseStartedAt(season?.phase_started_at ?? null);
+        if (phase === 'spring_training' && season?.phase_started_at) {
+          const logs = await getGameLogs(user.id, 100);
+          const start = new Date(season.phase_started_at).getTime();
+          setSpringGamesLogged(logs.filter((l) => new Date(l.created_at).getTime() >= start).length);
+        } else {
+          setSpringGamesLogged(0);
+        }
       }
       // Simulate data loading animation
       setIsLoaded(true);
@@ -136,7 +160,8 @@ function DashboardContent() {
     checkOnboarding();
   }, [user, router, searchParams]);
 
-  const unreadCount = notifications.filter((n) => !readNotificationIds.has(n.id)).length;
+  const visibleNotifications = filterNotificationsForSeasonPhase(notifications, seasonPhase);
+  const unreadCount = visibleNotifications.filter((n) => !readNotificationIds.has(n.id)).length;
 
   const markAsRead = async (id: string) => {
     if (!user?.id) return;
@@ -203,7 +228,16 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* Free Agent Ticker */}
+        {seasonPhase === 'spring_training' && (
+          <SpringTrainingBanner
+            compact
+            phaseDeadline={stPhaseDeadline}
+            phaseStartedAt={stPhaseStartedAt}
+            springGamesPlayed={springGamesLogged}
+          />
+        )}
+
+        {/* Free Agent Ticker (hidden outside FA/draft offseason phases — see FreeAgentTicker) */}
         <div
           className={`transition-all duration-500 delay-75 ${
             isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
@@ -455,7 +489,7 @@ function DashboardContent() {
                   </CardHeader>
                   <CardContent className="p-0">
                     <div className="divide-y divide-border">
-                      {notifications.slice(0, 3).map((notification, index) => {
+                      {visibleNotifications.slice(0, 3).map((notification, index) => {
                         const isUnread = !readNotificationIds.has(notification.id);
                         return (
                           <div
@@ -553,7 +587,8 @@ function DashboardContent() {
 
         {/* Off-Season & Resources Section */}
         <div className="grid lg:grid-cols-2 gap-6 mt-8">
-          {/* Off-Season Planning Widget */}
+          {/* Off-Season Planning Widget — hidden during spring training / regular season */}
+          {!hideOffseasonTaskWidget(seasonPhase) && (
           <div
             className={`transition-all duration-500 delay-350 ${
               isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
@@ -625,6 +660,7 @@ function DashboardContent() {
               </CardContent>
             </Card>
           </div>
+          )}
 
           {/* Quick Resources Widget */}
           <div

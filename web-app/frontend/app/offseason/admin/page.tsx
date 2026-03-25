@@ -114,7 +114,9 @@ import {
   DBSeasonArchive,
   DraftOrderTeam,
   DraftOrderResult,
+  updateSeasonPhase,
 } from '@/lib/supabase';
+import { PHASE_ORDER } from '@/lib/phase-manager';
 import { MLB_TEAMS } from '@/types/league';
 import { checkQuestionnaireCompletions, getAllQuestionnaireCompletions } from '@/lib/typeform-api';
 import { 
@@ -174,6 +176,7 @@ export default function OffSeasonAdminPage() {
   
   // Season state
   const [currentPhase, setCurrentPhase] = useState<SeasonPhase>('questionnaire');
+  const [seasonStateId, setSeasonStateId] = useState<string | null>(null);
   const [seasonNumber, setSeasonNumber] = useState(4);
   const [playoffTeamCount, setPlayoffTeamCount] = useState(4);
 
@@ -348,6 +351,7 @@ export default function OffSeasonAdminPage() {
 
       // Set season info
       setSeasonNumber(currentSeasonNum);
+      setSeasonStateId(seasonState?.id ?? null);
       if (seasonState) {
         setCurrentPhase(seasonState.phase as SeasonPhase);
         // Default playoff team count to 4 if not stored
@@ -637,6 +641,39 @@ export default function OffSeasonAdminPage() {
       },
     };
     return notifications[phase];
+  };
+
+  /** Persist SeasonPhase to season_state (drives member UI: spring training, ticker, etc.) */
+  const persistSeasonPhaseToDb = async (phase: SeasonPhase): Promise<boolean> => {
+    if (!seasonStateId) {
+      alert('No season_state row in the database. Ensure a current season exists (Seasons / version tools), then reload.');
+      return false;
+    }
+    const deadline =
+      phase === 'spring_training'
+        ? new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+        : null;
+    const result = await updateSeasonPhase(seasonStateId, phase, deadline);
+    if (!result.success) {
+      alert(result.error || 'Failed to save season phase');
+      return false;
+    }
+    if (phase === 'spring_training') {
+      await saveLeagueSettings({
+        offseason_phase: 'complete',
+        claiming_open: false,
+        claiming_closes_at: null,
+      });
+      setOffseasonPhase('complete');
+      setClaimingOpen(false);
+      setClaimingClosesAt(null);
+    }
+    return true;
+  };
+
+  const selectSeasonPhase = async (phase: SeasonPhase) => {
+    const ok = await persistSeasonPhaseToDb(phase);
+    if (ok) setCurrentPhase(phase);
   };
 
   // Change offseason phase
@@ -2926,31 +2963,26 @@ Let's get this done! 💪`;
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    {[
-                      'questionnaire',
-                      'awards_voting', 
-                      'free_agent_declaration',
-                      'world_series',
-                      'claiming_period',
-                      'claim_resolution',
-                      'roster_finalization',
-                      'draft_prep',
-                    ].map((phase) => (
+                  <div className="space-y-2 max-h-[min(28rem,55vh)] overflow-y-auto pr-1">
+                    {PHASE_ORDER.map((phase) => (
                       <button
                         key={phase}
-                        onClick={() => setCurrentPhase(phase as SeasonPhase)}
+                        type="button"
+                        onClick={() => void selectSeasonPhase(phase)}
                         className={`w-full flex items-center justify-between p-3 rounded-lg transition-all ${
                           currentPhase === phase
                             ? 'bg-amber-500/20 border border-amber-500/50'
                             : 'bg-slate-700/30 border border-slate-600 hover:bg-slate-700/50'
                         }`}
                       >
-                        <span className="text-white">{getPhaseLabel(phase as SeasonPhase)}</span>
-                        {currentPhase === phase && <CheckCircle className="w-4 h-4 text-amber-400" />}
+                        <span className="text-white text-left text-sm">{getPhaseLabel(phase)}</span>
+                        {currentPhase === phase && <CheckCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />}
                       </button>
                     ))}
                   </div>
+                  <p className="text-xs text-slate-500 mt-3">
+                    Saves to <code className="text-slate-400">season_state</code> for all members. Spring Training sets a 48h trade window and marks league offseason complete.
+                  </p>
                 </CardContent>
               </Card>
 
@@ -2997,7 +3029,8 @@ Let's get this done! 💪`;
                           'claim_resolution': 'roster_finalization',
                           'roster_finalization': 'draft_prep',
                           'draft_prep': 'draft',
-                          'draft': 'pre_season',
+                          'draft': 'spring_training',
+                          'spring_training': 'regular_season',
                         };
                         const nextPhase = nextPhases[currentPhase];
                         
@@ -3005,6 +3038,8 @@ Let's get this done! 💪`;
                         if (nextPhase === 'claiming_period') {
                           const hours = parseInt(claimingDuration) || 24;
                           if (confirm(`Open Claiming Period for ${hours} hours?\n\nThis will:\n• Set phase to "Claiming Period"\n• OPEN claiming for ${hours} hours\n• Allow members to submit claims\n• Post announcement to Discord\n\nContinue?`)) {
+                            const ok = await persistSeasonPhaseToDb(nextPhase);
+                            if (!ok) return;
                             setCurrentPhase(nextPhase);
                             
                             // Auto-open claiming
@@ -3031,6 +3066,8 @@ Let's get this done! 💪`;
                         } else if (nextPhase === 'claim_resolution') {
                           // Moving to resolution = close claiming
                           if (confirm(`Close Claiming & Move to Resolution?\n\nThis will:\n• CLOSE the claiming window\n• Move to "Claim Resolution" phase\n• You can now process signings\n\nContinue?`)) {
+                            const ok = await persistSeasonPhaseToDb(nextPhase);
+                            if (!ok) return;
                             setCurrentPhase(nextPhase);
                             
                             // Auto-close claiming
@@ -3048,6 +3085,8 @@ Let's get this done! 💪`;
                             setTimeout(() => setDiscordStatus(null), 5000);
                           }
                         } else if (nextPhase && confirm(`Advance to "${getPhaseLabel(nextPhase)}"?\n\nThis will:\n• Update the phase for all members\n• Post announcement to Discord (if configured)\n\nContinue?`)) {
+                          const ok = await persistSeasonPhaseToDb(nextPhase);
+                          if (!ok) return;
                           setCurrentPhase(nextPhase);
                           // Post to Discord if webhook is set
                           if (discordWebhookUrl) {
@@ -3055,6 +3094,8 @@ Let's get this done! 💪`;
                               'free_agent_declaration': { title: 'Free Agent Declaration Period', msg: '🔄 **Declare your free agents!**\n\nYou must declare at least **1 player** as a free agent before the deadline.' },
                               'draft_prep': { title: 'Draft Order Announced!', msg: '🎯 **The draft order has been set!**\n\nReview the draft board and prepare your strategy.' },
                               'draft': { title: 'DRAFT DAY!', msg: '🏈 **IT\'S DRAFT DAY!**\n\nHead to the Draft Tool to participate. Good luck!' },
+                              'spring_training': { title: '⚾ Spring Training!', msg: '🌴 **Spring Training has started!**\n\n• 3 ST games • ST/alternate jerseys • ST or MiLB parks\n• Unlimited trades (commissioner approval) for 48h or until 3 games, whichever comes first.\n\nLog games on the site Game Logger.' },
+                              'regular_season': { title: 'Regular Season', msg: '⚾ **The regular season is underway!** Good luck this season.' },
                             };
                             const ann = announcements[nextPhase];
                             if (ann) {

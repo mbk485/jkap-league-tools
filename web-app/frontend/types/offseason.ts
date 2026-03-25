@@ -17,7 +17,7 @@ export type SeasonPhase =
   | 'draft_prep'          // Preparing for the draft (draft order, eligible players)
   | 'draft'               // Draft in progress
   | 'roster_finalization' // Final roster updates after draft
-  | 'spring_training'     // 3 games in spring training jerseys/stadiums, limited trading
+  | 'spring_training'     // 3 ST games; ST/alternate jerseys; ST/MiLB parks; unlimited approved trades (48h or 3 games)
   | 'pre_season';         // Getting ready for new season (deprecated - kept for compatibility)
 
 export interface SeasonState {
@@ -406,7 +406,8 @@ export function getPhaseDescription(phase: SeasonPhase): string {
     draft_prep: 'Draft order is set. Prepare your draft strategy!',
     draft: 'The draft is in progress!',
     roster_finalization: 'Final roster adjustments after the draft. Make any last changes.',
-    spring_training: 'Play 3 games in spring training jerseys/stadiums. Limited trading window (48 hours or 3 games, whichever first).',
+    spring_training:
+      'Three ST games; spring training or alternate jerseys; ST or minor league parks. Unlimited approved trades until 3 games or 48 hours, whichever first.',
     pre_season: 'Get ready for the new season!',
   };
   return descriptions[phase];

@@ -4773,20 +4773,20 @@ export async function getCurrentSeasonState(): Promise<DBSeasonState | null> {
 export async function updateSeasonPhase(
   seasonId: string,
   phase: SeasonPhase,
-  deadline?: string,
-  notes?: string
+  deadline?: string | null,
+  notes?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { error } = await supabase
-      .from('season_state')
-      .update({
-        phase,
-        phase_started_at: new Date().toISOString(),
-        phase_deadline: deadline,
-        notes,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', seasonId);
+    const payload: Record<string, unknown> = {
+      phase,
+      phase_started_at: new Date().toISOString(),
+      phase_deadline: deadline ?? null,
+      updated_at: new Date().toISOString(),
+    };
+    if (notes !== undefined && notes !== null) {
+      payload.notes = notes;
+    }
+    const { error } = await supabase.from('season_state').update(payload).eq('id', seasonId);
 
     if (error) throw error;
     return { success: true };
