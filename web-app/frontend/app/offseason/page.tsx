@@ -803,6 +803,17 @@ function OffSeasonContent() {
             <Scroll className="w-4 h-4" />
             FA Signings
           </button>
+          <button
+            onClick={() => navigateToOffseasonTab('draft-results')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'draft-results'
+                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            <Trophy className="w-4 h-4" />
+            Draft Results
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -1205,6 +1216,13 @@ function OffSeasonContent() {
           {/* FA Signings Tab - Master List */}
           {activeTab === 'signings' && (
             <SigningsSection seasonNumber={seasonState.season_number} />
+          )}
+
+          {/* Draft Results Tab (top-level; same data as Draft → Draft results) */}
+          {activeTab === 'draft-results' && (
+            <div className="space-y-6">
+              <MemberDraftResultsPanel />
+            </div>
           )}
 
           {/* Winter League Tab */}
