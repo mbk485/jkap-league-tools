@@ -3744,7 +3744,7 @@ function DraftResultsSection({ seasonNumber }: { seasonNumber: number }) {
   });
 
   // Get unique teams
-  const teams = [...new Set(draftResults.map(p => p.teamAbbr))].sort();
+  const teams = Array.from(new Set(draftResults.map(p => p.teamAbbr))).sort();
 
   // Group by tier for summary
   const tierCounts = draftResults.reduce((acc, p) => {
