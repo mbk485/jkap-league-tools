@@ -23,9 +23,7 @@ const navLinks: NavLink[] = [
   { label: 'Home', href: '/' },
   { label: 'The Ballyard', href: '/dashboard', adminOnly: true, featureFlag: 'showDashboard' },
   { label: 'League Tools', href: '/tools', featureFlag: 'showTools', forUserType: 'jkap_member' },
-  { label: 'Off-Season', href: '/offseason', forUserType: 'jkap_member', featureFlag: 'showOffSeason' }, // Off-season hub
-  // Same visibility as League Tools so draft info stays reachable when Off-Season hub is toggled off
-  { label: 'Season draft', href: '/draft/order', forUserType: 'jkap_member', featureFlag: 'showTools' },
+  { label: 'Off-Season', href: '/offseason', forUserType: 'jkap_member', featureFlag: 'showOffSeason' }, // Off-season hub (includes Draft → Draft results for members)
   { label: 'Leaderboard', href: '/leaderboard', forUserType: 'jkap_member', featureFlag: 'showRewards' }, // Rankings & stats
   { label: 'Road to the Show', href: '/league-levels', forUserType: 'jkap_member', featureFlag: 'showLeagueHierarchy' }, // League hierarchy - HIDDEN until rollout
   { label: 'My Wallet', href: '/wallet', forUserType: 'jkap_member', featureFlag: 'showTokenEconomy' }, // Token wallet - HIDDEN until rollout
@@ -137,8 +135,7 @@ export function Navbar() {
             {visibleLinks.map((link) => {
               const isActive = pathname === link.href || 
                 (link.href === '/dashboard' && pathname === '/ballyard') ||
-                (link.href === '/tools' && pathname.startsWith('/tools')) ||
-                (link.href === '/draft/order' && (pathname.startsWith('/draft/order') || pathname.startsWith('/draft/results')));
+                (link.href === '/tools' && pathname.startsWith('/tools'));
               
               return (
                 <Link
@@ -345,8 +342,7 @@ export function Navbar() {
             <div className="flex flex-col gap-1">
               {visibleLinks.map((link) => {
                 const isActive = pathname === link.href || 
-                  (link.href === '/tools' && pathname.startsWith('/tools')) ||
-                  (link.href === '/draft/order' && (pathname.startsWith('/draft/order') || pathname.startsWith('/draft/results')));
+                  (link.href === '/tools' && pathname.startsWith('/tools'));
                 
                 return (
                   <Link

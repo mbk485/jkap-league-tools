@@ -1,8 +1,6 @@
 /**
- * Published Season Draft — order & results shown on /draft/order and /draft/results.
- *
- * When you post a new draft order or final results, update this file and deploy.
- * Optional: adjust PUBLISHED_DRAFT_META dates/labels.
+ * Published Season Draft — members see results in Off-Season → Draft → Draft results.
+ * Commissioners update this file when posting new results (and redeploy).
  */
 
 export const PUBLISHED_DRAFT_META = {

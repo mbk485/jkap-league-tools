@@ -1,10 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
-import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-import { PublishedDraftOrderView } from '@/components/draft/PublishedDraftOrderView';
-import { PublishedDraftResultsView } from '@/components/draft/PublishedDraftResultsView';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { PlayerStatsPopover } from '@/components/players';
 import { searchPlayers, PlayerSearchResult } from '@/lib/mlb-theshow-api';
 
@@ -636,14 +634,9 @@ function DraftBoard() {
               DRAFT BOARD
             </h2>
             <p className="text-slate-400 mt-4 text-lg">Snake Draft • 1 Minute Timer</p>
-            <p className="text-slate-500 text-sm mt-3">
-              <Link href="/draft/order" className="text-red-400/90 hover:text-red-300 underline underline-offset-2">
-                Published draft order
-              </Link>
-              <span className="mx-2 text-slate-600">·</span>
-              <Link href="/draft/results" className="text-red-400/90 hover:text-red-300 underline underline-offset-2">
-                Draft results
-              </Link>
+            <p className="text-slate-500 text-sm mt-3 max-w-lg mx-auto">
+              Members view official draft results under{' '}
+              <span className="text-slate-400">Off-Season → Draft → Draft results</span>.
             </p>
             
             {/* Toggle Draft Order View */}
@@ -1230,28 +1223,39 @@ function DraftBoard() {
   );
 }
 
-function DraftPublishedRouter() {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const pub = searchParams.get('published');
-  if (pathname === '/draft/order' || pub === 'order') {
-    return <PublishedDraftOrderView />;
-  }
-  if (pathname === '/draft/results' || pub === 'results') {
-    return <PublishedDraftResultsView />;
-  }
-  return <DraftBoard />;
-}
-
 export default function DraftPage() {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (user?.isAdmin) return;
+    if (isAuthenticated && user?.userType === 'jkap_member') {
+      router.replace('/offseason?tab=draft&draftView=results');
+      return;
+    }
+    if (isAuthenticated && user?.userType === 'external_commissioner') {
+      router.replace('/commissioner');
+      return;
+    }
+    const dest = encodeURIComponent('/offseason?tab=draft&draftView=results');
+    router.replace(`/login?redirect=${dest}`);
+  }, [isLoading, user, isAuthenticated, router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center text-slate-400">
+        Loading…
+      </div>
+    );
+  }
+  if (user?.isAdmin) {
+    return <DraftBoard />;
+  }
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
-      }
-    >
-      <DraftPublishedRouter />
-    </Suspense>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center text-slate-400">
+      Redirecting…
+    </div>
   );
 }
 

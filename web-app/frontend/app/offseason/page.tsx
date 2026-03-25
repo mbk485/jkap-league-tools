@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { MemberDraftResultsPanel } from '@/components/draft/MemberDraftResultsPanel';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -68,7 +69,6 @@ import {
   Trash2,
   X,
   Dices,
-  ListOrdered,
   Sun,
 } from 'lucide-react';
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
@@ -3141,8 +3141,57 @@ const TIER_CONFIG = {
 };
 
 function DraftPoolSection() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const draftViewParam = searchParams.get('draftView');
+  const [subTab, setSubTab] = useState<'pool' | 'results'>(() =>
+    draftViewParam === 'results' ? 'results' : 'pool'
+  );
   const [selectedTier, setSelectedTier] = useState<string>('all');
   const [selectedPlayer, setSelectedPlayer] = useState<DraftPlayer | null>(null);
+
+  useEffect(() => {
+    setSubTab(draftViewParam === 'results' ? 'results' : 'pool');
+  }, [draftViewParam]);
+
+  const goDraftSubTab = (t: 'pool' | 'results') => {
+    setSubTab(t);
+    const p = new URLSearchParams(searchParams.toString());
+    p.set('tab', 'draft');
+    if (t === 'results') {
+      p.set('draftView', 'results');
+    } else {
+      p.delete('draftView');
+    }
+    router.replace(`/offseason?${p.toString()}`, { scroll: false });
+  };
+
+  const subTabBar = (
+    <div className="flex flex-wrap gap-2 border-b border-slate-700/80 pb-4">
+      <button
+        type="button"
+        onClick={() => goDraftSubTab('pool')}
+        className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+          subTab === 'pool'
+            ? 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-500/20'
+            : 'bg-slate-800/60 text-slate-400 hover:bg-slate-700/60 hover:text-white'
+        }`}
+      >
+        Draft pool
+      </button>
+      <button
+        type="button"
+        onClick={() => goDraftSubTab('results')}
+        className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+          subTab === 'results'
+            ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+            : 'bg-slate-800/60 text-slate-400 hover:bg-slate-700/60 hover:text-white'
+        }`}
+      >
+        Draft results
+      </button>
+    </div>
+  );
   
   const filteredPlayers = selectedTier === 'all' 
     ? DRAFT_POOL_PLAYERS 
@@ -3156,31 +3205,18 @@ function DraftPoolSection() {
     common: DRAFT_POOL_PLAYERS.filter(p => p.tier === 'common'),
   };
 
+  if (subTab === 'results') {
+    return (
+      <div className="space-y-6">
+        {subTabBar}
+        <MemberDraftResultsPanel />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <Card className="bg-gradient-to-r from-purple-500/15 to-indigo-500/10 border-purple-500/30">
-        <CardContent className="p-5 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <ListOrdered className="w-5 h-5 text-purple-400" />
-                Published draft order & results
-              </h3>
-              <p className="text-slate-400 text-sm mt-1">
-                Official league postings — same info shared in announcements.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button as="link" href="/draft/order" size="sm" className="bg-purple-600 hover:bg-purple-500 border-0">
-                Draft order
-              </Button>
-              <Button as="link" href="/draft/results" size="sm" variant="secondary">
-                Draft results
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {subTabBar}
 
       {/* Header */}
       <Card className="bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border-2 border-amber-500/40">
