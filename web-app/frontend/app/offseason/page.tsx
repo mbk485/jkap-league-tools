@@ -3684,6 +3684,248 @@ const TIER_BADGES: Record<string, { bg: string; text: string; label: string; emo
   common: { bg: 'bg-slate-600', text: 'text-white', label: 'Common', emoji: '⚪' },
 };
 
+// Season 5 Draft Results - JKAP Memorial League
+const SEASON_5_DRAFT_RESULTS = [
+  { pick: 1, player: 'Bobby Witt Jr.', position: 'SS', overall: 91, team: 'Seattle Mariners', teamAbbr: 'SEA', tier: 'diamond' },
+  { pick: 2, player: 'Ramon Laureano', position: 'LF', overall: 85, team: 'Washington Nationals', teamAbbr: 'WSH', tier: 'diamond' },
+  { pick: 3, player: 'Trevor Story', position: 'SS', overall: 84, team: 'Toronto Blue Jays', teamAbbr: 'TOR', via: 'Oakland Athletics', tier: 'gold' },
+  { pick: 4, player: 'Michael Busch', position: '1B', overall: 84, team: 'Seattle Mariners', teamAbbr: 'SEA', via: 'St. Louis Cardinals', tier: 'gold' },
+  { pick: 5, player: 'Wilyer Abreu', position: 'RF', overall: 83, team: 'Arizona Diamondbacks', teamAbbr: 'ARI', via: 'Kansas City Royals', tier: 'gold' },
+  { pick: 6, player: 'Max Muncy', position: '3B', overall: 82, team: 'Seattle Mariners', teamAbbr: 'SEA', via: 'Boston Red Sox', tier: 'gold' },
+  { pick: 7, player: 'Jorge Polanco', position: '2B', overall: 81, team: 'Baltimore Orioles', teamAbbr: 'BAL', tier: 'gold' },
+  { pick: 8, player: 'Ivan Herrera', position: 'C', overall: 81, team: 'Milwaukee Brewers', teamAbbr: 'MIL', tier: 'gold' },
+  { pick: 9, player: 'Austin Wells', position: 'C', overall: 79, team: 'San Francisco Giants', teamAbbr: 'SF', tier: 'silver' },
+  { pick: 10, player: 'Tyler Soderstrom', position: '1B', overall: 79, team: 'San Diego Padres', teamAbbr: 'SD', tier: 'silver' },
+  { pick: 11, player: 'Jacob Young', position: 'CF', overall: 79, team: 'Texas Rangers', teamAbbr: 'TEX', tier: 'silver' },
+  { pick: 12, player: 'Framber Valdez', position: 'SP', overall: 78, team: 'New York Mets', teamAbbr: 'NYM', tier: 'silver' },
+  { pick: 13, player: 'Brock Stewart', position: 'RP', overall: 78, team: 'Toronto Blue Jays', teamAbbr: 'TOR', tier: 'silver' },
+  { pick: 14, player: 'Max Meyer', position: 'SP', overall: 76, team: 'New York Yankees', teamAbbr: 'NYY', tier: 'silver' },
+  { pick: 15, player: 'Colin Rea', position: 'SP', overall: 74, team: 'Tampa Bay Rays', teamAbbr: 'TB', tier: 'bronze' },
+  { pick: 16, player: 'Michael Lorenzen', position: 'SP', overall: 73, team: 'Detroit Tigers', teamAbbr: 'DET', tier: 'bronze' },
+  { pick: 17, player: 'Matthew Liberatore', position: 'SP', overall: 72, team: 'Cleveland Guardians', teamAbbr: 'CLE', tier: 'bronze' },
+  { pick: 18, player: 'Joel Payamps', position: 'RP', overall: 68, team: 'Philadelphia Phillies', teamAbbr: 'PHI', tier: 'bronze' },
+  { pick: 19, player: 'Tyler Gilbert', position: 'RP', overall: 68, team: 'Houston Astros', teamAbbr: 'HOU', tier: 'bronze' },
+  { pick: 20, player: 'Caden Dana', position: 'SP', overall: 67, team: 'Cincinnati Reds', teamAbbr: 'CIN', tier: 'bronze' },
+  { pick: 21, player: 'Jack Suwinski', position: 'CF', overall: 67, team: 'Cincinnati Reds', teamAbbr: 'CIN', tier: 'bronze' },
+  { pick: 22, player: 'Alexander Canario', position: 'RF', overall: 67, team: 'Houston Astros', teamAbbr: 'HOU', tier: 'bronze' },
+  { pick: 23, player: 'Carlos Vargas', position: 'RP', overall: 65, team: 'New York Yankees', teamAbbr: 'NYY', tier: 'bronze' },
+  { pick: 24, player: 'Ryan Noda', position: '1B', overall: 64, team: 'Minnesota Twins', teamAbbr: 'MIN', tier: 'common' },
+  { pick: 25, player: 'Kris Bryant', position: '1B', overall: 64, team: 'Milwaukee Brewers', teamAbbr: 'MIL', tier: 'common' },
+  { pick: 26, player: 'Michael Darrell-Hicks', position: 'SP', overall: 64, team: 'Washington Nationals', teamAbbr: 'WSH', tier: 'common' },
+  { pick: 27, player: 'Thomas Harrington', position: 'SP', overall: 63, team: 'San Diego Padres', teamAbbr: 'SD', tier: 'common' },
+  { pick: 28, player: 'Ryan Pressly', position: 'RP', overall: 63, team: 'New York Mets', teamAbbr: 'NYM', tier: 'common' },
+  { pick: 29, player: 'Graham Ashcraft', position: 'RP', overall: 63, team: 'Minnesota Twins', teamAbbr: 'MIN', tier: 'common' },
+  { pick: 30, player: 'Tyler Saucedo', position: 'RP', overall: 63, team: 'Arizona Diamondbacks', teamAbbr: 'ARI', tier: 'common' },
+  { pick: 31, player: 'Ryne Stanek', position: 'RP', overall: 63, team: 'Arizona Diamondbacks', teamAbbr: 'ARI', tier: 'common' },
+  { pick: 32, player: 'Gustavo Campero', position: 'RF', overall: 63, team: 'Arizona Diamondbacks', teamAbbr: 'ARI', via: 'Kansas City Royals', tier: 'common' },
+  { pick: 33, player: 'David Villar', position: '3B', overall: 61, team: 'Baltimore Orioles', teamAbbr: 'BAL', tier: 'common' },
+];
+
+const DRAFT_TIER_CONFIG: Record<string, { bg: string; text: string; border: string; label: string; emoji: string }> = {
+  diamond: { bg: 'bg-cyan-400/20', text: 'text-cyan-300', border: 'border-cyan-400/50', label: 'Diamond', emoji: '💎' },
+  gold: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/50', label: 'Gold', emoji: '⭐' },
+  silver: { bg: 'bg-slate-400/20', text: 'text-slate-300', border: 'border-slate-400/50', label: 'Silver', emoji: '🪙' },
+  bronze: { bg: 'bg-orange-600/20', text: 'text-orange-400', border: 'border-orange-600/50', label: 'Bronze', emoji: '🥉' },
+  common: { bg: 'bg-slate-600/20', text: 'text-slate-400', border: 'border-slate-600/50', label: 'Common', emoji: '⚫' },
+};
+
+function DraftResultsSection({ seasonNumber }: { seasonNumber: number }) {
+  const [filterTier, setFilterTier] = useState<string>('all');
+  const [filterTeam, setFilterTeam] = useState<string>('all');
+
+  const draftResults = SEASON_5_DRAFT_RESULTS;
+
+  // Filter results
+  const filteredResults = draftResults.filter(pick => {
+    if (filterTier !== 'all' && pick.tier !== filterTier) return false;
+    if (filterTeam !== 'all' && pick.teamAbbr !== filterTeam) return false;
+    return true;
+  });
+
+  // Get unique teams
+  const teams = [...new Set(draftResults.map(p => p.teamAbbr))].sort();
+
+  // Group by tier for summary
+  const tierCounts = draftResults.reduce((acc, p) => {
+    acc[p.tier] = (acc[p.tier] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Group by team for summary
+  const teamCounts = draftResults.reduce((acc, p) => {
+    acc[p.team] = (acc[p.team] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <Card className="bg-gradient-to-br from-emerald-500/20 to-green-500/10 border-2 border-emerald-500/40">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
+              <Trophy className="w-8 h-8 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white">Season {seasonNumber} Draft Results</h2>
+              <p className="text-slate-300">
+                {draftResults.length} total picks • JKAP Memorial League
+              </p>
+            </div>
+          </div>
+
+          {/* Tier Filter */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button
+              onClick={() => setFilterTier('all')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                filterTier === 'all'
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              All ({draftResults.length})
+            </button>
+            {Object.entries(DRAFT_TIER_CONFIG).map(([tier, config]) => {
+              const count = tierCounts[tier] || 0;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={tier}
+                  onClick={() => setFilterTier(tier)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
+                    filterTier === tier
+                      ? `${config.bg} ${config.text} border ${config.border}`
+                      : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  {config.emoji} {config.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Team Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 text-sm">Filter by team:</span>
+            <select
+              value={filterTeam}
+              onChange={(e) => setFilterTeam(e.target.value)}
+              className="px-3 py-1.5 rounded-lg bg-slate-700/50 border border-slate-600 text-white text-sm focus:outline-none focus:border-emerald-500"
+            >
+              <option value="all">All Teams</option>
+              {teams.map(team => (
+                <option key={team} value={team}>{team}</option>
+              ))}
+            </select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Draft Picks List */}
+      <div className="grid gap-3">
+        {filteredResults.map((pick) => {
+          const tierConfig = DRAFT_TIER_CONFIG[pick.tier] || DRAFT_TIER_CONFIG.common;
+          
+          return (
+            <Card key={pick.pick} className="bg-slate-800/50 border-slate-700 hover:border-slate-600 transition-all">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  {/* Pick Number */}
+                  <div className={`flex items-center justify-center w-12 h-12 rounded-full font-bold text-lg ${
+                    pick.pick <= 5 ? 'bg-amber-500/20 text-amber-400 border-2 border-amber-500/50' :
+                    pick.pick <= 10 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                    'bg-slate-700 text-slate-300'
+                  }`}>
+                    #{pick.pick}
+                  </div>
+                  
+                  {/* Player Info */}
+                  <div className="flex-grow">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${tierConfig.bg} ${tierConfig.text} border ${tierConfig.border}`}>
+                        {tierConfig.emoji} {pick.overall}
+                      </span>
+                      <h3 className="text-lg font-bold text-white">{pick.player}</h3>
+                      <span className="text-slate-400 text-sm">({pick.position})</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                      <span className="text-emerald-400 font-medium">
+                        → {pick.team}
+                      </span>
+                      {pick.via && (
+                        <span className="text-slate-500 text-xs">
+                          (via {pick.via})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Team Badge */}
+                  <div className="hidden sm:block">
+                    <Badge className="bg-slate-700 text-slate-300 text-sm">
+                      {pick.teamAbbr}
+                    </Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Team Summary */}
+      <Card className="bg-slate-800/30 border-slate-700">
+        <CardContent className="p-4">
+          <h3 className="text-lg font-bold text-white mb-4">Picks by Team</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {Object.entries(teamCounts)
+              .sort((a, b) => b[1] - a[1])
+              .map(([team, count]) => (
+                <button
+                  key={team}
+                  onClick={() => setFilterTeam(filterTeam === teams.find(t => draftResults.find(p => p.team === team)?.teamAbbr === t) || 'all' ? 'all' : draftResults.find(p => p.team === team)?.teamAbbr || 'all')}
+                  className="p-3 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-all text-left"
+                >
+                  <p className="text-2xl font-bold text-emerald-400">{count}</p>
+                  <p className="text-xs text-slate-400 truncate">{team}</p>
+                </button>
+              ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Summary Stats */}
+      <Card className="bg-slate-800/30 border-slate-700">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-center">
+            <div>
+              <p className="text-2xl font-bold text-white">{draftResults.length}</p>
+              <p className="text-sm text-slate-400">Total Picks</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-cyan-400">{tierCounts.diamond || 0}</p>
+              <p className="text-sm text-slate-400">💎 Diamonds</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-yellow-400">{tierCounts.gold || 0}</p>
+              <p className="text-sm text-slate-400">⭐ Golds</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-300">{tierCounts.silver || 0}</p>
+              <p className="text-sm text-slate-400">🪙 Silvers</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-orange-400">{(tierCounts.bronze || 0) + (tierCounts.common || 0)}</p>
+              <p className="text-sm text-slate-400">🥉⚫ Bronze/Common</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function SigningsSection({ seasonNumber }: { seasonNumber: number }) {
   const [signings, setSignings] = useState<Signing[]>([]);
   const [loading, setLoading] = useState(true);
