@@ -3,11 +3,25 @@
  * Handles posting announcements and updates to Discord webhooks
  */
 
+/** Discord API — required for @everyone / @role pings on webhook messages */
+export type DiscordAllowedMentions = {
+  parse?: ('everyone' | 'users' | 'roles')[];
+  roles?: string[];
+  users?: string[];
+};
+
 export interface DiscordWebhookOptions {
   username?: string;
   avatarUrl?: string;
   content?: string;
   embeds?: DiscordEmbed[];
+  /**
+   * Adds @everyone to the top of `content` (or as standalone content if only embeds)
+   * and sets allowed_mentions so members actually get notified.
+   * Embed bodies alone do not ping — this is required for channel notifications.
+   */
+  notifyEveryone?: boolean;
+  allowedMentions?: DiscordAllowedMentions;
 }
 
 export interface DiscordEmbed {
@@ -52,12 +66,35 @@ export async function postToDiscord(
       avatar_url: options.avatarUrl || JKAP_AVATAR,
     };
 
-    if (options.content) {
-      payload.content = options.content;
+    let content = options.content;
+    if (options.notifyEveryone) {
+      const ping = '@everyone';
+      const trimmed = content?.trimStart() ?? '';
+      const alreadyPing =
+        trimmed.startsWith('@everyone') || trimmed.startsWith('@here');
+      if (!alreadyPing) {
+        content = content ? `${ping}\n\n${content}` : ping;
+      } else if (!content) {
+        content = ping;
+      }
+    }
+
+    if (content) {
+      payload.content = content;
     }
 
     if (options.embeds && options.embeds.length > 0) {
       payload.embeds = options.embeds;
+    }
+
+    const mentions: DiscordAllowedMentions = { ...options.allowedMentions };
+    if (options.notifyEveryone) {
+      const parseSet = new Set<'everyone' | 'users' | 'roles'>(mentions.parse ?? []);
+      parseSet.add('everyone');
+      mentions.parse = Array.from(parseSet);
+    }
+    if (mentions.parse?.length || mentions.roles?.length || mentions.users?.length) {
+      payload.allowed_mentions = mentions;
     }
 
     const response = await fetch(webhookUrl, {
@@ -87,9 +124,11 @@ export async function postAnnouncement(
   message: string,
   username?: string
 ): Promise<{ success: boolean; error?: string }> {
+  const hasPingToken = /@everyone\b|@here\b/.test(message);
   return postToDiscord(webhookUrl, {
     content: message,
     username: username || 'JKAP Commissioner',
+    notifyEveryone: hasPingToken,
   });
 }
 
@@ -124,6 +163,7 @@ export async function postQuestionnaireReminder(
   return postToDiscord(webhookUrl, {
     username: 'JKAP Commissioner',
     embeds: [embed],
+    notifyEveryone: true,
   });
 }
 
@@ -158,6 +198,7 @@ export async function postFADeclarationReminder(
   return postToDiscord(webhookUrl, {
     username: 'JKAP Commissioner',
     embeds: [embed],
+    notifyEveryone: true,
   });
 }
 
@@ -187,6 +228,7 @@ export async function postStandingsUpdate(
   return postToDiscord(webhookUrl, {
     username: 'JKAP Standings',
     embeds: [embed],
+    notifyEveryone: true,
   });
 }
 
@@ -215,22 +257,35 @@ export async function postDraftOrder(
   return postToDiscord(webhookUrl, {
     username: 'JKAP Draft',
     embeds: [embed],
+    notifyEveryone: true,
   });
 }
 
+export type PostCustomAnnouncementOptions = {
+  color?: number;
+  /** Default true — @everyone + allowed_mentions so the server gets notified */
+  notifyEveryone?: boolean;
+};
+
 /**
  * Post a custom embedded announcement
+ * @param optionsOrColor — pass a number for embed color, or `{ color, notifyEveryone }`
  */
 export async function postCustomAnnouncement(
   webhookUrl: string,
   title: string,
   message: string,
-  color?: number
+  optionsOrColor?: number | PostCustomAnnouncementOptions
 ): Promise<{ success: boolean; error?: string }> {
+  const opts: PostCustomAnnouncementOptions =
+    typeof optionsOrColor === 'number' ? { color: optionsOrColor } : optionsOrColor ?? {};
+  const color = typeof optionsOrColor === 'number' ? optionsOrColor : opts.color;
+  const notifyEveryone = opts.notifyEveryone !== false;
+
   const embed: DiscordEmbed = {
     title: `📢 ${title}`,
     description: message,
-    color: color || DISCORD_COLORS.red,
+    color: color ?? DISCORD_COLORS.red,
     footer: {
       text: 'JKAP Memorial League',
     },
@@ -240,6 +295,7 @@ export async function postCustomAnnouncement(
   return postToDiscord(webhookUrl, {
     username: 'JKAP Commissioner',
     embeds: [embed],
+    notifyEveryone,
   });
 }
 
@@ -268,5 +324,6 @@ export async function postPlayoffBracket(
   return postToDiscord(webhookUrl, {
     username: 'JKAP Playoffs',
     embeds: [embed],
+    notifyEveryone: true,
   });
 }
