@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
-import { LogIn, LogOut, User, ChevronDown, Shield, Wrench, Globe, HelpCircle, Calendar, Users, FileText, ArrowLeftRight } from 'lucide-react';
+import { LogIn, LogOut, User, ChevronDown, Shield, Wrench, Globe, HelpCircle, Calendar, Users, FileText, ArrowLeftRight, Briefcase } from 'lucide-react';
 import { getFeatureFlags, FeatureFlags } from '@/lib/feature-flags';
 import { NotificationInbox } from '@/components/NotificationInbox';
 
@@ -30,6 +30,7 @@ const navLinks: NavLink[] = [
   { label: 'Home', href: '/' },
   { label: 'The Ballyard', href: '/dashboard', adminOnly: true, featureFlag: 'showDashboard' },
   { label: 'League Tools', href: '/tools', featureFlag: 'showTools', forUserType: 'jkap_member' },
+  { label: 'Front Office', href: '/front-office', forUserType: 'jkap_member' },
   { 
     label: 'Off-Season', 
     href: '/offseason', 
