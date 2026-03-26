@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
-import { LogIn, LogOut, User, ChevronDown, Shield, Wrench, Globe, HelpCircle } from 'lucide-react';
+import { LogIn, LogOut, User, ChevronDown, Shield, Wrench, Globe, HelpCircle, Calendar, Users, FileText, ArrowLeftRight } from 'lucide-react';
 import { getFeatureFlags, FeatureFlags } from '@/lib/feature-flags';
 import { NotificationInbox } from '@/components/NotificationInbox';
 
@@ -13,9 +13,16 @@ interface NavLink {
   label: string;
   href: string;
   adminOnly?: boolean;
-  directorOnly?: boolean; // Show only for league directors (Miguel, Roy)
+  directorOnly?: boolean;
   featureFlag?: keyof FeatureFlags;
-  forUserType?: 'jkap_member' | 'external_commissioner'; // Show only for specific user type
+  forUserType?: 'jkap_member' | 'external_commissioner';
+  isDropdown?: boolean;
+  dropdownItems?: {
+    label: string;
+    href: string;
+    icon?: React.ReactNode;
+    featureFlag?: keyof FeatureFlags;
+  }[];
 }
 
 // Full navigation - controlled by feature flags for regular members
@@ -23,16 +30,27 @@ const navLinks: NavLink[] = [
   { label: 'Home', href: '/' },
   { label: 'The Ballyard', href: '/dashboard', adminOnly: true, featureFlag: 'showDashboard' },
   { label: 'League Tools', href: '/tools', featureFlag: 'showTools', forUserType: 'jkap_member' },
-  { label: 'Off-Season', href: '/offseason', forUserType: 'jkap_member', featureFlag: 'showOffSeason' }, // Off-season hub (includes Draft → Draft results for members)
-  { label: 'Leaderboard', href: '/leaderboard', forUserType: 'jkap_member', featureFlag: 'showRewards' }, // Rankings & stats
-  { label: 'Road to the Show', href: '/league-levels', forUserType: 'jkap_member', featureFlag: 'showLeagueHierarchy' }, // League hierarchy - HIDDEN until rollout
-  { label: 'My Wallet', href: '/wallet', forUserType: 'jkap_member', featureFlag: 'showTokenEconomy' }, // Token wallet - HIDDEN until rollout
-  { label: 'Rules', href: '/rules', forUserType: 'jkap_member' }, // League rulebook
-  { label: 'Director Dashboard', href: '/director', directorOnly: true }, // For Miguel (AAA), Roy (AA)
+  { 
+    label: 'Off-Season', 
+    href: '/offseason', 
+    forUserType: 'jkap_member', 
+    featureFlag: 'showOffSeason',
+    isDropdown: true,
+    dropdownItems: [
+      { label: 'Overview', href: '/offseason', icon: <Calendar className="w-4 h-4" /> },
+      { label: 'Free Agency', href: '/offseason?tab=free-agents', icon: <Users className="w-4 h-4" />, featureFlag: 'showFreeAgents' },
+      { label: 'Draft', href: '/offseason?tab=draft-results', icon: <FileText className="w-4 h-4" /> },
+      { label: 'Trades', href: '/offseason?tab=trades', icon: <ArrowLeftRight className="w-4 h-4" /> },
+    ]
+  },
+  { label: 'Leaderboard', href: '/leaderboard', forUserType: 'jkap_member', featureFlag: 'showRewards' },
+  { label: 'Road to the Show', href: '/league-levels', forUserType: 'jkap_member', featureFlag: 'showLeagueHierarchy' },
+  { label: 'My Wallet', href: '/wallet', forUserType: 'jkap_member', featureFlag: 'showTokenEconomy' },
+  { label: 'Rules', href: '/rules', forUserType: 'jkap_member' },
+  { label: 'Director Dashboard', href: '/director', directorOnly: true },
   { label: 'Commissioner Hub', href: '/commissioner', forUserType: 'external_commissioner' },
-  { label: 'Free Agents', href: '/offseason?tab=free-agents', forUserType: 'jkap_member', featureFlag: 'showFreeAgents' },
   { label: 'Documents', href: '/documents', adminOnly: true, featureFlag: 'showDocuments' },
-  { label: 'Admin', href: '/admin', adminOnly: true }, // Always admin-only, no feature flag needed
+  { label: 'Admin', href: '/admin', adminOnly: true },
 ];
 
 export function Navbar() {
@@ -41,6 +59,7 @@ export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [offseasonDropdownOpen, setOffseasonDropdownOpen] = useState(false);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags | null>(null);
 
   // Load feature flags on mount and when they might change
@@ -135,7 +154,62 @@ export function Navbar() {
             {visibleLinks.map((link) => {
               const isActive = pathname === link.href || 
                 (link.href === '/dashboard' && pathname === '/ballyard') ||
-                (link.href === '/tools' && pathname.startsWith('/tools'));
+                (link.href === '/tools' && pathname.startsWith('/tools')) ||
+                (link.href === '/offseason' && pathname.startsWith('/offseason'));
+              
+              // Render dropdown for Off-Season
+              if (link.isDropdown && link.dropdownItems) {
+                return (
+                  <div key={link.href} className="relative">
+                    <button
+                      onClick={() => setOffseasonDropdownOpen(!offseasonDropdownOpen)}
+                      className={`
+                        relative px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-1
+                        ${isActive 
+                          ? 'text-foreground bg-muted' 
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                        }
+                      `}
+                    >
+                      {link.label}
+                      <ChevronDown className={`w-3 h-3 transition-transform ${offseasonDropdownOpen ? 'rotate-180' : ''}`} />
+                      {isActive && (
+                        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-jkap-red-500 rounded-full" />
+                      )}
+                    </button>
+                    
+                    {offseasonDropdownOpen && (
+                      <div className="absolute top-full left-0 mt-1 w-48 rounded-xl bg-card border border-border shadow-lg py-2 animate-slide-down z-50">
+                        {link.dropdownItems.map((item) => {
+                          // Check feature flag for dropdown item
+                          if (item.featureFlag && featureFlags && !featureFlags[item.featureFlag]) {
+                            return null;
+                          }
+                          const itemActive = pathname + (window?.location?.search || '') === item.href || 
+                            (item.href === '/offseason' && pathname === '/offseason' && !window?.location?.search);
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={() => setOffseasonDropdownOpen(false)}
+                              className={`
+                                flex items-center gap-3 px-4 py-2.5 text-sm transition-colors
+                                ${itemActive 
+                                  ? 'text-jkap-red-500 bg-jkap-red-500/10' 
+                                  : 'text-foreground hover:bg-muted'
+                                }
+                              `}
+                            >
+                              {item.icon}
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
               
               return (
                 <Link
@@ -342,7 +416,52 @@ export function Navbar() {
             <div className="flex flex-col gap-1">
               {visibleLinks.map((link) => {
                 const isActive = pathname === link.href || 
-                  (link.href === '/tools' && pathname.startsWith('/tools'));
+                  (link.href === '/tools' && pathname.startsWith('/tools')) ||
+                  (link.href === '/offseason' && pathname.startsWith('/offseason'));
+                
+                // Render expandable section for Off-Season on mobile
+                if (link.isDropdown && link.dropdownItems) {
+                  return (
+                    <div key={link.href} className="flex flex-col">
+                      <button
+                        onClick={() => setOffseasonDropdownOpen(!offseasonDropdownOpen)}
+                        className={`
+                          px-4 py-3 text-sm font-medium rounded-lg transition-colors flex items-center justify-between
+                          ${isActive 
+                            ? 'text-foreground bg-muted' 
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                          }
+                        `}
+                      >
+                        {link.label}
+                        <ChevronDown className={`w-4 h-4 transition-transform ${offseasonDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {offseasonDropdownOpen && (
+                        <div className="ml-4 mt-1 flex flex-col gap-1 border-l-2 border-muted pl-4">
+                          {link.dropdownItems.map((item) => {
+                            if (item.featureFlag && featureFlags && !featureFlags[item.featureFlag]) {
+                              return null;
+                            }
+                            return (
+                              <Link
+                                key={item.href}
+                                href={item.href}
+                                onClick={() => {
+                                  setMobileMenuOpen(false);
+                                  setOffseasonDropdownOpen(false);
+                                }}
+                                className="flex items-center gap-3 px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/50 transition-colors"
+                              >
+                                {item.icon}
+                                {item.label}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
                 
                 return (
                   <Link
@@ -420,6 +539,14 @@ export function Navbar() {
         <div
           className="fixed inset-0 z-40"
           onClick={() => setUserMenuOpen(false)}
+        />
+      )}
+      
+      {/* Click outside to close offseason dropdown */}
+      {offseasonDropdownOpen && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setOffseasonDropdownOpen(false)}
         />
       )}
     </header>

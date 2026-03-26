@@ -70,6 +70,7 @@ import {
   X,
   Dices,
   Sun,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { PlayerSearchModal } from '@/components/offseason/PlayerSearchModal';
 import { PlayerStatsCard, PlayerStatsPopover } from '@/components/players';
@@ -124,7 +125,7 @@ const PHASE_COLORS: Record<SeasonPhase, string> = {
   pre_season: 'teal',
 };
 
-type TabType = 'overview' | 'questionnaire' | 'free-agents' | 'claims' | 'standings' | 'draft' | 'signings' | 'draft-results' | 'winter-league';
+type TabType = 'overview' | 'questionnaire' | 'free-agents' | 'claims' | 'standings' | 'draft' | 'signings' | 'draft-results' | 'winter-league' | 'trades';
 
 function OffSeasonContent() {
   const { user } = useAuth();
@@ -136,7 +137,7 @@ function OffSeasonContent() {
   // Read initial tab from URL query parameter
   const getInitialTab = (): TabType => {
     const tabParam = searchParams.get('tab');
-    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'signings', 'draft-results', 'winter-league'];
+    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'signings', 'draft-results', 'winter-league', 'trades'];
     if (tabParam && validTabs.includes(tabParam as TabType)) {
       return tabParam as TabType;
     }
@@ -149,7 +150,7 @@ function OffSeasonContent() {
   const tabFromUrl = searchParams.get('tab');
   useEffect(() => {
     if (!tabFromUrl) return;
-    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'signings', 'draft-results', 'winter-league'];
+    const validTabs: TabType[] = ['overview', 'questionnaire', 'free-agents', 'claims', 'standings', 'draft', 'signings', 'draft-results', 'winter-league', 'trades'];
     if (validTabs.includes(tabFromUrl as TabType)) {
       setActiveTab(tabFromUrl as TabType);
     }
@@ -832,6 +833,17 @@ function OffSeasonContent() {
             <Trophy className="w-4 h-4" />
             Draft Results
           </button>
+          <button
+            onClick={() => navigateToOffseasonTab('trades')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'trades'
+                ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            <ArrowLeftRight className="w-4 h-4" />
+            Trades
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -1246,6 +1258,11 @@ function OffSeasonContent() {
           {/* Winter League Tab */}
           {activeTab === 'winter-league' && (
             <WinterLeagueSection />
+          )}
+
+          {/* Trades Tab */}
+          {activeTab === 'trades' && (
+            <TradesSection />
           )}
         </div>
 
@@ -4131,6 +4148,587 @@ function SigningsSection({ seasonNumber }: { seasonNumber: number }) {
             </div>
           </CardContent>
         </Card>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// TRADES SECTION
+// =============================================================================
+
+interface TradeProposal {
+  id: string;
+  proposing_team: string;
+  proposing_team_abbr: string;
+  receiving_team: string;
+  receiving_team_abbr: string;
+  players_offered: { name: string; position: string; overall: number }[];
+  players_requested: { name: string; position: string; overall: number }[];
+  status: 'pending' | 'accepted' | 'rejected' | 'countered' | 'expired' | 'withdrawn';
+  created_at: string;
+  expires_at: string;
+  message?: string;
+}
+
+function TradesSection() {
+  const { user } = useAuth();
+  const [activeTradeTab, setActiveTradeTab] = useState<'inbox' | 'propose' | 'history'>('inbox');
+  const [showProposalModal, setShowProposalModal] = useState(false);
+  const [selectedTeam, setSelectedTeam] = useState<string>('');
+  const [tradeMessage, setTradeMessage] = useState('');
+  
+  // Mock trade data - in production this would come from the database
+  const [incomingTrades, setIncomingTrades] = useState<TradeProposal[]>([
+    {
+      id: 'trade-1',
+      proposing_team: 'Seattle Mariners',
+      proposing_team_abbr: 'SEA',
+      receiving_team: user?.teamName || 'Your Team',
+      receiving_team_abbr: user?.teamAbbreviation || 'YT',
+      players_offered: [
+        { name: 'Bobby Witt Jr.', position: 'SS', overall: 91 },
+        { name: 'Ramon Laureano', position: 'LF', overall: 85 },
+      ],
+      players_requested: [
+        { name: 'Mookie Betts', position: 'RF', overall: 96 },
+      ],
+      status: 'pending',
+      created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + 46 * 60 * 60 * 1000).toISOString(),
+      message: 'Looking to add a power bat! Let me know if you want to counter.',
+    },
+  ]);
+  
+  const [outgoingTrades, setOutgoingTrades] = useState<TradeProposal[]>([
+    {
+      id: 'trade-2',
+      proposing_team: user?.teamName || 'Your Team',
+      proposing_team_abbr: user?.teamAbbreviation || 'YT',
+      receiving_team: 'Toronto Blue Jays',
+      receiving_team_abbr: 'TOR',
+      players_offered: [
+        { name: 'Mike Trout', position: 'CF', overall: 92 },
+      ],
+      players_requested: [
+        { name: 'Vladimir Guerrero Jr.', position: '1B', overall: 94 },
+        { name: 'Bo Bichette', position: 'SS', overall: 88 },
+      ],
+      status: 'pending',
+      created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    },
+  ]);
+  
+  const [tradeHistory, setTradeHistory] = useState<TradeProposal[]>([
+    {
+      id: 'trade-3',
+      proposing_team: 'Washington Nationals',
+      proposing_team_abbr: 'WSH',
+      receiving_team: user?.teamName || 'Your Team',
+      receiving_team_abbr: user?.teamAbbreviation || 'YT',
+      players_offered: [
+        { name: 'Juan Soto', position: 'RF', overall: 97 },
+      ],
+      players_requested: [
+        { name: 'Ronald Acuna Jr.', position: 'CF', overall: 98 },
+      ],
+      status: 'rejected',
+      created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: 'trade-4',
+      proposing_team: user?.teamName || 'Your Team',
+      proposing_team_abbr: user?.teamAbbreviation || 'YT',
+      receiving_team: 'Los Angeles Dodgers',
+      receiving_team_abbr: 'LAD',
+      players_offered: [
+        { name: 'Shohei Ohtani', position: 'DH/SP', overall: 99 },
+      ],
+      players_requested: [
+        { name: 'Mookie Betts', position: 'RF', overall: 96 },
+        { name: 'Freddie Freeman', position: '1B', overall: 95 },
+      ],
+      status: 'accepted',
+      created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  ]);
+  
+  // Teams for trade proposals (excluding own team)
+  const availableTeams = MLB_TEAMS.filter(t => t.abbreviation !== user?.teamAbbreviation);
+  
+  const getStatusBadge = (status: TradeProposal['status']) => {
+    const styles = {
+      pending: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+      accepted: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+      rejected: 'bg-red-500/20 text-red-400 border-red-500/30',
+      countered: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+      expired: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+      withdrawn: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+    };
+    const labels = {
+      pending: '⏳ Pending',
+      accepted: '✅ Accepted',
+      rejected: '❌ Rejected',
+      countered: '🔄 Countered',
+      expired: '⌛ Expired',
+      withdrawn: '↩️ Withdrawn',
+    };
+    return (
+      <Badge className={`${styles[status]} border`}>
+        {labels[status]}
+      </Badge>
+    );
+  };
+  
+  const getTimeRemaining = (expiresAt: string) => {
+    const now = new Date();
+    const expires = new Date(expiresAt);
+    const diff = expires.getTime() - now.getTime();
+    
+    if (diff <= 0) return 'Expired';
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 24) {
+      const days = Math.floor(hours / 24);
+      return `${days}d ${hours % 24}h remaining`;
+    }
+    return `${hours}h ${minutes}m remaining`;
+  };
+  
+  const handleAcceptTrade = (tradeId: string) => {
+    setIncomingTrades(prev => prev.filter(t => t.id !== tradeId));
+    const trade = incomingTrades.find(t => t.id === tradeId);
+    if (trade) {
+      setTradeHistory(prev => [{ ...trade, status: 'accepted' }, ...prev]);
+    }
+  };
+  
+  const handleRejectTrade = (tradeId: string) => {
+    setIncomingTrades(prev => prev.filter(t => t.id !== tradeId));
+    const trade = incomingTrades.find(t => t.id === tradeId);
+    if (trade) {
+      setTradeHistory(prev => [{ ...trade, status: 'rejected' }, ...prev]);
+    }
+  };
+  
+  const handleWithdrawTrade = (tradeId: string) => {
+    setOutgoingTrades(prev => prev.filter(t => t.id !== tradeId));
+    const trade = outgoingTrades.find(t => t.id === tradeId);
+    if (trade) {
+      setTradeHistory(prev => [{ ...trade, status: 'withdrawn' }, ...prev]);
+    }
+  };
+  
+  const renderTradeCard = (trade: TradeProposal, type: 'incoming' | 'outgoing' | 'history') => {
+    const isIncoming = type === 'incoming';
+    const isOutgoing = type === 'outgoing';
+    
+    return (
+      <Card key={trade.id} className="bg-slate-800/50 border-slate-700 hover:border-slate-600 transition-all">
+        <CardContent className="p-5">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-lg flex items-center justify-center font-bold text-white ${
+                isIncoming ? 'bg-cyan-500' : 'bg-amber-500'
+              }`}>
+                {isIncoming ? trade.proposing_team_abbr : trade.receiving_team_abbr}
+              </div>
+              <div>
+                <p className="text-white font-semibold">
+                  {isIncoming ? `From: ${trade.proposing_team}` : `To: ${trade.receiving_team}`}
+                </p>
+                <p className="text-slate-400 text-sm">
+                  {new Date(trade.created_at).toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit'
+                  })}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              {getStatusBadge(trade.status)}
+              {trade.status === 'pending' && (
+                <p className="text-xs text-amber-400 mt-1">
+                  <Clock className="w-3 h-3 inline mr-1" />
+                  {getTimeRemaining(trade.expires_at)}
+                </p>
+              )}
+            </div>
+          </div>
+          
+          {/* Trade Details */}
+          <div className="grid md:grid-cols-2 gap-4 mb-4">
+            {/* Players Offered */}
+            <div className="bg-slate-900/50 rounded-lg p-3">
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <ArrowRight className="w-3 h-3" />
+                {isIncoming ? 'You Receive' : 'You Give'}
+              </p>
+              <div className="space-y-2">
+                {(isIncoming ? trade.players_offered : trade.players_requested).map((player, idx) => (
+                  <div key={idx} className="flex items-center justify-between bg-slate-800/50 rounded px-3 py-2">
+                    <div>
+                      <p className="text-white font-medium">{player.name}</p>
+                      <p className="text-slate-400 text-sm">{player.position}</p>
+                    </div>
+                    <Badge className="bg-emerald-500/20 text-emerald-400">
+                      {player.overall} OVR
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Players Requested */}
+            <div className="bg-slate-900/50 rounded-lg p-3">
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <ArrowRight className="w-3 h-3 rotate-180" />
+                {isIncoming ? 'You Send' : 'You Receive'}
+              </p>
+              <div className="space-y-2">
+                {(isIncoming ? trade.players_requested : trade.players_offered).map((player, idx) => (
+                  <div key={idx} className="flex items-center justify-between bg-slate-800/50 rounded px-3 py-2">
+                    <div>
+                      <p className="text-white font-medium">{player.name}</p>
+                      <p className="text-slate-400 text-sm">{player.position}</p>
+                    </div>
+                    <Badge className="bg-cyan-500/20 text-cyan-400">
+                      {player.overall} OVR
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {/* Message */}
+          {trade.message && (
+            <div className="bg-slate-900/30 rounded-lg p-3 mb-4">
+              <p className="text-sm text-slate-300 italic">"{trade.message}"</p>
+            </div>
+          )}
+          
+          {/* Actions */}
+          {trade.status === 'pending' && (
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-700">
+              {isIncoming && (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => handleAcceptTrade(trade.id)}
+                    className="bg-emerald-500 hover:bg-emerald-400"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    Accept
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="text-blue-400 hover:text-blue-300"
+                  >
+                    <ArrowLeftRight className="w-4 h-4 mr-1" />
+                    Counter
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleRejectTrade(trade.id)}
+                    className="text-red-400 hover:text-red-300"
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    Reject
+                  </Button>
+                </>
+              )}
+              {isOutgoing && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => handleWithdrawTrade(trade.id)}
+                  className="text-slate-400 hover:text-slate-300"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Withdraw
+                </Button>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <Card className="bg-gradient-to-r from-cyan-950/80 to-slate-900/80 border border-cyan-500/35">
+        <CardContent className="p-5">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+              <ArrowLeftRight className="w-7 h-7 text-cyan-400" />
+            </div>
+            <div className="flex-grow">
+              <h2 className="text-2xl font-bold text-white mb-1">Trade Center</h2>
+              <p className="text-slate-400">
+                Propose trades, review offers, and manage your roster moves.
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowProposalModal(true)}
+              className="bg-cyan-500 hover:bg-cyan-400"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              New Trade
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      
+      {/* Trade Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold text-amber-400">{incomingTrades.length}</p>
+            <p className="text-sm text-slate-400">Incoming</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold text-cyan-400">{outgoingTrades.length}</p>
+            <p className="text-sm text-slate-400">Outgoing</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold text-emerald-400">
+              {tradeHistory.filter(t => t.status === 'accepted').length}
+            </p>
+            <p className="text-sm text-slate-400">Completed</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold text-slate-300">
+              {tradeHistory.length}
+            </p>
+            <p className="text-sm text-slate-400">Total History</p>
+          </CardContent>
+        </Card>
+      </div>
+      
+      {/* Sub-tabs */}
+      <div className="flex gap-2 p-1 bg-slate-800/50 rounded-lg w-fit">
+        <button
+          onClick={() => setActiveTradeTab('inbox')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            activeTradeTab === 'inbox'
+              ? 'bg-cyan-500 text-white'
+              : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Inbox
+          {incomingTrades.length > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
+              {incomingTrades.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTradeTab('propose')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            activeTradeTab === 'propose'
+              ? 'bg-cyan-500 text-white'
+              : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+          }`}
+        >
+          <Send className="w-4 h-4" />
+          Outgoing
+          {outgoingTrades.length > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 bg-amber-500 text-black text-xs rounded-full">
+              {outgoingTrades.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTradeTab('history')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            activeTradeTab === 'history'
+              ? 'bg-cyan-500 text-white'
+              : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          History
+        </button>
+      </div>
+      
+      {/* Content based on sub-tab */}
+      {activeTradeTab === 'inbox' && (
+        <div className="space-y-4">
+          {incomingTrades.length === 0 ? (
+            <Card className="bg-slate-800/30 border-slate-700">
+              <CardContent className="py-12 text-center">
+                <Users className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                <p className="text-slate-400">No incoming trade proposals</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  When other teams propose trades, they'll appear here.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            incomingTrades.map(trade => renderTradeCard(trade, 'incoming'))
+          )}
+        </div>
+      )}
+      
+      {activeTradeTab === 'propose' && (
+        <div className="space-y-4">
+          {outgoingTrades.length === 0 ? (
+            <Card className="bg-slate-800/30 border-slate-700">
+              <CardContent className="py-12 text-center">
+                <Send className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                <p className="text-slate-400">No outgoing trade proposals</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  Click "New Trade" to propose a trade to another team.
+                </p>
+                <Button
+                  onClick={() => setShowProposalModal(true)}
+                  className="mt-4 bg-cyan-500 hover:bg-cyan-400"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  Propose Trade
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            outgoingTrades.map(trade => renderTradeCard(trade, 'outgoing'))
+          )}
+        </div>
+      )}
+      
+      {activeTradeTab === 'history' && (
+        <div className="space-y-4">
+          {tradeHistory.length === 0 ? (
+            <Card className="bg-slate-800/30 border-slate-700">
+              <CardContent className="py-12 text-center">
+                <FileText className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                <p className="text-slate-400">No trade history yet</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  Completed, rejected, and expired trades will appear here.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            tradeHistory.map(trade => renderTradeCard(trade, 'history'))
+          )}
+        </div>
+      )}
+      
+      {/* Trade Proposal Modal */}
+      {showProposalModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="bg-slate-900 border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <CardHeader className="border-b border-slate-700">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white flex items-center gap-2">
+                  <ArrowLeftRight className="w-5 h-5 text-cyan-400" />
+                  Propose New Trade
+                </CardTitle>
+                <button
+                  onClick={() => setShowProposalModal(false)}
+                  className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              {/* Select Team */}
+              <div>
+                <label className="text-sm text-slate-400 mb-2 block">Trade With</label>
+                <select
+                  value={selectedTeam}
+                  onChange={(e) => setSelectedTeam(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-cyan-500 focus:outline-none"
+                >
+                  <option value="">Select a team...</option>
+                  {availableTeams.map(team => (
+                    <option key={team.abbreviation} value={team.abbreviation}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Players to Offer */}
+              <div>
+                <label className="text-sm text-slate-400 mb-2 block">Players You Offer</label>
+                <div className="bg-slate-800/50 border border-dashed border-slate-600 rounded-lg p-6 text-center">
+                  <UserPlus className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                  <p className="text-slate-400 text-sm">Click to select players from your roster</p>
+                  <Button variant="secondary" size="sm" className="mt-3">
+                    Add Players
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Players to Request */}
+              <div>
+                <label className="text-sm text-slate-400 mb-2 block">Players You Request</label>
+                <div className="bg-slate-800/50 border border-dashed border-slate-600 rounded-lg p-6 text-center">
+                  <UserMinus className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                  <p className="text-slate-400 text-sm">Click to select players from their roster</p>
+                  <Button variant="secondary" size="sm" className="mt-3" disabled={!selectedTeam}>
+                    Add Players
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Message */}
+              <div>
+                <label className="text-sm text-slate-400 mb-2 block">Message (Optional)</label>
+                <textarea
+                  value={tradeMessage}
+                  onChange={(e) => setTradeMessage(e.target.value)}
+                  placeholder="Add a message to your trade proposal..."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none resize-none"
+                  rows={3}
+                />
+              </div>
+              
+              {/* Submit */}
+              <div className="flex gap-3 pt-4 border-t border-slate-700">
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowProposalModal(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    // TODO: Submit trade proposal
+                    setShowProposalModal(false);
+                  }}
+                  disabled={!selectedTeam}
+                  className="flex-1 bg-cyan-500 hover:bg-cyan-400"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  Send Proposal
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );
