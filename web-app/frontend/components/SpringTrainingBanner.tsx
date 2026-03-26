@@ -56,7 +56,8 @@ export function SpringTrainingBanner({
                 <p className="text-sm text-muted-foreground">
                   Trading window: <strong className="text-foreground">48 hours</strong> or{' '}
                   <strong className="text-foreground">3 games</strong> logged (whichever comes first). Trades still
-                  require commissioner approval.
+                  require commissioner approval. Use <strong className="text-foreground">T&WR</strong> on Discord for
+                  trade posts and rules.
                 </p>
               </div>
             </div>
@@ -133,7 +134,7 @@ export function SpringTrainingBanner({
               <p className="font-medium text-foreground">Trading</p>
               <p className="text-sm text-muted-foreground">
                 Unlimited trades during the window (commissioner approval required). Window ends after 3 ST games or 48
-                hours.
+                hours. Post in <strong className="text-foreground">T&WR</strong> (Trades, Waivers & Rules).
               </p>
             </div>
           </div>

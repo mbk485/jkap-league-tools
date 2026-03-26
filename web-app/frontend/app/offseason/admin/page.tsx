@@ -116,7 +116,7 @@ import {
   DraftOrderResult,
   updateSeasonPhase,
 } from '@/lib/supabase';
-import { PHASE_ORDER } from '@/lib/phase-manager';
+import { PHASE_ORDER, announcePhaseTransition } from '@/lib/phase-manager';
 import { MLB_TEAMS } from '@/types/league';
 import { checkQuestionnaireCompletions, getAllQuestionnaireCompletions } from '@/lib/typeform-api';
 import { 
@@ -667,6 +667,14 @@ export default function OffSeasonAdminPage() {
       setOffseasonPhase('complete');
       setClaimingOpen(false);
       setClaimingClosesAt(null);
+      if (discordWebhookUrl) {
+        const posted = await announcePhaseTransition(discordWebhookUrl, 'spring_training');
+        if (!posted.success) {
+          alert(
+            `Season phase saved, but Discord announcement failed: ${posted.error || 'unknown error'}. Copy the ST message from Phase Manager or post manually to T&WR.`
+          );
+        }
+      }
     }
     return true;
   };
@@ -3094,7 +3102,7 @@ Let's get this done! 💪`;
                               'free_agent_declaration': { title: 'Free Agent Declaration Period', msg: '🔄 **Declare your free agents!**\n\nYou must declare at least **1 player** as a free agent before the deadline.' },
                               'draft_prep': { title: 'Draft Order Announced!', msg: '🎯 **The draft order has been set!**\n\nReview the draft board and prepare your strategy.' },
                               'draft': { title: 'DRAFT DAY!', msg: '🏈 **IT\'S DRAFT DAY!**\n\nHead to the Draft Tool to participate. Good luck!' },
-                              'spring_training': { title: '⚾ Spring Training!', msg: '🌴 **Spring Training has started!**\n\n• 3 ST games • ST/alternate jerseys • ST or MiLB parks\n• Unlimited trades (commissioner approval) for 48h or until 3 games, whichever comes first.\n\nLog games on the site Game Logger.' },
+                              // spring_training: Discord is posted inside persistSeasonPhaseToDb via announcePhaseTransition (includes T&WR)
                               'regular_season': { title: 'Regular Season', msg: '⚾ **The regular season is underway!** Good luck this season.' },
                             };
                             const ann = announcements[nextPhase];

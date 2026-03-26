@@ -198,7 +198,7 @@ export const PHASE_CONFIGS: Record<SeasonPhase, PhaseConfig> = {
     discordAnnouncement: {
       title: '⚾ SPRING TRAINING BEGINS!',
       message:
-        '🌴 **Spring Training is here!**\n\n**GAMES:**\n• Play **3** spring training games (regular season starts after).\n\n**UNIFORMS & STADIUMS:**\n• Use **spring training** or **alternate** jerseys.\n• Play in **spring training** or **minor league** stadiums only.\n\n**TRADING:**\n• **Unlimited** trades during the window (all trades still need **commissioner approval**).\n• Window ends after **3 games** OR **48 hours** from the league start of ST—**whichever comes first**.\n\nGood luck—see you on Opening Day! ⚾',
+        '🌴 **Spring Training is here!**\n\n**GAMES:**\n• Play **3** spring training games (regular season starts after).\n\n**UNIFORMS & STADIUMS:**\n• Use **spring training** or **alternate** jerseys.\n• Play in **spring training** or **minor league** stadiums only.\n\n**TRADING:**\n• **Unlimited** trades during the window (all trades still need **commissioner approval**).\n• Window ends after **3 games** OR **48 hours** from the league start of ST—**whichever comes first**.\n• Post trade proposals and follow league trade rules in **T&WR** (Trades, Waivers & Rules).\n\nGood luck—see you on Opening Day! ⚾',
     },
   },
   pre_season: {
