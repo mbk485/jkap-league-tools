@@ -13,6 +13,7 @@ import {
   getUserGameStats, 
   getLeaderboards,
   getCurrentSeasonState,
+  deleteGameLog,
   DBGameLog,
   LeaderboardEntry,
   saveRecentGame,
@@ -48,6 +49,7 @@ import {
   Camera,
   Loader2,
   Scan,
+  Trash2,
 } from 'lucide-react';
 
 interface HomeRunEntry {
@@ -112,6 +114,7 @@ export default function GameLoggerPage() {
   const [seasonPhase, setSeasonPhase] = useState<SeasonPhase | null>(null);
   const [phaseDeadline, setPhaseDeadline] = useState<string | null>(null);
   const [phaseStartedAt, setPhaseStartedAt] = useState<string | null>(null);
+  const [deletingGameId, setDeletingGameId] = useState<string | null>(null);
 
   const springGamesPlayed = useMemo(() => {
     if (seasonPhase !== 'spring_training' || !phaseStartedAt) return 0;
@@ -407,6 +410,26 @@ If you cannot read certain fields, use null or 0. Make your best effort to read 
   const getTeamAbbr = (teamId: string) => {
     const team = MLB_TEAMS.find(t => t.id === teamId);
     return team?.abbreviation || teamId;
+  };
+
+  const handleDeleteGame = async (gameId: string) => {
+    if (!user?.id) return;
+    if (!confirm('Delete this game log? This cannot be undone.')) return;
+    
+    setDeletingGameId(gameId);
+    try {
+      const result = await deleteGameLog(gameId, user.id);
+      if (result.success) {
+        setGameLogs(prev => prev.filter(g => g.id !== gameId));
+        loadData(); // Refresh stats
+      } else {
+        alert('Failed to delete: ' + result.error);
+      }
+    } catch (err) {
+      alert('Error deleting game');
+    } finally {
+      setDeletingGameId(null);
+    }
   };
 
   if (!isAuthenticated) {
@@ -1047,11 +1070,25 @@ If you cannot read certain fields, use null or 0. Make your best effort to read 
                             </div>
                           </div>
                         </div>
-                        {log.game_number && (
-                          <Badge variant="outline" className="text-xs">
-                            #{log.game_number}
-                          </Badge>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {log.game_number && (
+                            <Badge variant="outline" className="text-xs">
+                              #{log.game_number}
+                            </Badge>
+                          )}
+                          <button
+                            onClick={() => handleDeleteGame(log.id)}
+                            disabled={deletingGameId === log.id}
+                            className="p-2 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                            title="Delete this game log"
+                          >
+                            {deletingGameId === log.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}

@@ -2998,6 +2998,23 @@ export async function getGameLogs(
   }
 }
 
+// Delete a game log (user can only delete their own games)
+export async function deleteGameLog(gameId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('game_logs')
+      .delete()
+      .eq('id', gameId)
+      .eq('user_id', userId); // Ensure user can only delete their own games
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting game log:', err);
+    return { success: false, error: err.message };
+  }
+}
+
 // Get user's game stats summary
 export async function getUserGameStats(userId: string): Promise<{
   gamesPlayed: number;
