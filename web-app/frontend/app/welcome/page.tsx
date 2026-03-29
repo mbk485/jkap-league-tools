@@ -135,30 +135,37 @@ export default function WelcomePage() {
 
   useEffect(() => {
     const loadOnboarding = async () => {
-      if (!user?.id) return;
-      
-      console.log('Welcome: Checking if onboarding already complete for user:', user.id);
-      
-      // Use needsOnboarding which checks both localStorage and database
-      const needs = await needsOnboarding(user.id);
-      console.log('Welcome: needsOnboarding result:', needs);
-      
-      if (!needs) {
-        console.log('Welcome: Onboarding already complete, redirecting to dashboard');
-        router.push('/dashboard');
+      if (!user?.id) {
+        setIsLoading(false);
+        router.push('/login');
         return;
       }
 
-      // Load welcome packet
-      const packet = await getWelcomePacket();
-      setWelcomePacket(packet);
+      try {
+        console.log('Welcome: Checking if onboarding already complete for user:', user.id);
 
-      setIsLoading(false);
+        const needs = await needsOnboarding(user.id);
+        console.log('Welcome: needsOnboarding result:', needs);
+
+        if (!needs) {
+          console.log('Welcome: Onboarding already complete, redirecting to dashboard');
+          router.push('/dashboard');
+          return;
+        }
+
+        const packet = await getWelcomePacket();
+        setWelcomePacket(packet);
+      } catch (err) {
+        console.error('Welcome: loadOnboarding failed:', err);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     if (!authLoading && user) {
-      loadOnboarding();
+      void loadOnboarding();
     } else if (!authLoading && !user) {
+      setIsLoading(false);
       router.push('/login');
     }
   }, [user, authLoading, router]);

@@ -107,74 +107,82 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   
   useEffect(() => {
-    // Check if user needs onboarding
     const checkOnboarding = async () => {
-      if (user?.id && user.userType === 'jkap_member' && !user.isAdmin) {
-        console.log('Dashboard: Checking onboarding for user:', user.id, 'userType:', user.userType);
-        
-        // Check for onboarded=1 URL parameter (backup from welcome page)
-        const onboardedParam = searchParams.get('onboarded');
-        if (onboardedParam === '1') {
-          console.log('Dashboard: onboarded=1 param detected, marking complete');
-          await completeOnboarding(user.id);
-          // Clean up URL
-          window.history.replaceState({}, '', '/dashboard');
-        }
-        
-        const needs = await needsOnboarding(user.id);
-        console.log('Dashboard: needsOnboarding result:', needs);
-        if (needs) {
-          console.log('Dashboard: Redirecting to /welcome');
-          router.push('/welcome');
-          return;
-        }
-        console.log('Dashboard: User does not need onboarding, showing dashboard');
-      } else {
-        console.log('Dashboard: Skipping onboarding check - user:', user?.id, 'userType:', user?.userType, 'isAdmin:', user?.isAdmin);
-      }
-      // Load feature flags
-      setFeatureFlags(getFeatureFlags());
-      // Load rewards data and notifications
-      if (user?.id) {
-        const [rewardsData, walletData, notifs, reads, season, gameStats] = await Promise.all([
-          getPlayerRewards(user.id),
-          getUserWallet(user.id),
-          getNotifications(),
-          getUserNotificationReads(user.id),
-          getCurrentSeasonState(),
-          getUserGameStats(user.id),
-        ]);
-        setRewards(rewardsData);
-        setWallet(walletData);
-        setNotifications(notifs);
-        setReadNotificationIds(reads);
-        setSeasonGameStats({
-          gamesPlayed: gameStats.gamesPlayed,
-          currentWinStreak: gameStats.currentWinStreak,
-        });
-        const phase = (season?.phase as SeasonPhase) ?? null;
-        setSeasonPhase(phase);
-        setStPhaseDeadline(season?.phase_deadline ?? null);
-        setStPhaseStartedAt(season?.phase_started_at ?? null);
-        if (phase === 'spring_training' && season?.phase_started_at) {
-          const logs = await getGameLogs(user.id, 100);
-          const phaseStartMs = new Date(season.phase_started_at).getTime();
-          setSpringGamesLogged(
-            logs.filter((l) => {
-              const gd = (l.game_date || '').slice(0, 10);
-              if (gd < CURRENT_SEASON_GAME_MIN_DATE) return false;
-              return new Date(l.created_at).getTime() >= phaseStartMs;
-            }).length
-          );
+      try {
+        if (user?.id && user.userType === 'jkap_member' && !user.isAdmin) {
+          console.log('Dashboard: Checking onboarding for user:', user.id, 'userType:', user.userType);
+
+          const onboardedParam = searchParams.get('onboarded');
+          if (onboardedParam === '1') {
+            console.log('Dashboard: onboarded=1 param detected, marking complete');
+            await completeOnboarding(user.id);
+            window.history.replaceState({}, '', '/dashboard');
+          }
+
+          const needs = await needsOnboarding(user.id);
+          console.log('Dashboard: needsOnboarding result:', needs);
+          if (needs) {
+            console.log('Dashboard: Redirecting to /welcome');
+            router.push('/welcome');
+            return;
+          }
+          console.log('Dashboard: User does not need onboarding, showing dashboard');
         } else {
-          setSpringGamesLogged(0);
+          console.log(
+            'Dashboard: Skipping onboarding check - user:',
+            user?.id,
+            'userType:',
+            user?.userType,
+            'isAdmin:',
+            user?.isAdmin
+          );
         }
+
+        setFeatureFlags(getFeatureFlags());
+
+        if (user?.id) {
+          const [rewardsData, walletData, notifs, reads, season, gameStats] = await Promise.all([
+            getPlayerRewards(user.id),
+            getUserWallet(user.id),
+            getNotifications(),
+            getUserNotificationReads(user.id),
+            getCurrentSeasonState(),
+            getUserGameStats(user.id),
+          ]);
+          setRewards(rewardsData);
+          setWallet(walletData);
+          setNotifications(notifs);
+          setReadNotificationIds(reads);
+          setSeasonGameStats({
+            gamesPlayed: gameStats.gamesPlayed,
+            currentWinStreak: gameStats.currentWinStreak,
+          });
+          const phase = (season?.phase as SeasonPhase) ?? null;
+          setSeasonPhase(phase);
+          setStPhaseDeadline(season?.phase_deadline ?? null);
+          setStPhaseStartedAt(season?.phase_started_at ?? null);
+          if (phase === 'spring_training' && season?.phase_started_at) {
+            const logs = await getGameLogs(user.id, 100);
+            const phaseStartMs = new Date(season.phase_started_at).getTime();
+            setSpringGamesLogged(
+              logs.filter((l) => {
+                const gd = (l.game_date || '').slice(0, 10);
+                if (gd < CURRENT_SEASON_GAME_MIN_DATE) return false;
+                return new Date(l.created_at).getTime() >= phaseStartMs;
+              }).length
+            );
+          } else {
+            setSpringGamesLogged(0);
+          }
+        }
+      } catch (err) {
+        console.error('Dashboard: failed to load or check onboarding:', err);
+      } finally {
+        setIsLoaded(true);
       }
-      // Simulate data loading animation
-      setIsLoaded(true);
     };
-    
-    checkOnboarding();
+
+    void checkOnboarding();
   }, [user, router, searchParams]);
 
   const visibleNotifications = filterNotificationsForSeasonPhase(notifications, seasonPhase);

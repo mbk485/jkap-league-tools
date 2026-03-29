@@ -76,19 +76,21 @@ function LoginForm() {
   // Redirect if already authenticated
   useEffect(() => {
     const checkOnboardingAndRedirect = async () => {
-      if (isAuthenticated && !isLoading && user) {
+      if (!isAuthenticated || isLoading || !user) return;
+
+      try {
         // New JKAP member registrations go to SMS signup page first
         if (isNewRegistration && user.userType === 'jkap_member' && !user.isAdmin) {
           router.push('/register-sms');
           return;
         }
-        
+
         // Admin goes to redirect URL
         if (user.isAdmin) {
-      router.push(redirectUrl);
+          router.push(redirectUrl);
           return;
         }
-        
+
         // Check if JKAP member needs onboarding
         if (user.userType === 'jkap_member' && user.id) {
           const needsWelcome = await needsOnboarding(user.id);
@@ -97,13 +99,16 @@ function LoginForm() {
             return;
           }
         }
-        
+
         // Default: go to tools
+        router.push('/tools');
+      } catch (err) {
+        console.error('Post-login redirect failed:', err);
         router.push('/tools');
       }
     };
-    
-    checkOnboardingAndRedirect();
+
+    void checkOnboardingAndRedirect();
   }, [isAuthenticated, isLoading, router, redirectUrl, user, isNewRegistration]);
 
   const handleLogin = async (e: React.FormEvent) => {

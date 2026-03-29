@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AuthUser, MLB_TEAMS, UserType } from '@/types/league';
-import { supabase, createUser, loginUser, DBUser } from '@/lib/supabase';
+import { supabase, createUser, loginUser, DBUser, initializeNewMember } from '@/lib/supabase';
 
 interface RegisterOptions {
   username: string;
@@ -258,6 +258,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       
       if (result.success && result.user) {
+        // Same as admin approval flow: league level + welcome wallet (non-blocking if RLS/policy fails)
+        if (userType === 'jkap_member' && result.user.id) {
+          const init = await initializeNewMember(result.user.id, 'rookie');
+          if (!init.success) {
+            console.warn('[Register] initializeNewMember:', init.error);
+          }
+        }
+
         // Modify the auth user to include the correct type info
         const team = teamId ? MLB_TEAMS.find((t) => t.id === teamId) : null;
         const authUser: AuthUser = {
