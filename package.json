@@ -1,0 +1,11 @@
+{
+  "name": "jkap-league-tools",
+  "private": true,
+  "description": "Monorepo root — Next.js app lives in web-app/frontend (see root vercel.json for Vercel).",
+  "scripts": {
+    "build": "cd web-app/frontend && npm ci && npm run build",
+    "dev": "cd web-app/frontend && npm run dev",
+    "start": "cd web-app/frontend && npm run start",
+    "lint": "cd web-app/frontend && npm run lint"
+  }
+}
