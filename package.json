@@ -1,14 +1,11 @@
 {
   "name": "jkap-league-tools",
   "private": true,
-  "workspaces": [
-    "web-app/frontend"
-  ],
   "scripts": {
-    "build": "npm run build -w web-app/frontend",
-    "dev": "npm run dev -w web-app/frontend",
-    "lint": "npm run lint -w web-app/frontend",
-    "start": "npm run start -w web-app/frontend"
+    "build": "npm run build --prefix web-app/frontend",
+    "dev": "npm run dev --prefix web-app/frontend",
+    "lint": "npm run lint --prefix web-app/frontend",
+    "start": "npm run start --prefix web-app/frontend"
   },
   "engines": {
     "node": ">=18.18.0"
